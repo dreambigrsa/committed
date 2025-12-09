@@ -32,6 +32,10 @@ export const [AppContext, useApp] = createContextHook(() => {
   useEffect(() => {
     if (session?.user) {
       loadUserData(session.user.id);
+    } else if (session === null) {
+      // Session cleared (logout)
+      setCurrentUser(null);
+      setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
@@ -57,6 +61,7 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const loadUserData = async (userId: string) => {
     try {
+      setIsLoading(true);
       console.log('Loading user data for:', userId);
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -406,6 +411,8 @@ export const [AppContext, useApp] = createContextHook(() => {
 
     } catch (error: any) {
       console.error('Failed to load user data:', error?.message || error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
