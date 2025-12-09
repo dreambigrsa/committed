@@ -37,18 +37,18 @@ export default function AdminReportsScreen() {
 
       if (data) {
         const formattedReports: ReportedContent[] = data.map((r: any) => ({
-          id: r.id,
-          reporterId: r.reporter_id,
-          reportedUserId: r.reported_user_id,
-          contentType: r.content_type,
-          contentId: r.content_id,
-          reason: r.reason,
-          description: r.description,
-          status: r.status,
-          reviewedBy: r.reviewed_by,
-          reviewedAt: r.reviewed_at,
-          actionTaken: r.action_taken,
-          createdAt: r.created_at,
+          id: r.id || '',
+          reporterId: r.reporter_id || '',
+          reportedUserId: r.reported_user_id || undefined,
+          contentType: r.content_type || 'post',
+          contentId: r.content_id || undefined,
+          reason: r.reason || '',
+          description: r.description || undefined,
+          status: r.status || 'pending',
+          reviewedBy: r.reviewed_by || undefined,
+          reviewedAt: r.reviewed_at || undefined,
+          actionTaken: r.action_taken || undefined,
+          createdAt: r.created_at || new Date().toISOString(),
         }));
         setReports(formattedReports);
       }
