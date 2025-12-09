@@ -54,7 +54,7 @@ export interface SearchResult {
   };
 }
 
-export type NotificationType = 'relationship_request' | 'cheating_alert' | 'relationship_verified' | 'relationship_ended';
+export type NotificationType = 'relationship_request' | 'cheating_alert' | 'relationship_verified' | 'relationship_ended' | 'post_like' | 'post_comment' | 'message' | 'follow';
 
 export interface Notification {
   id: string;
@@ -142,4 +142,78 @@ export interface Advertisement {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CheatingAlert {
+  id: string;
+  userId: string;
+  partnerUserId: string;
+  alertType: 'duplicate_registration' | 'suspicious_activity';
+  description: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface Follow {
+  id: string;
+  followerId: string;
+  followingId: string;
+  createdAt: string;
+}
+
+export interface Dispute {
+  id: string;
+  relationshipId: string;
+  initiatedBy: string;
+  disputeType: 'end_relationship' | 'challenge_verification' | 'privacy_change';
+  description?: string;
+  status: 'pending' | 'resolved' | 'auto_resolved';
+  resolution?: string;
+  autoResolveAt?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  createdAt: string;
+}
+
+export interface CoupleCertificate {
+  id: string;
+  relationshipId: string;
+  certificateUrl: string;
+  verificationSelfieUrl?: string;
+  issuedAt: string;
+  createdAt: string;
+}
+
+export interface Anniversary {
+  id: string;
+  relationshipId: string;
+  anniversaryDate: string;
+  reminderSent: boolean;
+  createdAt: string;
+}
+
+export interface ReportedContent {
+  id: string;
+  reporterId: string;
+  reportedUserId?: string;
+  contentType: 'post' | 'reel' | 'comment' | 'message' | 'profile';
+  contentId?: string;
+  reason: string;
+  description?: string;
+  status: 'pending' | 'reviewing' | 'resolved' | 'dismissed';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  actionTaken?: string;
+  createdAt: string;
+}
+
+export interface ReelComment {
+  id: string;
+  reelId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  content: string;
+  likes: string[];
+  createdAt: string;
 }

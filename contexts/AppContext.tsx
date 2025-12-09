@@ -1,8 +1,8 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement } from '@/types';
+import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { Session, RealtimeChannel } from '@supabase/supabase-js';
 
 export const [AppContext, useApp] = createContextHook(() => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -15,7 +15,15 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [advertisements, setAdvertisements] = useState<Advertisement[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [cheatingAlerts, setCheatingAlerts] = useState<CheatingAlert[]>([]);
+  const [follows, setFollows] = useState<Follow[]>([]);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [certificates, setCertificates] = useState<CoupleCertificate[]>([]);
+  const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
+  const [reelComments, setReelComments] = useState<Record<string, ReelComment[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [subscriptions, setSubscriptions] = useState<RealtimeChannel[]>([]);
 
   useEffect(() => {
     initializeAuth();
@@ -256,6 +264,144 @@ export const [AppContext, useApp] = createContextHook(() => {
         );
         setConversations(formattedConversations);
       }
+
+      const { data: commentsData } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          users!comments_user_id_fkey(full_name, profile_picture)
+        `)
+        .order('created_at', { ascending: true });
+
+      if (commentsData) {
+        const commentsByPost: Record<string, Comment[]> = {};
+        commentsData.forEach((c: any) => {
+          const comment: Comment = {
+            id: c.id,
+            postId: c.post_id,
+            userId: c.user_id,
+            userName: c.users.full_name,
+            userAvatar: c.users.profile_picture,
+            content: c.content,
+            likes: [],
+            createdAt: c.created_at,
+          };
+          if (!commentsByPost[c.post_id]) {
+            commentsByPost[c.post_id] = [];
+          }
+          commentsByPost[c.post_id].push(comment);
+        });
+        setComments(commentsByPost);
+      }
+
+      const { data: notificationsData } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (notificationsData) {
+        const formattedNotifications: Notification[] = notificationsData.map((n: any) => ({
+          id: n.id,
+          userId: n.user_id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          data: n.data,
+          read: n.read,
+          createdAt: n.created_at,
+        }));
+        setNotifications(formattedNotifications);
+      }
+
+      const { data: cheatingAlertsData } = await supabase
+        .from('cheating_alerts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (cheatingAlertsData) {
+        const formattedAlerts: CheatingAlert[] = cheatingAlertsData.map((a: any) => ({
+          id: a.id,
+          userId: a.user_id,
+          partnerUserId: a.partner_user_id,
+          alertType: a.alert_type,
+          description: a.description,
+          read: a.read,
+          createdAt: a.created_at,
+        }));
+        setCheatingAlerts(formattedAlerts);
+      }
+
+      const { data: followsData } = await supabase
+        .from('follows')
+        .select('*')
+        .or(`follower_id.eq.${userId},following_id.eq.${userId}`);
+
+      if (followsData) {
+        const formattedFollows: Follow[] = followsData.map((f: any) => ({
+          id: f.id,
+          followerId: f.follower_id,
+          followingId: f.following_id,
+          createdAt: f.created_at,
+        }));
+        setFollows(formattedFollows);
+      }
+
+      const { data: disputesData } = await supabase
+        .from('disputes')
+        .select('*')
+        .eq('initiated_by', userId)
+        .order('created_at', { ascending: false });
+
+      if (disputesData) {
+        const formattedDisputes: Dispute[] = disputesData.map((d: any) => ({
+          id: d.id,
+          relationshipId: d.relationship_id,
+          initiatedBy: d.initiated_by,
+          disputeType: d.dispute_type,
+          description: d.description,
+          status: d.status,
+          resolution: d.resolution,
+          autoResolveAt: d.auto_resolve_at,
+          resolvedAt: d.resolved_at,
+          resolvedBy: d.resolved_by,
+          createdAt: d.created_at,
+        }));
+        setDisputes(formattedDisputes);
+      }
+
+      const { data: reelCommentsData } = await supabase
+        .from('reel_comments')
+        .select(`
+          *,
+          users!reel_comments_user_id_fkey(full_name, profile_picture)
+        `)
+        .order('created_at', { ascending: true });
+
+      if (reelCommentsData) {
+        const commentsByReel: Record<string, ReelComment[]> = {};
+        reelCommentsData.forEach((c: any) => {
+          const comment: ReelComment = {
+            id: c.id,
+            reelId: c.reel_id,
+            userId: c.user_id,
+            userName: c.users.full_name,
+            userAvatar: c.users.profile_picture,
+            content: c.content,
+            likes: [],
+            createdAt: c.created_at,
+          };
+          if (!commentsByReel[c.reel_id]) {
+            commentsByReel[c.reel_id] = [];
+          }
+          commentsByReel[c.reel_id].push(comment);
+        });
+        setReelComments(commentsByReel);
+      }
+
+      setupRealtimeSubscriptions(userId);
 
 
     } catch (error: any) {
@@ -1006,6 +1152,310 @@ export const [AppContext, useApp] = createContextHook(() => {
     );
   }, [advertisements]);
 
+  const setupRealtimeSubscriptions = useCallback((userId: string) => {
+    const subs: RealtimeChannel[] = [];
+
+    const messagesChannel = supabase
+      .channel('messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const newMessage: Message = {
+            id: payload.new.id,
+            conversationId: payload.new.conversation_id,
+            senderId: payload.new.sender_id,
+            receiverId: payload.new.receiver_id,
+            content: payload.new.content,
+            mediaUrl: payload.new.media_url,
+            read: payload.new.read,
+            createdAt: payload.new.created_at,
+          };
+          setMessages(prev => ({
+            ...prev,
+            [newMessage.conversationId]: [...(prev[newMessage.conversationId] || []), newMessage],
+          }));
+        }
+      )
+      .subscribe();
+    subs.push(messagesChannel);
+
+    const notificationsChannel = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const newNotification: Notification = {
+            id: payload.new.id,
+            userId: payload.new.user_id,
+            type: payload.new.type,
+            title: payload.new.title,
+            message: payload.new.message,
+            data: payload.new.data,
+            read: payload.new.read,
+            createdAt: payload.new.created_at,
+          };
+          setNotifications(prev => [newNotification, ...prev]);
+        }
+      )
+      .subscribe();
+    subs.push(notificationsChannel);
+
+    const requestsChannel = supabase
+      .channel('relationship_requests')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'relationship_requests',
+          filter: `to_user_id=eq.${userId}`,
+        },
+        async () => {
+          const { data: requestsData } = await supabase
+            .from('relationship_requests')
+            .select('*')
+            .eq('to_user_id', userId)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+
+          if (requestsData) {
+            const formattedRequests: RelationshipRequest[] = requestsData.map((req: any) => ({
+              id: req.id,
+              fromUserId: req.from_user_id,
+              fromUserName: req.from_user_name,
+              toUserId: req.to_user_id,
+              relationshipType: req.relationship_type,
+              status: req.status,
+              createdAt: req.created_at,
+            }));
+            setRelationshipRequests(formattedRequests);
+          }
+        }
+      )
+      .subscribe();
+    subs.push(requestsChannel);
+
+    setSubscriptions(subs);
+
+    return () => {
+      subs.forEach(sub => {
+        supabase.removeChannel(sub);
+      });
+    };
+  }, []);
+
+  const followUser = useCallback(async (followingId: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .insert({
+          follower_id: currentUser.id,
+          following_id: followingId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newFollow: Follow = {
+        id: data.id,
+        followerId: data.follower_id,
+        followingId: data.following_id,
+        createdAt: data.created_at,
+      };
+
+      setFollows([...follows, newFollow]);
+      return newFollow;
+    } catch (error) {
+      console.error('Follow user error:', error);
+      return null;
+    }
+  }, [currentUser, follows]);
+
+  const unfollowUser = useCallback(async (followingId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', currentUser.id)
+        .eq('following_id', followingId);
+
+      if (error) throw error;
+
+      setFollows(follows.filter(f => !(f.followerId === currentUser.id && f.followingId === followingId)));
+    } catch (error) {
+      console.error('Unfollow user error:', error);
+    }
+  }, [currentUser, follows]);
+
+  const isFollowing = useCallback((userId: string) => {
+    if (!currentUser) return false;
+    return follows.some(f => f.followerId === currentUser.id && f.followingId === userId);
+  }, [currentUser, follows]);
+
+  const addReelComment = useCallback(async (reelId: string, content: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('reel_comments')
+        .insert({
+          reel_id: reelId,
+          user_id: currentUser.id,
+          content,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newComment: ReelComment = {
+        id: data.id,
+        reelId,
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        userAvatar: currentUser.profilePicture,
+        content,
+        likes: [],
+        createdAt: data.created_at,
+      };
+      
+      const updatedComments = {
+        ...reelComments,
+        [reelId]: [...(reelComments[reelId] || []), newComment],
+      };
+      setReelComments(updatedComments);
+      
+      const updatedReels = reels.map(reel => 
+        reel.id === reelId ? { ...reel, commentCount: reel.commentCount + 1 } : reel
+      );
+      setReels(updatedReels);
+      
+      return newComment;
+    } catch (error) {
+      console.error('Add reel comment error:', error);
+      return null;
+    }
+  }, [currentUser, reelComments, reels]);
+
+  const getReelComments = useCallback((reelId: string) => {
+    return reelComments[reelId] || [];
+  }, [reelComments]);
+
+  const reportContent = useCallback(async (
+    contentType: ReportedContent['contentType'],
+    contentId: string | undefined,
+    reportedUserId: string | undefined,
+    reason: string,
+    description?: string
+  ) => {
+    if (!currentUser) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('reported_content')
+        .insert({
+          reporter_id: currentUser.id,
+          reported_user_id: reportedUserId,
+          content_type: contentType,
+          content_id: contentId,
+          reason,
+          description,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (error) {
+      console.error('Report content error:', error);
+      return null;
+    }
+  }, [currentUser]);
+
+  const createNotification = useCallback(async (
+    userId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    data?: Record<string, any>
+  ) => {
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type,
+          title,
+          message,
+          data,
+          read: false,
+        });
+    } catch (error) {
+      console.error('Create notification error:', error);
+    }
+  }, []);
+
+  const markNotificationAsRead = useCallback(async (notificationId: string) => {
+    try {
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notificationId);
+
+      setNotifications(notifications.map(n => 
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
+    } catch (error) {
+      console.error('Mark notification as read error:', error);
+    }
+  }, [notifications]);
+
+  const getUnreadNotificationsCount = useCallback(() => {
+    return notifications.filter(n => !n.read).length;
+  }, [notifications]);
+
+  const logActivity = useCallback(async (
+    action: string,
+    resourceType?: string,
+    resourceId?: string,
+    details?: Record<string, any>
+  ) => {
+    if (!currentUser) return;
+    
+    try {
+      await supabase
+        .from('activity_logs')
+        .insert({
+          user_id: currentUser.id,
+          action,
+          resource_type: resourceType,
+          resource_id: resourceId,
+          details,
+        });
+    } catch (error) {
+      console.error('Log activity error:', error);
+    }
+  }, [currentUser]);
+
   return {
     currentUser,
     isLoading,
@@ -1040,5 +1490,21 @@ export const [AppContext, useApp] = createContextHook(() => {
     recordAdImpression,
     recordAdClick,
     getActiveAds,
+    notifications,
+    cheatingAlerts,
+    follows,
+    disputes,
+    certificates,
+    anniversaries,
+    followUser,
+    unfollowUser,
+    isFollowing,
+    addReelComment,
+    getReelComments,
+    reportContent,
+    createNotification,
+    markNotificationAsRead,
+    getUnreadNotificationsCount,
+    logActivity,
   };
 });
