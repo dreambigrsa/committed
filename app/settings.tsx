@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  TextInput,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -29,6 +30,9 @@ export default function SettingsScreen() {
   const { currentUser, getCurrentUserRelationship } = useApp();
   const relationship = getCurrentUserRelationship();
 
+  const [editMode, setEditMode] = useState(false);
+  const [fullName, setFullName] = useState(currentUser?.fullName || '');
+  const [phoneNumber, setPhoneNumber] = useState(currentUser?.phoneNumber || '');
   const [notifications, setNotifications] = useState({
     relationshipRequests: true,
     cheatingAlerts: true,
@@ -42,9 +46,60 @@ export default function SettingsScreen() {
     allowSearchByPhone: true,
   });
 
+  useEffect(() => {
+    if (currentUser) {
+      loadSettings();
+    }
+  }, [currentUser]);
+
+  const loadSettings = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (data) {
+        if (data.notification_settings) {
+          setNotifications(data.notification_settings);
+        }
+        if (data.privacy_settings) {
+          setPrivacy(data.privacy_settings);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  };
+
   if (!currentUser) {
     return null;
   }
+
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          full_name: fullName,
+          phone_number: phoneNumber,
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Profile updated successfully!');
+      setEditMode(false);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      Alert.alert('Error', 'Failed to update profile');
+    }
+  };
 
   const handleToggleNotification = async (key: keyof typeof notifications) => {
     const newValue = !notifications[key];
@@ -176,6 +231,68 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Shield size={20} color={colors.primary} />
+              <Text style={styles.sectionTitle}>Profile Information</Text>
+            </View>
+
+            <View style={styles.settingsList}>
+              <View style={styles.profileEditSection}>
+                <View style={styles.editRow}>
+                  <Text style={styles.editLabel}>Full Name</Text>
+                  <TextInput
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    editable={editMode}
+                    placeholder="Enter your full name"
+                    placeholderTextColor={colors.text.tertiary}
+                  />
+                </View>
+                <View style={styles.editRow}>
+                  <Text style={styles.editLabel}>Phone Number</Text>
+                  <TextInput
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    editable={editMode}
+                    placeholder="Enter your phone number"
+                    placeholderTextColor={colors.text.tertiary}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                {editMode ? (
+                  <View style={styles.editButtons}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={() => {
+                        setEditMode(false);
+                        setFullName(currentUser?.fullName || '');
+                        setPhoneNumber(currentUser?.phoneNumber || '');
+                      }}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={handleSaveProfile}
+                    >
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => setEditMode(true)}
+                  >
+                    <Text style={styles.editButtonText}>Edit Profile</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Bell size={20} color={colors.primary} />
@@ -496,5 +613,74 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
     lineHeight: 18,
+  },
+  profileEditSection: {
+    padding: 16,
+    gap: 16,
+  },
+  editRow: {
+    gap: 8,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  editInput: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  editInputDisabled: {
+    backgroundColor: colors.background.primary,
+    color: colors.text.secondary,
+  },
+  editButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: colors.background.secondary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
 });
