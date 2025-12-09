@@ -131,6 +131,69 @@ export default function AdminUsersScreen() {
     }
   };
 
+  const handleChangeRole = async (userId: string, currentRole: string) => {
+    if (currentUser?.role !== 'super_admin') {
+      Alert.alert('Error', 'Only Super Admins can change roles');
+      return;
+    }
+
+    Alert.alert(
+      'Change User Role',
+      'Select new role for this user:',
+      [
+        {
+          text: 'User',
+          onPress: async () => {
+            try {
+              await supabase.from('users').update({ role: 'user' }).eq('id', userId);
+              Alert.alert('Success', 'Role updated to User');
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update role');
+            }
+          },
+        },
+        {
+          text: 'Moderator',
+          onPress: async () => {
+            try {
+              await supabase.from('users').update({ role: 'moderator' }).eq('id', userId);
+              Alert.alert('Success', 'Role updated to Moderator');
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update role');
+            }
+          },
+        },
+        {
+          text: 'Admin',
+          onPress: async () => {
+            try {
+              await supabase.from('users').update({ role: 'admin' }).eq('id', userId);
+              Alert.alert('Success', 'Role updated to Admin');
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update role');
+            }
+          },
+        },
+        currentUser.role === 'super_admin' && {
+          text: 'Super Admin',
+          onPress: async () => {
+            try {
+              await supabase.from('users').update({ role: 'super_admin' }).eq('id', userId);
+              Alert.alert('Success', 'Role updated to Super Admin');
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update role');
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ].filter(Boolean) as any
+    );
+  };
+
   const filteredUsers = users.filter(user =>
     user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -243,6 +306,15 @@ export default function AdminUsersScreen() {
 
                 {user.id !== currentUser.id && (
                   <View style={styles.userActions}>
+                    {currentUser.role === 'super_admin' && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.editButton]}
+                        onPress={() => handleChangeRole(user.id, user.role)}
+                      >
+                        <Edit2 size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Role</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       style={[styles.actionButton, styles.banButton]}
                       onPress={() => handleBanUser(user.id)}
@@ -422,6 +494,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 8,
+  },
+  editButton: {
+    backgroundColor: colors.secondary,
   },
   banButton: {
     backgroundColor: colors.danger,
