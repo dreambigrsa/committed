@@ -191,19 +191,22 @@ export const [AppContext, useApp] = createContextHook(() => {
         .single();
 
       if (insertError) {
-        console.error('Failed to create user record:', JSON.stringify(insertError, null, 2));
-        
+        // Handle duplicate key error (user already exists)
         if (insertError.code === '23505') {
-          console.log('User already exists, trying to load...');
+          console.log('User already exists (duplicate email or ID), loading existing user...');
           await loadUserData(userId);
           return;
         }
         
+        // Handle RLS policy error
         if (insertError.code === '42501') {
           console.error('RLS policy error: User cannot insert their own record');
           console.error('Please run the supabase-fix-rls.sql script in your Supabase SQL editor');
+          throw insertError;
         }
         
+        // Log and throw other errors
+        console.error('Failed to create user record:', JSON.stringify(insertError, null, 2));
         throw insertError;
       }
 
@@ -281,11 +284,16 @@ export const [AppContext, useApp] = createContextHook(() => {
               id_verified: false,
             });
 
-          if (profileError && profileError.code !== '23505') {
-            console.error('Profile creation error:', JSON.stringify(profileError, null, 2));
-            
-            if (profileError.code === '42501') {
+          if (profileError) {
+            // Handle duplicate key error (user already exists)
+            if (profileError.code === '23505') {
+              console.log('User profile already exists, continuing...');
+            } else if (profileError.code === '42501') {
               console.error('RLS policy error. Please run supabase-fix-rls.sql in your Supabase SQL editor');
+              throw profileError;
+            } else {
+              console.error('Profile creation error:', JSON.stringify(profileError, null, 2));
+              throw profileError;
             }
           } else {
             console.log('User profile created successfully');
