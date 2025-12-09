@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,263 +8,256 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Calendar, Heart, Bell, Gift, Cake } from 'lucide-react-native';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Calendar, Heart, Plus, Bell, X } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 
+interface Anniversary {
+  id: string;
+  relationship_id: string;
+  anniversary_date: string;
+  reminder_sent: boolean;
+  created_at: string;
+}
+
 export default function AnniversaryScreen() {
-  const { relationshipId } = useLocalSearchParams();
-  const { currentUser } = useApp();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const relationshipId = params.relationshipId as string;
+  const { currentUser, getCurrentUserRelationship } = useApp();
+  const relationship = getCurrentUserRelationship();
+
+  const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [relationship, setRelationship] = useState<any>(null);
-  const [anniversaries, setAnniversaries] = useState<any[]>([]);
-  const [upcomingAnniversary, setUpcomingAnniversary] = useState<any>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    loadAnniversaryData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadAnniversaries();
   }, [relationshipId]);
 
-  const loadAnniversaryData = async () => {
+  const loadAnniversaries = useCallback(async () => {
     try {
-      const { data: relData } = await supabase
-        .from('relationships')
-        .select('*')
-        .eq('id', relationshipId)
-        .single();
-
-      setRelationship(relData);
-
-      if (relData) {
-        calculateAnniversaries(relData.start_date);
-      }
-
-      const { data: annivData } = await supabase
+      const { data } = await supabase
         .from('anniversaries')
         .select('*')
         .eq('relationship_id', relationshipId)
-        .order('anniversary_date', { ascending: false });
+        .order('anniversary_date', { ascending: true });
 
-      if (annivData) {
-        setAnniversaries(annivData);
+      if (data) {
+        setAnniversaries(data);
       }
     } catch (error) {
-      console.error('Failed to load anniversary data:', error);
+      console.error('Failed to load anniversaries:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [relationshipId]);
 
-  const calculateAnniversaries = (startDate: string) => {
-    const start = new Date(startDate);
-    const now = new Date();
-    const monthsDiff = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
-    
-    const nextAnniversaryDate = new Date(start);
-    nextAnniversaryDate.setMonth(nextAnniversaryDate.getMonth() + monthsDiff + 1);
-    
-    const daysUntil = Math.ceil((nextAnniversaryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    setUpcomingAnniversary({
-      date: nextAnniversaryDate,
-      months: monthsDiff + 1,
-      daysUntil,
-    });
-  };
-
-  const createAnniversaryReminder = async () => {
-    if (!upcomingAnniversary || !currentUser) return;
-
+  const handleCreateAnniversary = async () => {
+    setIsCreating(true);
     try {
       const { error } = await supabase
         .from('anniversaries')
         .insert({
-          relationship_id: relationshipId as string,
-          anniversary_date: upcomingAnniversary.date.toISOString(),
+          relationship_id: relationshipId,
+          anniversary_date: selectedDate.toISOString(),
           reminder_sent: false,
         });
 
       if (error) throw error;
 
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: currentUser.id,
-          type: 'relationship_verified',
-          title: 'Anniversary Reminder Set',
-          message: `You'll be reminded about your ${upcomingAnniversary.months} month anniversary on ${upcomingAnniversary.date.toLocaleDateString()}`,
-          read: false,
-        });
-
-      Alert.alert('Success', 'Anniversary reminder has been set!');
-      loadAnniversaryData();
+      Alert.alert('Success', 'Anniversary reminder added!');
+      setShowDatePicker(false);
+      loadAnniversaries();
     } catch (error) {
-      console.error('Failed to create reminder:', error);
-      Alert.alert('Error', 'Failed to create anniversary reminder');
+      console.error('Failed to create anniversary:', error);
+      Alert.alert('Error', 'Failed to add anniversary reminder');
+    } finally {
+      setIsCreating(false);
     }
   };
 
-  const getMilestoneIcon = (months: number) => {
-    if (months % 12 === 0) return <Cake size={24} color={colors.primary} />;
-    if (months === 6) return <Gift size={24} color={colors.accent} />;
-    return <Heart size={24} color={colors.danger} />;
+  const handleDeleteAnniversary = async (id: string) => {
+    try {
+      await supabase
+        .from('anniversaries')
+        .delete()
+        .eq('id', id);
+
+      loadAnniversaries();
+    } catch (error) {
+      console.error('Failed to delete anniversary:', error);
+    }
   };
 
-  const getMilestoneLabel = (months: number) => {
-    const years = Math.floor(months / 12);
-    const remainingMonths = months % 12;
-
-    if (years > 0 && remainingMonths === 0) {
-      return `${years} Year${years > 1 ? 's' : ''}`;
-    } else if (years > 0) {
-      return `${years} Year${years > 1 ? 's' : ''} ${remainingMonths} Month${remainingMonths > 1 ? 's' : ''}`;
-    }
-    return `${months} Month${months > 1 ? 's' : ''}`;
+  const calculateDaysUntil = (date: string) => {
+    const today = new Date();
+    const anniversaryDate = new Date(date);
+    const diffTime = anniversaryDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Stack.Screen options={{ title: 'Anniversaries' }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
+      <>
+        <Stack.Screen options={{ headerShown: true, title: 'Anniversaries' }} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
+  if (!relationship) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: true, title: 'Anniversaries' }} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>
+              No relationship found
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  const relationshipStartDate = new Date(relationship.startDate);
+  const daysTogether = Math.floor(
+    (Date.now() - relationshipStartDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Anniversary Tracker' }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Anniversaries' }} />
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {upcomingAnniversary && (
-            <View style={styles.upcomingCard}>
-              <View style={styles.upcomingHeader}>
-                <Calendar size={32} color={colors.primary} />
-                <View style={styles.upcomingInfo}>
-                  <Text style={styles.upcomingLabel}>Next Anniversary</Text>
-                  <Text style={styles.upcomingTitle}>
-                    {getMilestoneLabel(upcomingAnniversary.months)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.countdownContainer}>
-                <View style={styles.countdownBox}>
-                  <Text style={styles.countdownNumber}>{upcomingAnniversary.daysUntil}</Text>
-                  <Text style={styles.countdownLabel}>Days</Text>
-                </View>
-                <Text style={styles.countdownDate}>
-                  {upcomingAnniversary.date.toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.reminderButton}
-                onPress={createAnniversaryReminder}
-              >
-                <Bell size={20} color={colors.text.white} />
-                <Text style={styles.reminderButtonText}>Set Reminder</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Relationship Timeline</Text>
-
-            {relationship && (
-              <View style={styles.timelineCard}>
-                <View style={styles.timelineItem}>
-                  <View style={styles.timelineIcon}>
-                    <Heart size={20} color={colors.danger} fill={colors.danger} />
-                  </View>
-                  <View style={styles.timelineContent}>
-                    <Text style={styles.timelineTitle}>Relationship Started</Text>
-                    <Text style={styles.timelineDate}>
-                      {new Date(relationship.start_date).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </Text>
-                  </View>
-                </View>
-
-                {relationship.verified_date && (
-                  <View style={styles.timelineItem}>
-                    <View style={styles.timelineIcon}>
-                      <Bell size={20} color={colors.secondary} />
-                    </View>
-                    <View style={styles.timelineContent}>
-                      <Text style={styles.timelineTitle}>Relationship Verified</Text>
-                      <Text style={styles.timelineDate}>
-                        {new Date(relationship.verified_date).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
+          <View style={styles.summaryCard}>
+            <Heart size={48} color={colors.danger} fill={colors.danger} />
+            <Text style={styles.summaryTitle}>
+              {currentUser?.fullName} & {relationship.partnerName}
+            </Text>
+            <Text style={styles.summarySubtitle}>Together for {daysTogether} days</Text>
+            <Text style={styles.summaryDate}>
+              Since {relationshipStartDate.toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </Text>
           </View>
 
-          {anniversaries.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Past Milestones</Text>
-              {anniversaries.map((anniversary, index) => {
-                const months = Math.floor(
-                  (new Date(anniversary.anniversary_date).getTime() - 
-                   new Date(relationship.start_date).getTime()) / 
-                  (1000 * 60 * 60 * 24 * 30)
-                );
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Anniversary Reminders</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Plus size={20} color={colors.text.white} />
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {anniversaries.length > 0 ? (
+            <View style={styles.anniversariesList}>
+              {anniversaries.map((anniversary) => {
+                const daysUntil = calculateDaysUntil(anniversary.anniversary_date);
+                const isPast = daysUntil < 0;
+                const isToday = daysUntil === 0;
 
                 return (
-                  <View key={anniversary.id} style={styles.milestoneCard}>
-                    <View style={styles.milestoneIcon}>
-                      {getMilestoneIcon(months)}
+                  <View key={anniversary.id} style={styles.anniversaryCard}>
+                    <View style={styles.anniversaryIcon}>
+                      <Calendar size={24} color={isToday ? colors.danger : colors.primary} />
                     </View>
-                    <View style={styles.milestoneContent}>
-                      <Text style={styles.milestoneTitle}>
-                        {getMilestoneLabel(months)}
-                      </Text>
-                      <Text style={styles.milestoneDate}>
+                    <View style={styles.anniversaryInfo}>
+                      <Text style={styles.anniversaryDate}>
                         {new Date(anniversary.anniversary_date).toLocaleDateString('en-US', {
-                          year: 'numeric',
                           month: 'long',
                           day: 'numeric',
+                          year: 'numeric',
                         })}
                       </Text>
+                      <Text
+                        style={[
+                          styles.anniversaryDays,
+                          isToday && styles.anniversaryDaysToday,
+                          isPast && styles.anniversaryDaysPast,
+                        ]}
+                      >
+                        {isToday
+                          ? 'Today! 🎉'
+                          : isPast
+                          ? `${Math.abs(daysUntil)} days ago`
+                          : `In ${daysUntil} days`}
+                      </Text>
                     </View>
-                    {anniversary.reminder_sent && (
-                      <View style={styles.reminderBadge}>
-                        <Bell size={16} color={colors.secondary} />
-                      </View>
-                    )}
+                    <TouchableOpacity
+                      onPress={() => handleDeleteAnniversary(anniversary.id)}
+                      style={styles.deleteButton}
+                    >
+                      <X size={20} color={colors.text.tertiary} />
+                    </TouchableOpacity>
                   </View>
                 );
               })}
             </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Bell size={48} color={colors.text.tertiary} strokeWidth={1.5} />
+              <Text style={styles.emptyStateTitle}>No Reminders Yet</Text>
+              <Text style={styles.emptyStateText}>
+                Add anniversary reminders to celebrate your special moments
+              </Text>
+            </View>
           )}
 
-          <View style={styles.infoCard}>
-            <Heart size={20} color={colors.danger} />
-            <Text style={styles.infoText}>
-              Track your relationship milestones and get reminded about important anniversaries. 
-              Celebrate every moment together!
-            </Text>
-          </View>
+          {showDatePicker && (
+            <View style={styles.datePickerModal}>
+              <View style={styles.datePickerCard}>
+                <Text style={styles.datePickerTitle}>Select Anniversary Date</Text>
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={(event, date) => {
+                    if (date) setSelectedDate(date);
+                  }}
+                  minimumDate={new Date()}
+                />
+                <View style={styles.datePickerActions}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.confirmButton}
+                    onPress={handleCreateAnniversary}
+                    disabled={isCreating}
+                  >
+                    {isCreating ? (
+                      <ActivityIndicator color={colors.text.white} size="small" />
+                    ) : (
+                      <Text style={styles.confirmButtonText}>Add Reminder</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </>
@@ -276,131 +269,87 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.secondary,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scrollContent: {
     padding: 20,
     paddingBottom: 40,
   },
-  upcomingCard: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: colors.primary + '30',
-  },
-  upcomingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 20,
-  },
-  upcomingInfo: {
+  loadingContainer: {
     flex: 1,
-  },
-  upcomingLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    fontWeight: '600' as const,
-    marginBottom: 4,
-  },
-  upcomingTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.text.primary,
-  },
-  countdownContainer: {
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  countdownBox: {
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 20,
   },
-  countdownNumber: {
-    fontSize: 48,
-    fontWeight: '700' as const,
-    color: colors.primary,
-  },
-  countdownLabel: {
+  errorText: {
     fontSize: 16,
-    color: colors.text.secondary,
-    fontWeight: '600' as const,
-  },
-  countdownDate: {
-    fontSize: 15,
     color: colors.text.secondary,
     textAlign: 'center',
   },
-  reminderButton: {
-    flexDirection: 'row',
+  summaryCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 20,
+    padding: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-  },
-  reminderButtonText: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: colors.text.white,
-  },
-  section: {
     marginBottom: 24,
   },
-  sectionTitle: {
+  summaryTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  summarySubtitle: {
+    fontSize: 18,
+    color: colors.text.secondary,
+    marginTop: 8,
+  },
+  summaryDate: {
+    fontSize: 14,
+    color: colors.text.tertiary,
+    marginTop: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 16,
   },
-  timelineCard: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 16,
-    padding: 20,
-    gap: 16,
-  },
-  timelineItem: {
+  addButton: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  timelineIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.background.secondary,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
-  timelineContent: {
-    flex: 1,
-  },
-  timelineTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: colors.text.primary,
-    marginBottom: 4,
-  },
-  timelineDate: {
+  addButtonText: {
     fontSize: 14,
-    color: colors.text.secondary,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
-  milestoneCard: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
+  anniversariesList: {
+    gap: 12,
+  },
+  anniversaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
   },
-  milestoneIcon: {
+  anniversaryIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -408,41 +357,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  milestoneContent: {
+  anniversaryInfo: {
     flex: 1,
   },
-  milestoneTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
+  anniversaryDate: {
+    fontSize: 16,
+    fontWeight: '600' as const,
     color: colors.text.primary,
     marginBottom: 4,
   },
-  milestoneDate: {
+  anniversaryDays: {
     fontSize: 14,
     color: colors.text.secondary,
   },
-  reminderBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.badge.verified,
-    alignItems: 'center',
-    justifyContent: 'center',
+  anniversaryDaysToday: {
+    color: colors.danger,
+    fontWeight: '700' as const,
   },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+  anniversaryDaysPast: {
+    color: colors.text.tertiary,
+  },
+  deleteButton: {
+    padding: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginTop: 16,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 40,
+    lineHeight: 22,
+  },
+  datePickerModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  datePickerCard: {
     backgroundColor: colors.background.primary,
-    padding: 16,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: colors.background.secondary,
+    paddingVertical: 14,
     borderRadius: 12,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border.light,
   },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
     color: colors.text.secondary,
-    lineHeight: 20,
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.white,
   },
 });

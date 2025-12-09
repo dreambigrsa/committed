@@ -8,48 +8,41 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Share,
+  Platform,
 } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Award, Share2, Camera, CheckCircle2 } from 'lucide-react-native';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Download, Award, Share2, CheckCircle2 } from 'lucide-react-native';
+import { Image } from 'expo-image';
+
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
-import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
 export default function CertificateScreen() {
-  const { relationshipId } = useLocalSearchParams();
-  const { currentUser } = useApp();
-  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const relationshipId = params.relationshipId as string;
+  const { currentUser, getCurrentUserRelationship } = useApp();
+  const relationship = getCurrentUserRelationship();
+
   const [certificate, setCertificate] = useState<any>(null);
-  const [relationship, setRelationship] = useState<any>(null);
-  const [verificationSelfie, setVerificationSelfie] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     loadCertificate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relationshipId]);
 
   const loadCertificate = async () => {
     try {
-      const { data: relData } = await supabase
-        .from('relationships')
-        .select('*')
-        .eq('id', relationshipId)
-        .single();
-
-      setRelationship(relData);
-
-      const { data: certData } = await supabase
+      const { data, error } = await supabase
         .from('couple_certificates')
         .select('*')
         .eq('relationship_id', relationshipId)
         .single();
 
-      if (certData) {
-        setCertificate(certData);
-        setVerificationSelfie(certData.verification_selfie_url);
+      if (data) {
+        setCertificate(data);
       }
     } catch (error) {
       console.error('Failed to load certificate:', error);
@@ -58,116 +51,54 @@ export default function CertificateScreen() {
     }
   };
 
-  const generateCertificate = async () => {
-    if (!relationship || !currentUser) return;
-
-    setIsLoading(true);
-    try {
-      const certificateUrl = `https://api.dicebear.com/7.x/shapes/svg?seed=${relationshipId}`;
-
-      const { data, error } = await supabase
-        .from('couple_certificates')
-        .insert({
-          relationship_id: relationshipId as string,
-          certificate_url: certificateUrl,
-          verification_selfie_url: verificationSelfie,
-          issued_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setCertificate(data);
-      Alert.alert('Success', 'Certificate generated successfully!');
-    } catch (error) {
-      console.error('Failed to generate certificate:', error);
-      Alert.alert('Error', 'Failed to generate certificate');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const uploadVerificationSelfie = async () => {
-    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Camera permission is required to take a verification selfie.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-      aspect: [1, 1],
+  const handleCreateCertificate = () => {
+    router.push({
+      pathname: '/verification/couple-selfie' as any,
+      params: { relationshipId },
     });
-
-    if (!result.canceled && result.assets[0]) {
-      try {
-        const fileName = `verification_${Date.now()}.jpg`;
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-
-        const { error } = await supabase.storage
-          .from('media')
-          .upload(fileName, uint8Array, {
-            contentType: 'image/jpeg',
-            upsert: false,
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('media')
-          .getPublicUrl(fileName);
-
-        setVerificationSelfie(publicUrl);
-
-        if (certificate) {
-          await supabase
-            .from('couple_certificates')
-            .update({ verification_selfie_url: publicUrl })
-            .eq('id', certificate.id);
-        }
-
-        Alert.alert('Success', 'Verification selfie uploaded!');
-      } catch (error) {
-        console.error('Failed to upload selfie:', error);
-        Alert.alert('Error', 'Failed to upload selfie');
-      }
-    }
   };
 
-  const shareCertificate = async () => {
+  const handleDownloadCertificate = async () => {
     if (!certificate) return;
 
-    try {
-      await Share.share({
-        message: `Check out our verified relationship certificate! ${certificate.certificate_url}`,
-        title: 'Relationship Certificate',
-      });
-    } catch (error) {
-      console.error('Failed to share:', error);
+    if (Platform.OS === 'web') {
+      window.open(certificate.certificate_url, '_blank');
+    } else {
+      Alert.alert('Success', 'Certificate download coming soon!');
     }
   };
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Stack.Screen options={{ title: 'Certificate' }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
+      <>
+        <Stack.Screen options={{ headerShown: true, title: 'Certificate' }} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  if (!relationship || relationship.status !== 'verified') {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: true, title: 'Certificate' }} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>
+              Only verified relationships can generate certificates
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Relationship Certificate' }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Couple Certificate' }} />
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {certificate ? (
@@ -175,119 +106,101 @@ export default function CertificateScreen() {
               <View style={styles.certificateCard}>
                 <View style={styles.certificateHeader}>
                   <Award size={48} color={colors.primary} />
-                  <Text style={styles.certificateTitle}>Official Relationship Certificate</Text>
+                  <Text style={styles.certificateTitle}>
+                    Official Couple Certificate
+                  </Text>
                 </View>
 
                 <View style={styles.certificateBody}>
-                  <Text style={styles.certificateLabel}>This certifies that</Text>
-                  <Text style={styles.partnerName}>{relationship?.partner_name}</Text>
-                  <Text style={styles.certificateLabel}>and</Text>
-                  <Text style={styles.partnerName}>{currentUser?.fullName}</Text>
-                  <Text style={styles.certificateLabel}>are in a verified relationship</Text>
+                  <View style={styles.verifiedBadge}>
+                    <CheckCircle2 size={24} color={colors.secondary} />
+                    <Text style={styles.verifiedText}>Verified Couple</Text>
+                  </View>
 
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailLabel}>Relationship Type:</Text>
-                    <Text style={styles.detailValue}>
-                      {relationship?.type.charAt(0).toUpperCase() + relationship?.type.slice(1)}
+                  <Text style={styles.coupleNames}>
+                    {currentUser?.fullName} & {relationship.partnerName}
+                  </Text>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Relationship Type:</Text>
+                    <Text style={styles.infoValue}>
+                      {relationship.type === 'married' && 'Married'}
+                      {relationship.type === 'engaged' && 'Engaged'}
+                      {relationship.type === 'serious' && 'Serious Relationship'}
+                      {relationship.type === 'dating' && 'Dating'}
                     </Text>
                   </View>
 
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailLabel}>Start Date:</Text>
-                    <Text style={styles.detailValue}>
-                      {new Date(relationship?.start_date).toLocaleDateString('en-US', {
-                        year: 'numeric',
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Since:</Text>
+                    <Text style={styles.infoValue}>
+                      {new Date(relationship.startDate).toLocaleDateString('en-US', {
                         month: 'long',
                         day: 'numeric',
+                        year: 'numeric',
                       })}
                     </Text>
                   </View>
 
-                  <View style={styles.detailsRow}>
-                    <Text style={styles.detailLabel}>Verified Date:</Text>
-                    <Text style={styles.detailValue}>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Issued:</Text>
+                    <Text style={styles.infoValue}>
                       {new Date(certificate.issued_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
                         month: 'long',
                         day: 'numeric',
+                        year: 'numeric',
                       })}
                     </Text>
                   </View>
                 </View>
 
-                {verificationSelfie && (
-                  <View style={styles.selfieSection}>
-                    <Text style={styles.selfieLabel}>Verification Photo</Text>
-                    <Image
-                      source={{ uri: verificationSelfie }}
-                      style={styles.selfieImage}
-                      contentFit="cover"
-                    />
-                  </View>
+                {certificate.verification_selfie_url && (
+                  <Image
+                    source={{ uri: certificate.verification_selfie_url }}
+                    style={styles.selfieImage}
+                  />
                 )}
-
-                <View style={styles.verifiedBadge}>
-                  <CheckCircle2 size={20} color={colors.secondary} />
-                  <Text style={styles.verifiedText}>Verified Relationship</Text>
-                </View>
               </View>
 
-              <View style={styles.actions}>
-                {!verificationSelfie && (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={uploadVerificationSelfie}
-                  >
-                    <Camera size={20} color={colors.primary} />
-                    <Text style={styles.actionButtonText}>Add Verification Photo</Text>
-                  </TouchableOpacity>
-                )}
-
+              <View style={styles.actionsContainer}>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={shareCertificate}
+                  onPress={handleDownloadCertificate}
+                  disabled={isDownloading}
+                >
+                  {isDownloading ? (
+                    <ActivityIndicator color={colors.text.white} size="small" />
+                  ) : (
+                    <>
+                      <Download size={20} color={colors.text.white} />
+                      <Text style={styles.actionButtonText}>Download</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonSecondary]}
+                  onPress={() => {
+                    Alert.alert('Share', 'Share functionality coming soon!');
+                  }}
                 >
                   <Share2 size={20} color={colors.primary} />
-                  <Text style={styles.actionButtonText}>Share Certificate</Text>
+                  <Text style={styles.actionButtonTextSecondary}>Share</Text>
                 </TouchableOpacity>
               </View>
             </>
           ) : (
-            <View style={styles.noCertificate}>
+            <View style={styles.noCertificateContainer}>
               <Award size={80} color={colors.text.tertiary} strokeWidth={1.5} />
               <Text style={styles.noCertificateTitle}>No Certificate Yet</Text>
               <Text style={styles.noCertificateText}>
-                Generate an official certificate for your verified relationship
+                Complete couple selfie verification to generate your official certificate
               </Text>
-
-              {verificationSelfie ? (
-                <View style={styles.previewSelfie}>
-                  <Text style={styles.previewLabel}>Verification Photo Ready</Text>
-                  <Image
-                    source={{ uri: verificationSelfie }}
-                    style={styles.previewImage}
-                    contentFit="cover"
-                  />
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.selfieButton}
-                  onPress={uploadVerificationSelfie}
-                >
-                  <Camera size={24} color={colors.primary} />
-                  <Text style={styles.selfieButtonText}>Take Verification Photo</Text>
-                </TouchableOpacity>
-              )}
-
               <TouchableOpacity
-                style={[
-                  styles.generateButton,
-                  !verificationSelfie && styles.generateButtonDisabled,
-                ]}
-                onPress={generateCertificate}
-                disabled={!verificationSelfie}
+                style={styles.createButton}
+                onPress={handleCreateCertificate}
               >
-                <Text style={styles.generateButtonText}>Generate Certificate</Text>
+                <Text style={styles.createButtonText}>Start Verification</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -302,84 +215,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.secondary,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scrollContent: {
     padding: 20,
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   certificateCard: {
     backgroundColor: colors.background.primary,
     borderRadius: 20,
     padding: 24,
-    marginBottom: 20,
+    marginBottom: 24,
     borderWidth: 2,
     borderColor: colors.primary + '30',
   },
   certificateHeader: {
     alignItems: 'center',
     marginBottom: 24,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
   certificateTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    textAlign: 'center',
     marginTop: 12,
+    textAlign: 'center',
   },
   certificateBody: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  certificateLabel: {
-    fontSize: 16,
-    color: colors.text.secondary,
-    marginVertical: 8,
-  },
-  partnerName: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.primary,
-    marginVertical: 4,
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.light,
-    marginTop: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    fontWeight: '600' as const,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: colors.text.primary,
-    fontWeight: '600' as const,
-  },
-  selfieSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  selfieLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text.secondary,
-    marginBottom: 12,
-  },
-  selfieImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 3,
-    borderColor: colors.primary,
+    gap: 20,
   },
   verifiedBadge: {
     flexDirection: 'row',
@@ -389,96 +268,98 @@ const styles = StyleSheet.create({
     backgroundColor: colors.badge.verified,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 25,
+    borderRadius: 12,
   },
   verifiedText: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.badge.verifiedText,
   },
-  actions: {
+  coupleNames: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginVertical: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    fontWeight: '500' as const,
+  },
+  infoValue: {
+    fontSize: 15,
+    color: colors.text.primary,
+    fontWeight: '600' as const,
+  },
+  selfieImage: {
+    width: '100%',
+    height: 250,
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
     gap: 12,
   },
   actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    backgroundColor: colors.background.primary,
+    gap: 8,
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
+  },
+  actionButtonSecondary: {
+    backgroundColor: colors.background.primary,
     borderWidth: 2,
-    borderColor: colors.border.light,
+    borderColor: colors.primary,
   },
   actionButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  actionButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.primary,
   },
-  noCertificate: {
+  noCertificateContainer: {
     alignItems: 'center',
     paddingVertical: 60,
   },
   noCertificateTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginTop: 20,
-    marginBottom: 8,
+    marginTop: 24,
+    marginBottom: 12,
   },
   noCertificateText: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
     marginBottom: 32,
     paddingHorizontal: 20,
   },
-  previewSelfie: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  previewLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.secondary,
-    marginBottom: 12,
-  },
-  previewImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: colors.secondary,
-  },
-  selfieButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.background.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: colors.border.light,
-  },
-  selfieButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
-  generateButton: {
+  createButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
     borderRadius: 12,
   },
-  generateButtonDisabled: {
-    backgroundColor: colors.text.tertiary,
-  },
-  generateButtonText: {
-    fontSize: 18,
+  createButtonText: {
+    fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.white,
   },
