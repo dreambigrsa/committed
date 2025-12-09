@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Home, Search, User, MessageSquare, Film } from "lucide-react-native";
+import { Home, Search, User, MessageSquare, Film, Heart } from "lucide-react-native";
 import React from "react";
 import colors from "@/constants/colors";
 
@@ -29,13 +29,20 @@ export default function TabLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Heart size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="feed"
         options={{
           title: "Feed",
+          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reels"
+        options={{
+          title: "Reels",
           tabBarIcon: ({ color }) => <Film size={24} color={color} />,
         }}
       />
@@ -58,12 +65,6 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="reels"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen

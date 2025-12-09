@@ -197,18 +197,39 @@ export default function FeedScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {posts.map((post, index) => {
-          const ads = getActiveAds('feed');
-          const shouldShowAd = (index + 1) % 3 === 0 && ads.length > 0;
-          const adIndex = Math.floor(index / 3) % ads.length;
-          
-          return (
-            <React.Fragment key={post.id}>
-              {renderPost(post)}
-              {shouldShowAd && renderAd(ads[adIndex])}
-            </React.Fragment>
-          );
-        })}
+        {posts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Heart size={64} color={colors.text.tertiary} strokeWidth={1.5} />
+            <Text style={styles.emptyStateTitle}>No Posts Yet</Text>
+            <Text style={styles.emptyStateText}>
+              Be the first to share your relationship journey!
+              Create a post to get started.
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyStateButton}
+              onPress={() => router.push('/post/create' as any)}
+            >
+              <Plus size={20} color={colors.text.white} />
+              <Text style={styles.emptyStateButtonText}>Create Your First Post</Text>
+            </TouchableOpacity>
+            <Text style={styles.emptyStateNote}>
+              💡 Tip: Run the seed-sample-data.sql script in Supabase to see sample posts
+            </Text>
+          </View>
+        ) : (
+          posts.map((post, index) => {
+            const ads = getActiveAds('feed');
+            const shouldShowAd = (index + 1) % 3 === 0 && ads.length > 0;
+            const adIndex = Math.floor(index / 3) % ads.length;
+            
+            return (
+              <React.Fragment key={post.id}>
+                {renderPost(post)}
+                {shouldShowAd && renderAd(ads[adIndex])}
+              </React.Fragment>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -581,5 +602,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: colors.primary,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  emptyStateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  emptyStateButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  emptyStateNote: {
+    fontSize: 13,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontStyle: 'italic' as const,
   },
 });

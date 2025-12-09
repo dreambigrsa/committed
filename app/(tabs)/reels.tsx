@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -139,26 +139,58 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        ref={scrollViewRef}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        style={styles.scrollView}
-      >
-        {reels.map((reel, index) => renderReel(reel, index))}
-      </ScrollView>
-
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Reels</Text>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => router.push('/reel/create' as any)}
-        >
-          <Plus size={24} color={colors.text.white} />
-        </TouchableOpacity>
-      </View>
+      {reels.length === 0 ? (
+        <>
+          <View style={styles.emptyContainer}>
+            <Film size={80} color={colors.text.tertiary} strokeWidth={1.5} />
+            <Text style={styles.emptyTitle}>No Reels Yet</Text>
+            <Text style={styles.emptyText}>
+              Create and share short video moments from your relationship journey!
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => router.push('/reel/create' as any)}
+            >
+              <Plus size={20} color={colors.text.white} />
+              <Text style={styles.emptyButtonText}>Create Your First Reel</Text>
+            </TouchableOpacity>
+            <Text style={styles.emptyNote}>
+              💡 Tip: Run the seed-sample-data.sql script in Supabase to see sample reels
+            </Text>
+          </View>
+          <View style={styles.emptyHeader}>
+            <Text style={[styles.headerTitle, styles.emptyHeaderTitle]}>Reels</Text>
+            <TouchableOpacity
+              style={styles.emptyCreateButton}
+              onPress={() => router.push('/reel/create' as any)}
+            >
+              <Plus size={24} color={colors.text.white} />
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <>
+          <ScrollView
+            ref={scrollViewRef}
+            pagingEnabled
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            style={styles.scrollView}
+          >
+            {reels.map((reel, index) => renderReel(reel, index))}
+          </ScrollView>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Reels</Text>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => router.push('/reel/create' as any)}
+            >
+              <Plus size={24} color={colors.text.white} />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -279,6 +311,77 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    backgroundColor: colors.background.secondary,
+  },
+  emptyTitle: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  emptyButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  emptyNote: {
+    fontSize: 13,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontStyle: 'italic' as const,
+  },
+  emptyHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: colors.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  emptyHeaderTitle: {
+    color: colors.text.primary,
+    textShadowColor: 'transparent',
+  },
+  emptyCreateButton: {
+    position: 'absolute',
+    right: 20,
+    top: 56,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
