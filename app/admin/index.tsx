@@ -20,6 +20,7 @@ import {
   FileText,
   MessageSquare,
   DollarSign,
+  Video,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -80,6 +81,22 @@ export default function AdminDashboardScreen() {
       description: 'Review reports',
       route: '/admin/reports',
       color: colors.danger,
+      visible: true,
+    },
+    {
+      title: 'Posts Review',
+      icon: FileText,
+      description: 'Review posts',
+      route: '/admin/posts-review',
+      color: '#4ECDC4',
+      visible: true,
+    },
+    {
+      title: 'Reels Review',
+      icon: Video,
+      description: 'Review reels',
+      route: '/admin/reels-review',
+      color: '#95E1D3',
       visible: true,
     },
     {
