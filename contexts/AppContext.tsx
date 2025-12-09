@@ -87,6 +87,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         const user: User = {
           id: userData.id,
           fullName: userData.full_name,
+          username: userData.username,
           email: userData.email,
           phoneNumber: userData.phone_number,
           profilePicture: userData.profile_picture,
@@ -107,6 +108,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           *,
           users!posts_user_id_fkey(full_name, profile_picture)
         `)
+        .or(`moderation_status.eq.approved,user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -141,6 +143,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           *,
           users!reels_user_id_fkey(full_name, profile_picture)
         `)
+        .or(`moderation_status.eq.approved,user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -667,7 +670,8 @@ export const [AppContext, useApp] = createContextHook(() => {
   const createRelationship = useCallback(async (
     partnerName: string,
     partnerPhone: string,
-    type: Relationship['type']
+    type: Relationship['type'],
+    partnerUserId?: string
   ) => {
     if (!currentUser) return null;
     
@@ -700,11 +704,22 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
       }
 
-      const { data: partnerData } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone_number', partnerPhone)
-        .single();
+      let partnerData = null;
+      if (partnerUserId) {
+        const { data } = await supabase
+          .from('users')
+          .select('id, phone_number')
+          .eq('id', partnerUserId)
+          .single();
+        partnerData = data;
+      } else {
+        const { data } = await supabase
+          .from('users')
+          .select('id')
+          .eq('phone_number', partnerPhone)
+          .single();
+        partnerData = data;
+      }
 
       if (partnerData) {
         const { data: partnerExistingRels } = await supabase
@@ -849,14 +864,18 @@ export const [AppContext, useApp] = createContextHook(() => {
       return (data || []).map((u: any) => ({
         id: u.id,
         fullName: u.full_name,
-        email: u.email,
-        phoneNumber: u.phone_number,
+        username: u.username,
+        email: u.email || '',
+        phoneNumber: u.phone_number || '',
         profilePicture: u.profile_picture,
-        role: u.role,
+        role: u.role || 'user',
+        isRegisteredUser: u.is_registered_user !== false, // Default to true if not specified
+        relationshipType: u.relationship_type,
+        relationshipStatus: u.relationship_status,
         verifications: {
-          phone: u.phone_verified,
-          email: u.email_verified,
-          id: u.id_verified,
+          phone: u.phone_verified || false,
+          email: u.email_verified || false,
+          id: u.id_verified || false,
         },
         createdAt: '',
       }));
@@ -1364,6 +1383,162 @@ export const [AppContext, useApp] = createContextHook(() => {
       )
       .subscribe();
     subs.push(requestsChannel);
+
+    // Real-time subscription for posts
+    const postsChannel = supabase
+      .channel('posts_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'posts',
+        },
+        async (payload: any) => {
+          if (payload.eventType === 'INSERT' && payload.new.moderation_status === 'approved') {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('full_name, profile_picture')
+              .eq('id', payload.new.user_id)
+              .single();
+            
+            if (userData) {
+              const newPost: Post = {
+                id: payload.new.id,
+                userId: payload.new.user_id,
+                userName: userData.full_name,
+                userAvatar: userData.profile_picture,
+                content: payload.new.content,
+                mediaUrls: payload.new.media_urls || [],
+                mediaType: payload.new.media_type,
+                likes: [],
+                commentCount: payload.new.comment_count || 0,
+                createdAt: payload.new.created_at,
+              };
+              setPosts(prev => [newPost, ...prev.filter(p => p.id !== newPost.id)]);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            if (payload.new.moderation_status === 'approved') {
+              // Reload posts to get updated one
+              const { data: postsData } = await supabase
+                .from('posts')
+                .select(`
+                  *,
+                  users!posts_user_id_fkey(full_name, profile_picture)
+                `)
+                .eq('id', payload.new.id)
+                .single();
+              
+              if (postsData) {
+                const { data: postLikesData } = await supabase
+                  .from('post_likes')
+                  .select('user_id')
+                  .eq('post_id', postsData.id);
+                
+                const likes = postLikesData?.map((l: any) => l.user_id) || [];
+                const updatedPost: Post = {
+                  id: postsData.id,
+                  userId: postsData.user_id,
+                  userName: postsData.users.full_name,
+                  userAvatar: postsData.users.profile_picture,
+                  content: postsData.content,
+                  mediaUrls: postsData.media_urls || [],
+                  mediaType: postsData.media_type,
+                  likes,
+                  commentCount: postsData.comment_count,
+                  createdAt: postsData.created_at,
+                };
+                setPosts(prev => [updatedPost, ...prev.filter(p => p.id !== updatedPost.id)]);
+              }
+            } else {
+              // Remove if rejected
+              setPosts(prev => prev.filter(p => p.id !== payload.new.id));
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setPosts(prev => prev.filter(p => p.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+    subs.push(postsChannel);
+
+    // Real-time subscription for reels
+    const reelsChannel = supabase
+      .channel('reels_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reels',
+        },
+        async (payload: any) => {
+          if (payload.eventType === 'INSERT' && payload.new.moderation_status === 'approved') {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('full_name, profile_picture')
+              .eq('id', payload.new.user_id)
+              .single();
+            
+            if (userData) {
+              const newReel: Reel = {
+                id: payload.new.id,
+                userId: payload.new.user_id,
+                userName: userData.full_name,
+                userAvatar: userData.profile_picture,
+                videoUrl: payload.new.video_url,
+                thumbnailUrl: payload.new.thumbnail_url,
+                caption: payload.new.caption,
+                likes: [],
+                commentCount: payload.new.comment_count || 0,
+                viewCount: payload.new.view_count || 0,
+                createdAt: payload.new.created_at,
+              };
+              setReels(prev => [newReel, ...prev.filter(r => r.id !== newReel.id)]);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            if (payload.new.moderation_status === 'approved') {
+              const { data: reelsData } = await supabase
+                .from('reels')
+                .select(`
+                  *,
+                  users!reels_user_id_fkey(full_name, profile_picture)
+                `)
+                .eq('id', payload.new.id)
+                .single();
+              
+              if (reelsData) {
+                const { data: reelLikesData } = await supabase
+                  .from('reel_likes')
+                  .select('user_id')
+                  .eq('reel_id', reelsData.id);
+                
+                const likes = reelLikesData?.map((l: any) => l.user_id) || [];
+                const updatedReel: Reel = {
+                  id: reelsData.id,
+                  userId: reelsData.user_id,
+                  userName: reelsData.users.full_name,
+                  userAvatar: reelsData.users.profile_picture,
+                  videoUrl: reelsData.video_url,
+                  thumbnailUrl: reelsData.thumbnail_url,
+                  caption: reelsData.caption,
+                  likes,
+                  commentCount: reelsData.comment_count,
+                  viewCount: reelsData.view_count,
+                  createdAt: reelsData.created_at,
+                };
+                setReels(prev => [updatedReel, ...prev.filter(r => r.id !== updatedReel.id)]);
+              }
+            } else {
+              setReels(prev => prev.filter(r => r.id !== payload.new.id));
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setReels(prev => prev.filter(r => r.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+    subs.push(reelsChannel);
 
     setSubscriptions(subs);
 
