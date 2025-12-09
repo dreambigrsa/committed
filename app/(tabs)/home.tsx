@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,30 @@ export default function HomeScreen() {
   const { currentUser, isLoading, getCurrentUserRelationship, getPendingRequests } = useApp();
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim, scaleAnim]);
 
   if (isLoading) {
     return (
@@ -61,10 +86,18 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <Animated.View 
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
           <View>
             <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.name}>{currentUser.fullName.split(' ')[0]}</Text>
+            <Text style={styles.name}>{currentUser.fullName.split(' ')[0]} 👋</Text>
           </View>
           <TouchableOpacity style={styles.avatarContainer}>
             {currentUser.profilePicture ? (
@@ -80,22 +113,39 @@ export default function HomeScreen() {
               </View>
             )}
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
         {pendingRequests.length > 0 && (
-          <TouchableOpacity
-            style={styles.notificationBanner}
-            onPress={() => router.push('/(tabs)/notifications')}
+          <Animated.View
+            style={[
+              styles.notificationBanner,
+              {
+                opacity: fadeAnim,
+              },
+            ]}
           >
-            <AlertCircle size={20} color={colors.accent} />
-            <Text style={styles.notificationText}>
-              You have {pendingRequests.length} pending relationship{' '}
-              {pendingRequests.length === 1 ? 'request' : 'requests'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.notificationBannerInner}
+              onPress={() => router.push('/(tabs)/notifications')}
+            >
+              <AlertCircle size={20} color={colors.accent} />
+              <Text style={styles.notificationText}>
+                You have {pendingRequests.length} pending relationship{' '}
+                {pendingRequests.length === 1 ? 'request' : 'requests'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
-        <View style={styles.card}>
+        <Animated.View 
+          style={[
+            styles.card,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleContainer}>
               <Shield size={20} color={colors.primary} />
@@ -183,9 +233,17 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
+        </Animated.View>
 
-        <View style={styles.card}>
+        <Animated.View 
+          style={[
+            styles.card,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleContainer}>
               <CheckCircle2 size={20} color={colors.secondary} />
@@ -262,11 +320,19 @@ export default function HomeScreen() {
               )}
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {relationship && relationship.status === 'verified' && (
           <>
-            <View style={styles.actionsCard}>
+            <Animated.View 
+              style={[
+                styles.actionsCard,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ scale: scaleAnim }],
+                },
+              ]}
+            >
               <Text style={styles.actionsTitle}>Relationship Tools</Text>
               <View style={styles.actionsGrid}>
                 <TouchableOpacity
@@ -289,37 +355,53 @@ export default function HomeScreen() {
                   <Text style={styles.actionLabel}>Anniversary</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </Animated.View>
 
-            <View style={styles.infoCard}>
+            <Animated.View 
+              style={[
+                styles.infoCard,
+                {
+                  opacity: fadeAnim,
+                },
+              ]}
+            >
               <Shield size={20} color={colors.primary} />
               <Text style={styles.infoText}>
                 Your relationship is verified and publicly visible. Others can now
                 search and see your committed status.
               </Text>
-            </View>
+            </Animated.View>
           </>
         )}
 
         {(currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator') && (
-          <TouchableOpacity
-            style={styles.adminCard}
-            onPress={() => router.push('/admin' as any)}
+          <Animated.View
+            style={[
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
           >
-            <View style={styles.adminCardContent}>
-              <View style={styles.adminIconContainer}>
-                <Settings size={28} color={colors.primary} />
+            <TouchableOpacity
+              style={styles.adminCard}
+              onPress={() => router.push('/admin' as any)}
+            >
+              <View style={styles.adminCardContent}>
+                <View style={styles.adminIconContainer}>
+                  <Settings size={28} color={colors.primary} />
+                </View>
+                <View style={styles.adminTextContainer}>
+                  <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+                  <Text style={styles.adminCardSubtitle}>
+                    {currentUser.role === 'super_admin' ? 'Super Admin' : 
+                     currentUser.role === 'admin' ? 'Admin' : 'Moderator'} Control Panel
+                  </Text>
+                </View>
+                <Shield size={24} color={colors.text.white} />
               </View>
-              <View style={styles.adminTextContainer}>
-                <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
-                <Text style={styles.adminCardSubtitle}>
-                  {currentUser.role === 'super_admin' ? 'Super Admin' : 
-                   currentUser.role === 'admin' ? 'Admin' : 'Moderator'} Control Panel
-                </Text>
-              </View>
-              <Shield size={24} color={colors.primary} />
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -358,43 +440,55 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   name: {
-    fontSize: 28,
-    fontWeight: '700' as const,
+    fontSize: 32,
+    fontWeight: '800' as const,
     color: colors.text.primary,
     marginTop: 4,
   },
   avatarContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
   },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
-    fontSize: 20,
-    fontWeight: '600' as const,
+    fontSize: 22,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   notificationBanner: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  notificationBannerInner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.badge.pending,
-    marginHorizontal: 20,
-    marginBottom: 20,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 12,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   notificationText: {
     flex: 1,
@@ -406,8 +500,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -540,9 +639,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   registerButtonText: {
     fontSize: 16,
@@ -605,8 +709,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   actionsTitle: {
     fontSize: 18,
@@ -621,10 +730,12 @@ const styles = StyleSheet.create({
   actionItem: {
     flex: 1,
     backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
     gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   actionIconContainer: {
     width: 56,
@@ -643,13 +754,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     marginHorizontal: 20,
     marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 5,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   adminCardContent: {
     flexDirection: 'row',

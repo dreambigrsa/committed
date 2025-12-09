@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,15 @@ import colors from '@/constants/colors';
 export default function MessagesScreen() {
   const router = useRouter();
   const { currentUser, conversations } = useApp();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   if (!currentUser) {
     return null;
@@ -56,13 +66,13 @@ export default function MessagesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {conversations.length === 0 ? (
-          <View style={styles.emptyState}>
-            <MessageCircle size={64} color={colors.text.tertiary} />
+          <Animated.View style={[styles.emptyState, { opacity: fadeAnim }]}>
+            <MessageCircle size={80} color={colors.text.tertiary} strokeWidth={1.5} />
             <Text style={styles.emptyStateTitle}>No Messages Yet</Text>
             <Text style={styles.emptyStateText}>
               Start conversations with other verified members
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           conversations.map((conversation) => {
             const otherParticipant = getOtherParticipant(conversation);
@@ -139,38 +149,39 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
+    fontSize: 28,
+    fontWeight: '800' as const,
     color: colors.text.primary,
   },
   scrollContent: {
     paddingBottom: 100,
+    flexGrow: 1,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 100,
     paddingHorizontal: 40,
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
+    fontSize: 24,
+    fontWeight: '800' as const,
     color: colors.text.primary,
-    marginTop: 16,
+    marginTop: 24,
     marginBottom: 8,
   },
   emptyStateText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   conversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
@@ -179,38 +190,40 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   avatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
-    fontSize: 22,
-    fontWeight: '600' as const,
+    fontSize: 24,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   unreadBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: -2,
+    right: -2,
     backgroundColor: colors.danger,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: colors.background.primary,
   },
   unreadBadgeText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
+    fontSize: 12,
+    fontWeight: '800' as const,
     color: colors.text.white,
   },
   conversationContent: {
@@ -223,18 +236,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   participantName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    fontSize: 17,
+    fontWeight: '700' as const,
     color: colors.text.primary,
   },
   timestamp: {
     fontSize: 13,
     color: colors.text.tertiary,
+    fontWeight: '500' as const,
   },
   lastMessage: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text.secondary,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   lastMessageUnread: {
     fontWeight: '600' as const,

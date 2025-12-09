@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   FlatList,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 
 import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2 } from 'lucide-react-native';
@@ -24,6 +25,15 @@ export default function NotificationsScreen() {
   } = useApp();
   const pendingRequests = getPendingRequests();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   const getRelationshipTypeLabel = (type: string) => {
     const labels = {
@@ -128,8 +138,8 @@ export default function NotificationsScreen() {
     <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <View style={styles.requestHeaderLeft}>
-          <View style={styles.iconContainer}>
-            <Heart size={24} color={colors.danger} fill={colors.danger} />
+          <View style={styles.requestIconContainer}>
+            <Heart size={28} color={colors.danger} fill={colors.danger} />
           </View>
           <View style={styles.requestInfo}>
             <Text style={styles.requestTitle}>Relationship Request</Text>
@@ -173,7 +183,7 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Notifications</Text>
-        <View style={styles.tabs}>
+        <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'all' && styles.activeTab]}
             onPress={() => setActiveTab('all')}
@@ -190,18 +200,18 @@ export default function NotificationsScreen() {
               Requests {pendingRequests.length > 0 && `(${pendingRequests.length})`}
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </View>
 
       {activeTab === 'all' ? (
         allNotifications.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Bell size={64} color={colors.text.tertiary} strokeWidth={1.5} />
+          <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
+            <Bell size={80} color={colors.text.tertiary} strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>No Notifications</Text>
             <Text style={styles.emptyText}>
               You&apos;ll be notified about important events and updates here
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           <FlatList
             data={allNotifications}
@@ -213,13 +223,13 @@ export default function NotificationsScreen() {
         )
       ) : (
         pendingRequests.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Heart size={64} color={colors.text.tertiary} strokeWidth={1.5} />
+          <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
+            <Heart size={80} color={colors.text.tertiary} strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>No Pending Requests</Text>
             <Text style={styles.emptyText}>
               You&apos;ll be notified when someone sends you a relationship request
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           <FlatList
             data={pendingRequests}
@@ -250,17 +260,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
     backgroundColor: colors.background.primary,
   },
   activeTab: {
     backgroundColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: colors.text.secondary,
   },
   activeTabText: {
@@ -268,7 +278,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: colors.text.primary,
     marginBottom: 4,
   },
@@ -283,17 +293,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
+    fontSize: 24,
+    fontWeight: '800' as const,
     color: colors.text.primary,
-    marginTop: 20,
+    marginTop: 24,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   listContent: {
     paddingHorizontal: 20,
@@ -301,9 +311,14 @@ const styles = StyleSheet.create({
   },
   requestCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   requestHeader: {
     flexDirection: 'row',
@@ -313,7 +328,15 @@ const styles = StyleSheet.create({
   requestHeaderLeft: {
     flexDirection: 'row',
     flex: 1,
-    gap: 12,
+    gap: 14,
+  },
+  requestIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.badge.pending,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconContainer: {
     width: 48,
@@ -328,21 +351,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   requestTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700' as const,
     color: colors.text.primary,
   },
   requestText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text.secondary,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   requestName: {
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.text.primary,
   },
   requestDate: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text.tertiary,
     marginTop: 4,
   },
@@ -356,39 +379,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   rejectButton: {
     backgroundColor: colors.text.tertiary,
   },
   rejectButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   acceptButton: {
     backgroundColor: colors.secondary,
   },
   acceptButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   notificationCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 8,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 14,
     borderWidth: 1,
     borderColor: colors.border.light,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   unreadNotification: {
     backgroundColor: colors.badge.pending,
-    borderColor: colors.primary + '30',
+    borderColor: colors.primary + '40',
+    borderWidth: 2,
   },
   unreadIconContainer: {
     backgroundColor: colors.background.primary,
@@ -398,7 +427,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   notificationTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.primary,
   },
@@ -417,10 +446,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.primary,
-    marginTop: 4,
+    marginTop: 6,
   },
 });

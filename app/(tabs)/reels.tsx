@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Dimensions,
   TouchableOpacity,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -24,6 +25,15 @@ export default function ReelsScreen() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   if (!currentUser) {
     return null;
@@ -104,32 +114,41 @@ export default function ReelsScreen() {
               style={styles.actionButton}
               onPress={() => toggleReelLike(reel.id)}
             >
-              <Heart
-                size={32}
-                color={colors.text.white}
-                fill={isLiked ? colors.text.white : 'transparent'}
-              />
+              <View style={[styles.actionIconContainer, isLiked && styles.actionIconContainerActive]}>
+                <Heart
+                  size={28}
+                  color={colors.text.white}
+                  fill={isLiked ? colors.text.white : 'transparent'}
+                  strokeWidth={isLiked ? 0 : 2}
+                />
+              </View>
               <Text style={styles.actionCount}>{formatCount(reel.likes.length)}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionButton}>
-              <MessageCircle size={32} color={colors.text.white} />
+              <View style={styles.actionIconContainer}>
+                <MessageCircle size={28} color={colors.text.white} strokeWidth={2} />
+              </View>
               <Text style={styles.actionCount}>{formatCount(reel.commentCount)}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionButton}>
-              <Share2 size={32} color={colors.text.white} />
+              <View style={styles.actionIconContainer}>
+                <Share2 size={28} color={colors.text.white} strokeWidth={2} />
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => setIsMuted(!isMuted)}
             >
-              {isMuted ? (
-                <VolumeX size={28} color={colors.text.white} />
-              ) : (
-                <Volume2 size={28} color={colors.text.white} />
-              )}
+              <View style={styles.actionIconContainer}>
+                {isMuted ? (
+                  <VolumeX size={26} color={colors.text.white} strokeWidth={2} />
+                ) : (
+                  <Volume2 size={26} color={colors.text.white} strokeWidth={2} />
+                )}
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -141,7 +160,7 @@ export default function ReelsScreen() {
     <View style={styles.container}>
       {reels.length === 0 ? (
         <>
-          <View style={styles.emptyContainer}>
+          <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
             <Film size={80} color={colors.text.tertiary} strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>No Reels Yet</Text>
             <Text style={styles.emptyText}>
@@ -157,7 +176,7 @@ export default function ReelsScreen() {
             <Text style={styles.emptyNote}>
               💡 Tip: Run the seed-sample-data.sql script in Supabase to see sample reels
             </Text>
-          </View>
+          </Animated.View>
           <View style={styles.emptyHeader}>
             <Text style={[styles.headerTitle, styles.emptyHeaderTitle]}>Reels</Text>
             <TouchableOpacity
@@ -224,7 +243,7 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
-    marginBottom: 80,
+    marginBottom: 90,
   },
   userHeader: {
     flexDirection: 'row',
@@ -233,16 +252,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 2,
     borderColor: colors.text.white,
   },
   avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -251,7 +270,7 @@ const styles = StyleSheet.create({
   },
   avatarPlaceholderText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   userName: {
@@ -265,22 +284,36 @@ const styles = StyleSheet.create({
   caption: {
     fontSize: 14,
     color: colors.text.white,
-    lineHeight: 18,
+    lineHeight: 20,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   actions: {
     gap: 20,
-    marginBottom: 80,
+    marginBottom: 90,
   },
   actionButton: {
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+  },
+  actionIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  actionIconContainerActive: {
+    backgroundColor: colors.danger,
+    borderColor: colors.text.white,
   },
   actionCount: {
-    fontSize: 12,
-    fontWeight: '600' as const,
+    fontSize: 13,
+    fontWeight: '700' as const,
     color: colors.text.white,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
@@ -294,6 +327,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
@@ -307,12 +343,18 @@ const styles = StyleSheet.create({
   createButton: {
     position: 'absolute',
     right: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    top: 56,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
   },
   emptyContainer: {
     flex: 1,
@@ -323,7 +365,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 28,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: colors.text.primary,
     marginTop: 24,
     marginBottom: 12,
@@ -343,8 +385,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 28,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   emptyButtonText: {
     fontSize: 16,
@@ -378,11 +425,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     top: 56,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
 });

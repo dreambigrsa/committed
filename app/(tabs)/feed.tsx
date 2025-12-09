@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -27,6 +28,15 @@ export default function FeedScreen() {
   const { currentUser, posts, toggleLike, getComments, getActiveAds, recordAdImpression, recordAdClick } = useApp();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [viewedAds, setViewedAds] = useState<Set<string>>(new Set());
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   if (!currentUser) {
     return null;
@@ -139,7 +149,9 @@ export default function FeedScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.postContent}>{post.content}</Text>
+        {post.content.length > 0 && (
+          <Text style={styles.postContent}>{post.content}</Text>
+        )}
 
         {renderPostMedia(post)}
 
@@ -153,7 +165,9 @@ export default function FeedScreen() {
               color={isLiked ? colors.danger : colors.text.secondary}
               fill={isLiked ? colors.danger : 'transparent'}
             />
-            <Text style={styles.actionText}>{post.likes.length}</Text>
+            <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
+              {post.likes.length}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -198,8 +212,8 @@ export default function FeedScreen() {
         showsVerticalScrollIndicator={false}
       >
         {posts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Heart size={64} color={colors.text.tertiary} strokeWidth={1.5} />
+          <Animated.View style={[styles.emptyState, { opacity: fadeAnim }]}>
+            <Heart size={80} color={colors.text.tertiary} strokeWidth={1.5} />
             <Text style={styles.emptyStateTitle}>No Posts Yet</Text>
             <Text style={styles.emptyStateText}>
               Be the first to share your relationship journey!
@@ -215,7 +229,7 @@ export default function FeedScreen() {
             <Text style={styles.emptyStateNote}>
               💡 Tip: Run the seed-sample-data.sql script in Supabase to see sample posts
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           posts.map((post, index) => {
             const ads = getActiveAds('feed');
@@ -274,7 +288,7 @@ function CommentsModal({
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Comments</Text>
-          <TouchableOpacity onPress={onClose}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={24} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
@@ -356,15 +370,15 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
+    fontSize: 28,
+    fontWeight: '800' as const,
     color: colors.text.primary,
   },
   createButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.background.secondary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -373,8 +387,13 @@ const styles = StyleSheet.create({
   },
   post: {
     backgroundColor: colors.background.primary,
-    marginBottom: 8,
+    marginBottom: 12,
     paddingTop: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   postHeader: {
     flexDirection: 'row',
@@ -389,26 +408,26 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   postAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   postAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   postAvatarPlaceholderText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   postUserName: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.text.primary,
   },
   postTime: {
@@ -419,7 +438,7 @@ const styles = StyleSheet.create({
   postContent: {
     fontSize: 15,
     color: colors.text.primary,
-    lineHeight: 20,
+    lineHeight: 22,
     paddingHorizontal: 16,
     marginBottom: 12,
   },
@@ -433,19 +452,22 @@ const styles = StyleSheet.create({
   postActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 24,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text.secondary,
     fontWeight: '600' as const,
+  },
+  actionTextActive: {
+    color: colors.danger,
   },
   modalContainer: {
     flex: 1,
@@ -465,12 +487,20 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: colors.text.primary,
   },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   commentsList: {
     flex: 1,
   },
   comment: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
@@ -500,15 +530,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   commentUserName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: colors.text.primary,
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
     color: colors.text.primary,
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 4,
   },
   commentTime: {
@@ -536,7 +566,7 @@ const styles = StyleSheet.create({
     maxHeight: 100,
   },
   sendButton: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: colors.primary,
@@ -546,7 +576,7 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   sendButtonTextDisabled: {
@@ -554,23 +584,28 @@ const styles = StyleSheet.create({
   },
   adCard: {
     backgroundColor: colors.background.primary,
-    marginBottom: 8,
+    marginBottom: 12,
     position: 'relative',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   adBadge: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     zIndex: 1,
   },
   adBadgeText: {
     fontSize: 11,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.text.white,
   },
   adImage: {
@@ -581,10 +616,10 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   adTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   adDescription: {
     fontSize: 14,
@@ -599,21 +634,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   adLinkText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: colors.primary,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 100,
     paddingHorizontal: 40,
   },
   emptyStateTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
+    fontSize: 28,
+    fontWeight: '800' as const,
     color: colors.text.primary,
-    marginTop: 24,
+    marginTop: 32,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -629,10 +664,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    borderRadius: 14,
     marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   emptyStateButtonText: {
     fontSize: 16,
