@@ -268,6 +268,33 @@ export const [AppContext, useApp] = createContextHook(() => {
           })
         );
         setConversations(formattedConversations);
+
+        const { data: messagesData } = await supabase
+          .from('messages')
+          .select('*')
+          .in('conversation_id', conversationsData.map((c: any) => c.id))
+          .order('created_at', { ascending: true });
+
+        if (messagesData) {
+          const messagesByConversation: Record<string, Message[]> = {};
+          messagesData.forEach((m: any) => {
+            const message: Message = {
+              id: m.id,
+              conversationId: m.conversation_id,
+              senderId: m.sender_id,
+              receiverId: m.receiver_id,
+              content: m.content,
+              mediaUrl: m.media_url,
+              read: m.read,
+              createdAt: m.created_at,
+            };
+            if (!messagesByConversation[m.conversation_id]) {
+              messagesByConversation[m.conversation_id] = [];
+            }
+            messagesByConversation[m.conversation_id].push(message);
+          });
+          setMessages(messagesByConversation);
+        }
       }
 
       const { data: commentsData } = await supabase
