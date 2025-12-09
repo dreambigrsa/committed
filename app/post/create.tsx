@@ -18,6 +18,7 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { supabase } from '@/lib/supabase';
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -50,6 +51,40 @@ export default function CreatePostScreen() {
     setMediaUrls(mediaUrls.filter((_, i) => i !== index));
   };
 
+  const uploadMedia = async (uris: string[]): Promise<string[]> => {
+    const uploadedUrls: string[] = [];
+    
+    for (const uri of uris) {
+      try {
+        const fileName = `post_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        const { error } = await supabase.storage
+          .from('media')
+          .upload(fileName, uint8Array, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('media')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrl);
+      } catch (error) {
+        console.error('Failed to upload media:', error);
+        throw error;
+      }
+    }
+    
+    return uploadedUrls;
+  };
+
   const handlePost = async () => {
     if (!content.trim() && mediaUrls.length === 0) {
       Alert.alert('Error', 'Please add some content or images to your post');
@@ -58,8 +93,15 @@ export default function CreatePostScreen() {
 
     setIsLoading(true);
     try {
-      const mediaType: 'image' | 'video' | 'mixed' = 'image';
-      await createPost(content.trim(), mediaUrls, mediaUrls.length > 0 ? mediaType : 'image');
+      let uploadedMediaUrls: string[] = [];
+      if (mediaUrls.length > 0) {
+        uploadedMediaUrls = await uploadMedia(mediaUrls);
+      }
+      
+      const mediaType: 'image' | 'video' | 'mixed' = uploadedMediaUrls.length > 0 ? 'image' : 'image';
+      await createPost(content.trim(), uploadedMediaUrls, mediaType);
+      
+      Alert.alert('Success', 'Post created successfully!');
       router.back();
     } catch (error) {
       console.error('Failed to create post:', error);

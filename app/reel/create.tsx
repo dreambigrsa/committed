@@ -14,13 +14,15 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { X, Video as VideoIcon, Upload } from 'lucide-react-native';
-
+import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
+import { supabase } from '@/lib/supabase';
 
 export default function CreateReelScreen() {
   const router = useRouter();
+  const { createReel } = useApp();
   const [caption, setCaption] = useState<string>('');
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -65,6 +67,29 @@ export default function CreateReelScreen() {
     }
   };
 
+  const uploadVideo = async (uri: string): Promise<string> => {
+    const fileName = `reel_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    const { error } = await supabase.storage
+      .from('media')
+      .upload(fileName, uint8Array, {
+        contentType: 'video/mp4',
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('media')
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  };
+
   const handlePost = async () => {
     if (!videoUri) {
       Alert.alert('Error', 'Please select or record a video');
@@ -73,15 +98,12 @@ export default function CreateReelScreen() {
 
     setIsUploading(true);
     try {
-      console.log('Uploading reel with caption:', caption);
-      console.log('Video URI:', videoUri);
+      const uploadedVideoUrl = await uploadVideo(videoUri);
       
-      setTimeout(() => {
-        setIsUploading(false);
-        Alert.alert('Success', 'Reel posted successfully!', [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
-      }, 2000);
+      await createReel(uploadedVideoUrl, caption.trim());
+      
+      Alert.alert('Success', 'Reel posted successfully!');
+      router.back();
     } catch (error) {
       console.error('Failed to upload reel:', error);
       Alert.alert('Error', 'Failed to upload reel. Please try again.');

@@ -650,6 +650,48 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, posts]);
 
+  const createReel = useCallback(async (videoUrl: string, caption: string, thumbnailUrl?: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('reels')
+        .insert({
+          user_id: currentUser.id,
+          video_url: videoUrl,
+          thumbnail_url: thumbnailUrl,
+          caption,
+        })
+        .select(`
+          *,
+          users!reels_user_id_fkey(full_name, profile_picture)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      const newReel: Reel = {
+        id: data.id,
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        userAvatar: currentUser.profilePicture,
+        videoUrl,
+        thumbnailUrl,
+        caption,
+        likes: [],
+        commentCount: 0,
+        viewCount: 0,
+        createdAt: data.created_at,
+      };
+
+      setReels([newReel, ...reels]);
+      return newReel;
+    } catch (error) {
+      console.error('Create reel error:', error);
+      return null;
+    }
+  }, [currentUser, reels]);
+
   const toggleLike = useCallback(async (postId: string) => {
     if (!currentUser) return;
     
@@ -983,6 +1025,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     reels,
     conversations,
     createPost,
+    createReel,
     toggleLike,
     toggleReelLike,
     addComment,
