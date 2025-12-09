@@ -30,30 +30,36 @@ export default function AdminRelationshipsScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('relationships')
-        .select('*')
+        .select(`
+          *,
+          users!relationships_user_id_fkey(id, full_name, email)
+        `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Relationships query error:', error);
+        throw error;
+      }
 
       if (data) {
         const formattedRelationships: Relationship[] = data.map((r: any) => ({
           id: r.id,
           userId: r.user_id,
-          partnerName: r.partner_name,
-          partnerPhone: r.partner_phone,
-          partnerUserId: r.partner_user_id,
+          partnerName: r.partner_name || 'Unknown',
+          partnerPhone: r.partner_phone || '',
+          partnerUserId: r.partner_user_id || undefined,
           type: r.type,
           status: r.status,
-          startDate: r.start_date,
-          verifiedDate: r.verified_date,
-          endDate: r.end_date,
-          privacyLevel: r.privacy_level,
+          startDate: r.start_date || new Date().toISOString(),
+          verifiedDate: r.verified_date || undefined,
+          endDate: r.end_date || undefined,
+          privacyLevel: r.privacy_level || 'public',
         }));
         setRelationships(formattedRelationships);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load relationships:', error);
-      Alert.alert('Error', 'Failed to load relationships');
+      Alert.alert('Error', error?.message || 'Failed to load relationships');
     } finally {
       setLoading(false);
     }
