@@ -638,6 +638,29 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  const createNotification = useCallback(async (
+    userId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    data?: Record<string, any>
+  ) => {
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type,
+          title,
+          message,
+          data,
+          read: false,
+        });
+    } catch (error) {
+      console.error('Create notification error:', error);
+    }
+  }, []);
+
   const createRelationship = useCallback(async (
     partnerName: string,
     partnerPhone: string,
@@ -646,11 +669,69 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser) return null;
     
     try {
+      const { data: existingRelationships } = await supabase
+        .from('relationships')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .in('status', ['pending', 'verified']);
+
+      if (existingRelationships && existingRelationships.length > 0) {
+        const existingRel = existingRelationships[0];
+        if (existingRel.partner_user_id) {
+          await supabase
+            .from('cheating_alerts')
+            .insert({
+              user_id: existingRel.partner_user_id,
+              partner_user_id: currentUser.id,
+              alert_type: 'duplicate_registration',
+              description: `${currentUser.fullName} attempted to register a new relationship while already in a ${existingRel.status} relationship.`,
+            });
+
+          await createNotification(
+            existingRel.partner_user_id,
+            'cheating_alert',
+            'Suspicious Activity Detected',
+            `${currentUser.fullName} attempted to register another relationship. Please review.`,
+            { relationshipId: existingRel.id }
+          );
+        }
+      }
+
       const { data: partnerData } = await supabase
         .from('users')
         .select('id')
         .eq('phone_number', partnerPhone)
         .single();
+
+      if (partnerData) {
+        const { data: partnerExistingRels } = await supabase
+          .from('relationships')
+          .select('*')
+          .eq('user_id', partnerData.id)
+          .in('status', ['pending', 'verified']);
+
+        if (partnerExistingRels && partnerExistingRels.length > 0) {
+          const partnerExistingRel = partnerExistingRels[0];
+          if (partnerExistingRel.partner_user_id) {
+            await supabase
+              .from('cheating_alerts')
+              .insert({
+                user_id: partnerExistingRel.partner_user_id,
+                partner_user_id: partnerData.id,
+                alert_type: 'duplicate_registration',
+                description: `${partnerName} was registered in a new relationship by ${currentUser.fullName} while already in a ${partnerExistingRel.status} relationship.`,
+              });
+
+            await createNotification(
+              partnerExistingRel.partner_user_id,
+              'cheating_alert',
+              'Suspicious Activity Detected',
+              `Someone attempted to register ${partnerName} in a new relationship. Please review.`,
+              { relationshipId: partnerExistingRel.id }
+            );
+          }
+        }
+      }
 
       const { data: relationshipData, error: relError } = await supabase
         .from('relationships')
@@ -699,7 +780,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Create relationship error:', error);
       return null;
     }
-  }, [currentUser, relationships]);
+  }, [currentUser, relationships, createNotification]);
 
   const acceptRelationshipRequest = useCallback(async (requestId: string) => {
     if (!currentUser) return;
@@ -1425,29 +1506,6 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
-  const createNotification = useCallback(async (
-    userId: string,
-    type: NotificationType,
-    title: string,
-    message: string,
-    data?: Record<string, any>
-  ) => {
-    try {
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          type,
-          title,
-          message,
-          data,
-          read: false,
-        });
-    } catch (error) {
-      console.error('Create notification error:', error);
-    }
-  }, []);
-
   const markNotificationAsRead = useCallback(async (notificationId: string) => {
     try {
       await supabase
@@ -1489,6 +1547,88 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Log activity error:', error);
     }
   }, [currentUser]);
+
+  const endRelationship = useCallback(async (relationshipId: string, reason?: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const relationship = relationships.find(r => r.id === relationshipId);
+      if (!relationship) return null;
+
+      const { data: dispute, error } = await supabase
+        .from('disputes')
+        .insert({
+          relationship_id: relationshipId,
+          initiated_by: currentUser.id,
+          dispute_type: 'end_relationship',
+          description: reason || 'Request to end relationship',
+          status: 'pending',
+          auto_resolve_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const partnerId = relationship.userId === currentUser.id ? relationship.partnerUserId : relationship.userId;
+      
+      if (partnerId) {
+        await createNotification(
+          partnerId,
+          'relationship_end_request',
+          'End Relationship Request',
+          `${currentUser.fullName} has requested to end your relationship. Please confirm or it will auto-resolve in 7 days.`,
+          { relationshipId, disputeId: dispute.id }
+        );
+      }
+
+      await logActivity('end_relationship_request', 'relationship', relationshipId);
+
+      return dispute;
+    } catch (error) {
+      console.error('End relationship error:', error);
+      return null;
+    }
+  }, [currentUser, relationships, createNotification, logActivity]);
+
+  const confirmEndRelationship = useCallback(async (disputeId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const { data: dispute } = await supabase
+        .from('disputes')
+        .select('*')
+        .eq('id', disputeId)
+        .single();
+
+      if (!dispute) return;
+
+      await supabase
+        .from('disputes')
+        .update({
+          status: 'resolved',
+          resolution: 'confirmed',
+          resolved_at: new Date().toISOString(),
+          resolved_by: currentUser.id,
+        })
+        .eq('id', disputeId);
+
+      await supabase
+        .from('relationships')
+        .update({
+          status: 'ended',
+          end_date: new Date().toISOString(),
+        })
+        .eq('id', dispute.relationship_id);
+
+      await logActivity('end_relationship_confirmed', 'relationship', dispute.relationship_id);
+
+      const updatedRelationships = relationships.filter(r => r.id !== dispute.relationship_id);
+      setRelationships(updatedRelationships);
+    } catch (error) {
+      console.error('Confirm end relationship error:', error);
+    }
+  }, [currentUser, relationships, logActivity]);
 
   return {
     currentUser,
@@ -1540,5 +1680,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     markNotificationAsRead,
     getUnreadNotificationsCount,
     logActivity,
+    endRelationship,
+    confirmEndRelationship,
   };
 });

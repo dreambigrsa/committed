@@ -27,7 +27,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { currentUser, getCurrentUserRelationship } = useApp();
+  const { currentUser, getCurrentUserRelationship, endRelationship } = useApp();
   const relationship = getCurrentUserRelationship();
 
   const [editMode, setEditMode] = useState(false);
@@ -181,7 +181,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleEndRelationship = () => {
+  const handleEndRelationship = async () => {
     if (!relationship) return;
 
     Alert.alert(
@@ -192,12 +192,18 @@ export default function SettingsScreen() {
         {
           text: 'End Relationship',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Request Sent',
-              'Your partner will receive a request to confirm ending the relationship. It will be finalized once they confirm or after 7 days.',
-              [{ text: 'OK' }]
-            );
+          onPress: async () => {
+            try {
+              await endRelationship(relationship.id, 'User requested to end relationship');
+              Alert.alert(
+                'Request Sent',
+                'Your partner will receive a request to confirm ending the relationship. It will be finalized once they confirm or after 7 days.',
+                [{ text: 'OK' }]
+              );
+            } catch (error) {
+              console.error('Failed to end relationship:', error);
+              Alert.alert('Error', 'Failed to send end relationship request');
+            }
           },
         },
       ]
