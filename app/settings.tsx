@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Switch,
   Alert,
   TextInput,
+  Animated,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -31,6 +32,15 @@ export default function SettingsScreen() {
   const relationship = getCurrentUserRelationship();
 
   const [editMode, setEditMode] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, []);
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
   const [phoneNumber, setPhoneNumber] = useState(currentUser?.phoneNumber || '');
   const [notifications, setNotifications] = useState({
@@ -512,7 +522,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#F8F9FA',
   },
   scrollContent: {
     paddingTop: 20,
@@ -525,18 +535,24 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     marginBottom: 16,
+    paddingHorizontal: 4,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
   },
   settingsList: {
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   settingItem: {
     flexDirection: 'row',
@@ -570,12 +586,17 @@ const styles = StyleSheet.create({
   },
   dangerCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     flexDirection: 'row',
     gap: 16,
     borderWidth: 2,
     borderColor: colors.danger + '30',
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   dangerContent: {
     flex: 1,
@@ -594,10 +615,15 @@ const styles = StyleSheet.create({
   },
   dangerButton: {
     backgroundColor: colors.danger,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignSelf: 'flex-start',
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   dangerButtonText: {
     fontSize: 15,
@@ -608,11 +634,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: colors.background.primary,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primary + '10',
+    padding: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.primary + '30',
   },
   infoText: {
     flex: 1,

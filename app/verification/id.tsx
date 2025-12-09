@@ -205,7 +205,7 @@ export default function IdVerificationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#F8F9FA',
   },
   content: {
     flex: 1,
@@ -260,13 +260,18 @@ const styles = StyleSheet.create({
   },
   uploadButton: {
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
-    padding: 40,
+    borderRadius: 20,
+    padding: 48,
     alignItems: 'center',
     marginBottom: 24,
-    borderWidth: 2,
-    borderColor: colors.border.light,
+    borderWidth: 3,
+    borderColor: colors.primary + '40',
     borderStyle: 'dashed',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   uploadButtonDisabled: {
     opacity: 0.6,
@@ -299,9 +304,9 @@ const styles = StyleSheet.create({
   previewImage: {
     width: 300,
     height: 200,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.border.light,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: colors.primary + '30',
   },
   checkBadge: {
     position: 'absolute',
@@ -325,10 +330,15 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     backgroundColor: colors.primary,
-    paddingVertical: 18,
-    borderRadius: 12,
+    paddingVertical: 20,
+    borderRadius: 16,
     alignItems: 'center',
     marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonDisabled: {
     opacity: 0.6,
