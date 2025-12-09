@@ -26,16 +26,16 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="feed"
+        name="home"
         options={{
-          title: "Feed",
+          title: "Home",
           tabBarIcon: ({ color }) => <Home size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="reels"
+        name="feed"
         options={{
-          title: "Reels",
+          title: "Feed",
           tabBarIcon: ({ color }) => <Film size={24} color={color} />,
         }}
       />
@@ -61,7 +61,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="home"
+        name="reels"
         options={{
           href: null,
         }}
