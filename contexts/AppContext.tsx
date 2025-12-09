@@ -94,19 +94,28 @@ export const [AppContext, useApp] = createContextHook(() => {
         .order('created_at', { ascending: false })
         .limit(50);
 
+      const { data: postLikesData } = await supabase
+        .from('post_likes')
+        .select('post_id, user_id');
+
       if (postsData) {
-        const formattedPosts: Post[] = postsData.map((p: any) => ({
-          id: p.id,
-          userId: p.user_id,
-          userName: p.users.full_name,
-          userAvatar: p.users.profile_picture,
-          content: p.content,
-          mediaUrls: p.media_urls || [],
-          mediaType: p.media_type,
-          likes: [],
-          commentCount: p.comment_count,
-          createdAt: p.created_at,
-        }));
+        const formattedPosts: Post[] = postsData.map((p: any) => {
+          const likes = postLikesData
+            ?.filter((like: any) => like.post_id === p.id)
+            .map((like: any) => like.user_id) || [];
+          return {
+            id: p.id,
+            userId: p.user_id,
+            userName: p.users.full_name,
+            userAvatar: p.users.profile_picture,
+            content: p.content,
+            mediaUrls: p.media_urls || [],
+            mediaType: p.media_type,
+            likes,
+            commentCount: p.comment_count,
+            createdAt: p.created_at,
+          };
+        });
         setPosts(formattedPosts);
       }
 
@@ -119,20 +128,29 @@ export const [AppContext, useApp] = createContextHook(() => {
         .order('created_at', { ascending: false })
         .limit(50);
 
+      const { data: reelLikesData } = await supabase
+        .from('reel_likes')
+        .select('reel_id, user_id');
+
       if (reelsData) {
-        const formattedReels: Reel[] = reelsData.map((r: any) => ({
-          id: r.id,
-          userId: r.user_id,
-          userName: r.users.full_name,
-          userAvatar: r.users.profile_picture,
-          videoUrl: r.video_url,
-          thumbnailUrl: r.thumbnail_url,
-          caption: r.caption,
-          likes: [],
-          commentCount: r.comment_count,
-          viewCount: r.view_count,
-          createdAt: r.created_at,
-        }));
+        const formattedReels: Reel[] = reelsData.map((r: any) => {
+          const likes = reelLikesData
+            ?.filter((like: any) => like.reel_id === r.id)
+            .map((like: any) => like.user_id) || [];
+          return {
+            id: r.id,
+            userId: r.user_id,
+            userName: r.users.full_name,
+            userAvatar: r.users.profile_picture,
+            videoUrl: r.video_url,
+            thumbnailUrl: r.thumbnail_url,
+            caption: r.caption,
+            likes,
+            commentCount: r.comment_count,
+            viewCount: r.view_count,
+            createdAt: r.created_at,
+          };
+        });
         setReels(formattedReels);
       }
 
@@ -160,6 +178,86 @@ export const [AppContext, useApp] = createContextHook(() => {
         }));
         setAdvertisements(formattedAds);
       }
+
+      const { data: relationshipsData } = await supabase
+        .from('relationships')
+        .select('*')
+        .or(`user_id.eq.${userId},partner_user_id.eq.${userId}`)
+        .in('status', ['pending', 'verified']);
+
+      if (relationshipsData) {
+        const formattedRelationships: Relationship[] = relationshipsData.map((r: any) => ({
+          id: r.id,
+          userId: r.user_id,
+          partnerName: r.partner_name,
+          partnerPhone: r.partner_phone,
+          partnerUserId: r.partner_user_id,
+          type: r.type,
+          status: r.status,
+          startDate: r.start_date,
+          verifiedDate: r.verified_date,
+          endDate: r.end_date,
+          privacyLevel: r.privacy_level,
+        }));
+        setRelationships(formattedRelationships);
+      }
+
+      const { data: requestsData } = await supabase
+        .from('relationship_requests')
+        .select('*')
+        .eq('to_user_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (requestsData) {
+        const formattedRequests: RelationshipRequest[] = requestsData.map((req: any) => ({
+          id: req.id,
+          fromUserId: req.from_user_id,
+          fromUserName: req.from_user_name,
+          toUserId: req.to_user_id,
+          relationshipType: req.relationship_type,
+          status: req.status,
+          createdAt: req.created_at,
+        }));
+        setRelationshipRequests(formattedRequests);
+      }
+
+      const { data: conversationsData } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          participant_users:participant_ids
+        `)
+        .contains('participant_ids', [userId])
+        .order('last_message_at', { ascending: false });
+
+      if (conversationsData && conversationsData.length > 0) {
+        const formattedConversations: Conversation[] = await Promise.all(
+          conversationsData.map(async (conv: any) => {
+            const participantIds = conv.participant_ids;
+            const { data: participantsData } = await supabase
+              .from('users')
+              .select('id, full_name, profile_picture')
+              .in('id', participantIds);
+
+            const participantNames = participantsData?.map((p: any) => p.full_name) || [];
+            const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+
+            return {
+              id: conv.id,
+              participants: participantIds,
+              participantNames,
+              participantAvatars,
+              lastMessage: conv.last_message || '',
+              lastMessageAt: conv.last_message_at,
+              unreadCount: 0,
+            };
+          })
+        );
+        setConversations(formattedConversations);
+      }
+
+
     } catch (error: any) {
       console.error('Failed to load user data:', error?.message || error);
     }
