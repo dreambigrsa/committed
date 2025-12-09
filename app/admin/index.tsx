@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  Animated,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import {
@@ -26,15 +25,6 @@ import colors from '@/constants/colors';
 
 export default function AdminDashboardScreen() {
   const { currentUser } = useApp();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, []);
 
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin')) {
     return (
@@ -136,7 +126,7 @@ export default function AdminDashboardScreen() {
       />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+        <View style={styles.header}>
           <Text style={styles.welcomeText}>Welcome back,</Text>
           <Text style={styles.userName}>{currentUser.fullName}</Text>
           <View style={styles.roleBadge}>
@@ -145,9 +135,9 @@ export default function AdminDashboardScreen() {
               {currentUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
             </Text>
           </View>
-        </Animated.View>
+        </View>
 
-        <Animated.View style={[styles.sectionsGrid, { opacity: fadeAnim }]}>
+        <View style={styles.sectionsGrid}>
           {adminSections.filter(section => section.visible).map((section) => {
             const Icon = section.icon;
             return (
@@ -164,7 +154,7 @@ export default function AdminDashboardScreen() {
               </TouchableOpacity>
             );
           })}
-        </Animated.View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -173,7 +163,7 @@ export default function AdminDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background.secondary,
   },
   errorContainer: {
     flex: 1,
@@ -197,17 +187,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: 28,
+    padding: 24,
     backgroundColor: colors.background.primary,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 20,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
   welcomeText: {
     fontSize: 16,
@@ -215,29 +198,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   userName: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     alignSelf: 'flex-start',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
   roleText: {
-    fontSize: 14,
-    fontWeight: '700' as const,
+    fontSize: 12,
+    fontWeight: '600' as const,
     color: colors.text.white,
   },
   sectionsGrid: {
@@ -246,29 +224,24 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 3,
   },
+  iconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
     marginBottom: 8,

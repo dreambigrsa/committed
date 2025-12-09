@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -32,24 +31,6 @@ export default function ProfileScreen() {
   const { currentUser, logout, getCurrentUserRelationship, updateUserProfile } = useApp();
   const relationship = getCurrentUserRelationship();
   const [isUploading, setIsUploading] = useState(false);
-  
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
 
   if (!currentUser) {
     return null;
@@ -125,27 +106,11 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View 
-          style={[
-            styles.header,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <Text style={styles.title}>Profile</Text>
-        </Animated.View>
+        </View>
 
-        <Animated.View 
-          style={[
-            styles.profileSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
+        <View style={styles.profileSection}>
           <TouchableOpacity
             style={styles.avatarContainer}
             onPress={uploadProfilePicture}
@@ -199,16 +164,9 @@ export default function ProfileScreen() {
               </View>
             )}
           </View>
-        </Animated.View>
+        </View>
 
-        <Animated.View 
-          style={[
-            styles.card,
-            {
-              opacity: fadeAnim,
-            },
-          ]}
-        >
+        <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleContainer}>
               <Heart size={20} color={colors.danger} />
@@ -279,16 +237,9 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </Animated.View>
+        </View>
 
-        <Animated.View 
-          style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-            },
-          ]}
-        >
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
 
           {(currentUser.role === 'admin' || currentUser.role === 'super_admin') && (
@@ -326,7 +277,7 @@ export default function ProfileScreen() {
               <Text style={[styles.menuItemText, styles.logoutText]}>Log Out</Text>
             </View>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -335,7 +286,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     paddingTop: 20,
@@ -354,29 +305,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 24,
-    backgroundColor: colors.background.primary,
-    marginHorizontal: 20,
-    borderRadius: 24,
-    paddingVertical: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
   },
   avatarContainer: {
     marginBottom: 16,
     position: 'relative',
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -393,7 +335,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 60,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -401,19 +343,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: colors.background.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 3,
+    borderColor: colors.background.secondary,
   },
   profileInfo: {
     alignItems: 'center',
@@ -458,13 +395,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 24,
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 16,
+    padding: 20,
   },
   cardHeader: {
     marginBottom: 16,
@@ -555,15 +487,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.background.primary,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
   },
   menuItemLeft: {
     flexDirection: 'row',
