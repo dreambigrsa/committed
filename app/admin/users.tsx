@@ -40,18 +40,18 @@ export default function AdminUsersScreen() {
 
       if (data) {
         const formattedUsers: User[] = data.map((u: any) => ({
-          id: u.id,
-          fullName: u.full_name,
-          email: u.email,
-          phoneNumber: u.phone_number,
-          profilePicture: u.profile_picture,
-          role: u.role,
+          id: u.id || '',
+          fullName: u.full_name || 'Unknown',
+          email: u.email || '',
+          phoneNumber: u.phone_number || '',
+          profilePicture: u.profile_picture || undefined,
+          role: u.role || 'user',
           verifications: {
-            phone: u.phone_verified,
-            email: u.email_verified,
-            id: u.id_verified,
+            phone: u.phone_verified || false,
+            email: u.email_verified || false,
+            id: u.id_verified || false,
           },
-          createdAt: u.created_at,
+          createdAt: u.created_at || new Date().toISOString(),
         }));
         setUsers(formattedUsers);
       }
