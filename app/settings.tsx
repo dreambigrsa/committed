@@ -66,18 +66,23 @@ export default function SettingsScreen() {
     if (!currentUser) return;
     
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', currentUser.id)
-        .single();
+        .limit(1);
 
-      if (data) {
-        if (data.notification_settings) {
-          setNotifications(data.notification_settings);
+      if (error) {
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const settings = data[0];
+        if (settings.notification_settings) {
+          setNotifications(settings.notification_settings);
         }
-        if (data.privacy_settings) {
-          setPrivacy(data.privacy_settings);
+        if (settings.privacy_settings) {
+          setPrivacy(settings.privacy_settings);
         }
       }
     } catch (error) {
@@ -137,14 +142,33 @@ export default function SettingsScreen() {
     if (!currentUser) return;
     
     try {
-      await supabase
+      // First, get existing settings to preserve privacy_settings
+      const { data: existingData } = await supabase
+        .from('user_settings')
+        .select('privacy_settings')
+        .eq('user_id', currentUser.id)
+        .limit(1);
+
+      const existingPrivacy = existingData && existingData.length > 0 
+        ? existingData[0].privacy_settings 
+        : privacy;
+
+      const { error } = await supabase
         .from('user_settings')
         .upsert({
           user_id: currentUser.id,
           notification_settings: settings,
+          privacy_settings: existingPrivacy,
+        }, {
+          onConflict: 'user_id'
         });
+
+      if (error) {
+        throw error;
+      }
     } catch (error) {
       console.error('Failed to save notification settings:', error);
+      Alert.alert('Error', 'Failed to save notification settings');
     }
   };
 
@@ -152,14 +176,33 @@ export default function SettingsScreen() {
     if (!currentUser) return;
 
     try {
-      await supabase
+      // First, get existing settings to preserve notification_settings
+      const { data: existingData } = await supabase
+        .from('user_settings')
+        .select('notification_settings')
+        .eq('user_id', currentUser.id)
+        .limit(1);
+
+      const existingNotifications = existingData && existingData.length > 0 
+        ? existingData[0].notification_settings 
+        : notifications;
+
+      const { error } = await supabase
         .from('user_settings')
         .upsert({
           user_id: currentUser.id,
           privacy_settings: settings,
+          notification_settings: existingNotifications,
+        }, {
+          onConflict: 'user_id'
         });
+
+      if (error) {
+        throw error;
+      }
     } catch (error) {
       console.error('Failed to save privacy settings:', error);
+      Alert.alert('Error', 'Failed to save privacy settings');
     }
   };
 
