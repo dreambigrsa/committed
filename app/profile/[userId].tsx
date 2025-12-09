@@ -1,24 +1,173 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  TouchableOpacity,
+  FlatList,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
-import { CheckCircle2, Heart, Shield } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
-import { mockUsers } from '@/mocks/users';
+import { User, Post, Reel } from '@/types';
+import { supabase } from '@/lib/supabase';
+
+const { width } = Dimensions.get('window');
+const itemWidth = (width - 44) / 3;
+
+type TabType = 'posts' | 'reels';
 
 export default function UserProfileScreen() {
-  const { userId } = useLocalSearchParams();
-  const { getUserRelationship } = useApp();
+  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const router = useRouter();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels } = useApp();
   
-  const user = mockUsers.find((u) => u.id === userId);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<TabType>('posts');
+  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [followerCount, setFollowerCount] = useState<number>(0);
+  const [followingCount, setFollowingCount] = useState<number>(0);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [userReels, setUserReels] = useState<Reel[]>([]);
+  
   const relationship = user ? getUserRelationship(user.id) : null;
+
+  useEffect(() => {
+    if (userId) {
+      loadUserProfile();
+      checkFollowStatus();
+      loadFollowCounts();
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    loadUserContent();
+  }, [allPosts, allReels, userId]);
+
+  const loadUserProfile = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const userProfile: User = {
+          id: data.id,
+          fullName: data.full_name,
+          email: data.email,
+          phoneNumber: data.phone_number,
+          profilePicture: data.profile_picture,
+          role: data.role,
+          verifications: {
+            phone: data.phone_verified,
+            email: data.email_verified,
+            id: data.id_verified,
+          },
+          createdAt: data.created_at,
+        };
+        setUser(userProfile);
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadUserContent = () => {
+    const posts = allPosts.filter(p => p.userId === userId);
+    const reels = allReels.filter(r => r.userId === userId);
+    setUserPosts(posts);
+    setUserReels(reels);
+  };
+
+  const checkFollowStatus = async () => {
+    if (!currentUser || !userId) return;
+    try {
+      const { data } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', currentUser.id)
+        .eq('following_id', userId)
+        .single();
+      
+      setIsFollowing(!!data);
+    } catch (error) {
+      setIsFollowing(false);
+    }
+  };
+
+  const loadFollowCounts = async () => {
+    if (!userId) return;
+    try {
+      const { count: followers } = await supabase
+        .from('follows')
+        .select('id', { count: 'exact' })
+        .eq('following_id', userId);
+      
+      const { count: following } = await supabase
+        .from('follows')
+        .select('id', { count: 'exact' })
+        .eq('follower_id', userId);
+      
+      setFollowerCount(followers || 0);
+      setFollowingCount(following || 0);
+    } catch (error) {
+      console.error('Failed to load follow counts:', error);
+    }
+  };
+
+  const handleFollow = async () => {
+    if (!currentUser || !userId) return;
+    try {
+      if (isFollowing) {
+        await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', currentUser.id)
+          .eq('following_id', userId);
+        setIsFollowing(false);
+        setFollowerCount(prev => prev - 1);
+      } else {
+        await supabase
+          .from('follows')
+          .insert({
+            follower_id: currentUser.id,
+            following_id: userId,
+          });
+        setIsFollowing(true);
+        setFollowerCount(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Failed to toggle follow:', error);
+    }
+  };
+
+  const handleMessage = () => {
+    console.log('Message user');
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!user) {
     return (
@@ -39,6 +188,70 @@ export default function UserProfileScreen() {
     };
     return labels[type as keyof typeof labels] || type;
   };
+
+  const renderPostGrid = () => {
+    if (activeTab === 'posts') {
+      if (userPosts.length === 0) {
+        return (
+          <View style={styles.emptyContent}>
+            <Grid size={48} color={colors.text.tertiary} strokeWidth={1.5} />
+            <Text style={styles.emptyContentText}>No posts yet</Text>
+          </View>
+        );
+      }
+      return (
+        <FlatList
+          data={userPosts}
+          numColumns={3}
+          key="posts"
+          scrollEnabled={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.gridItem}>
+              {item.mediaUrls[0] ? (
+                <Image source={{ uri: item.mediaUrls[0] }} style={styles.gridImage} contentFit="cover" />
+              ) : (
+                <View style={[styles.gridImage, styles.gridPlaceholder]}>
+                  <Text style={styles.gridPlaceholderText} numberOfLines={3}>{item.content}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item.id}
+        />
+      );
+    } else {
+      if (userReels.length === 0) {
+        return (
+          <View style={styles.emptyContent}>
+            <Film size={48} color={colors.text.tertiary} strokeWidth={1.5} />
+            <Text style={styles.emptyContentText}>No reels yet</Text>
+          </View>
+        );
+      }
+      return (
+        <FlatList
+          data={userReels}
+          numColumns={3}
+          key="reels"
+          scrollEnabled={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.gridItem}>
+              {item.thumbnailUrl ? (
+                <Image source={{ uri: item.thumbnailUrl }} style={styles.gridImage} contentFit="cover" />
+              ) : (
+                <View style={[styles.gridImage, styles.gridPlaceholder]}>
+                  <Film size={32} color={colors.text.white} />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item.id}
+        />
+      );
+    }
+  };
+
+  const isOwnProfile = currentUser?.id === userId;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -66,6 +279,43 @@ export default function UserProfileScreen() {
                 <CheckCircle2 size={20} color={colors.secondary} />
               )}
             </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{userPosts.length}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{followerCount}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{followingCount}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </View>
+            </View>
+
+            {!isOwnProfile && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, isFollowing && styles.actionButtonSecondary]}
+                  onPress={handleFollow}
+                >
+                  {isFollowing ? (
+                    <UserMinus size={18} color={colors.text.primary} />
+                  ) : (
+                    <UserPlus size={18} color={colors.text.white} />
+                  )}
+                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextSecondary]}>
+                    {isFollowing ? 'Unfollow' : 'Follow'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButtonMessage} onPress={handleMessage}>
+                  <MessageCircle size={18} color={colors.text.primary} />
+                  <Text style={styles.actionButtonTextSecondary}>Message</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.verificationBadges}>
               {user.verifications.phone && (
@@ -180,6 +430,25 @@ export default function UserProfileScreen() {
             </Text>
           </View>
         )}
+
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'posts' && styles.tabActive]}
+            onPress={() => setActiveTab('posts')}
+          >
+            <Grid size={20} color={activeTab === 'posts' ? colors.primary : colors.text.tertiary} />
+            <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>Posts</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reels' && styles.tabActive]}
+            onPress={() => setActiveTab('reels')}
+          >
+            <Film size={20} color={activeTab === 'reels' ? colors.primary : colors.text.tertiary} />
+            <Text style={[styles.tabText, activeTab === 'reels' && styles.tabTextActive]}>Reels</Text>
+          </TouchableOpacity>
+        </View>
+
+        {renderPostGrid()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -351,5 +620,127 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
     lineHeight: 18,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 24,
+    marginVertical: 16,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: colors.text.secondary,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginBottom: 16,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  actionButtonSecondary: {
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  actionButtonMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.background.secondary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  actionButtonTextSecondary: {
+    color: colors.text.primary,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.background.primary,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  tabActive: {
+    backgroundColor: colors.background.secondary,
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.tertiary,
+  },
+  tabTextActive: {
+    color: colors.primary,
+  },
+  gridItem: {
+    width: itemWidth,
+    height: itemWidth,
+    margin: 2,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.background.secondary,
+  },
+  gridPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+  gridPlaceholderText: {
+    fontSize: 11,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  emptyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyContentText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    marginTop: 16,
   },
 });
