@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, Volume2, VolumeX } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { Reel } from '@/types';
@@ -17,6 +18,7 @@ import { Reel } from '@/types';
 const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
+  const router = useRouter();
   const { currentUser, reels, toggleReelLike } = useApp();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -150,6 +152,12 @@ export default function ReelsScreen() {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reels</Text>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => router.push('/reel/create' as any)}
+        >
+          <Plus size={24} color={colors.text.white} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -263,5 +271,15 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+  },
+  createButton: {
+    position: 'absolute',
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
