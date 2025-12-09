@@ -19,11 +19,11 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [cheatingAlerts, setCheatingAlerts] = useState<CheatingAlert[]>([]);
   const [follows, setFollows] = useState<Follow[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
-  const [certificates, setCertificates] = useState<CoupleCertificate[]>([]);
-  const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
+  const [certificates] = useState<CoupleCertificate[]>([]);
+  const [anniversaries] = useState<Anniversary[]>([]);
   const [reelComments, setReelComments] = useState<Record<string, ReelComment[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [subscriptions, setSubscriptions] = useState<RealtimeChannel[]>([]);
+  const [, setSubscriptions] = useState<RealtimeChannel[]>([]);
 
   useEffect(() => {
     initializeAuth();

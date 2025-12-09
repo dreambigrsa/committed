@@ -20,12 +20,22 @@ export default function HomeScreen() {
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
 
-  if (isLoading || !currentUser) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>Loading your profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Please log in to continue</Text>
         </View>
       </SafeAreaView>
     );
