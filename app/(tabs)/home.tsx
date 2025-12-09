@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar } from 'lucide-react-native';
+import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar, Settings } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 
@@ -299,6 +299,27 @@ export default function HomeScreen() {
               </Text>
             </View>
           </>
+        )}
+
+        {(currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator') && (
+          <TouchableOpacity
+            style={styles.adminCard}
+            onPress={() => router.push('/admin' as any)}
+          >
+            <View style={styles.adminCardContent}>
+              <View style={styles.adminIconContainer}>
+                <Settings size={28} color={colors.primary} />
+              </View>
+              <View style={styles.adminTextContainer}>
+                <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+                <Text style={styles.adminCardSubtitle}>
+                  {currentUser.role === 'super_admin' ? 'Super Admin' : 
+                   currentUser.role === 'admin' ? 'Admin' : 'Moderator'} Control Panel
+                </Text>
+              </View>
+              <Shield size={24} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -617,5 +638,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: colors.text.primary,
+  },
+  adminCard: {
+    backgroundColor: colors.primary,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  adminCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  adminIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.text.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminTextContainer: {
+    flex: 1,
+  },
+  adminCardTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+    marginBottom: 4,
+  },
+  adminCardSubtitle: {
+    fontSize: 14,
+    color: colors.text.white,
+    opacity: 0.9,
   },
 });
