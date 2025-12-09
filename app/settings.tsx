@@ -132,6 +132,18 @@ export default function SettingsScreen() {
           setLanguage(settings.language);
         }
       }
+
+      // Load gender and date of birth from users table
+      const { data: userData } = await supabase
+        .from('users')
+        .select('gender, date_of_birth')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (userData) {
+        if (userData.gender) setGender(userData.gender);
+        if (userData.date_of_birth) setDateOfBirth(userData.date_of_birth);
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -151,8 +163,27 @@ export default function SettingsScreen() {
   };
 
   const loadBlockedUsers = async () => {
-    // Placeholder - would need a blocked_users table
-    setBlockedUsers([]);
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('blocked_users')
+        .select('blocked_id, users!blocked_users_blocked_id_fkey(full_name, profile_picture)')
+        .eq('blocker_id', currentUser.id);
+
+      if (error) {
+        // Table might not exist yet, that's okay
+        console.log('Blocked users table not available:', error);
+        setBlockedUsers([]);
+        return;
+      }
+
+      if (data) {
+        setBlockedUsers(data);
+      }
+    } catch (error) {
+      console.error('Failed to load blocked users:', error);
+      setBlockedUsers([]);
+    }
   };
 
   if (!currentUser) {
@@ -163,12 +194,22 @@ export default function SettingsScreen() {
     if (!currentUser) return;
     
     try {
+      const updateData: any = {
+        full_name: fullName,
+        phone_number: phoneNumber,
+      };
+
+      // Add optional fields if they have values
+      if (gender) {
+        updateData.gender = gender;
+      }
+      if (dateOfBirth) {
+        updateData.date_of_birth = dateOfBirth;
+      }
+
       const { error } = await supabase
         .from('users')
-        .update({
-          full_name: fullName,
-          phone_number: phoneNumber,
-        })
+        .update(updateData)
         .eq('id', currentUser.id);
 
       if (error) throw error;
@@ -312,13 +353,19 @@ export default function SettingsScreen() {
     try {
       const { data: existingData } = await supabase
         .from('user_settings')
-        .select('privacy_settings')
+        .select('privacy_settings, theme_preference, language')
         .eq('user_id', currentUser.id)
         .limit(1);
 
       const existingPrivacy = existingData && existingData.length > 0 
         ? existingData[0].privacy_settings 
         : privacy;
+      const existingTheme = existingData && existingData.length > 0 
+        ? existingData[0].theme_preference || 'light'
+        : 'light';
+      const existingLanguage = existingData && existingData.length > 0 
+        ? existingData[0].language || 'en'
+        : 'en';
 
       const { error } = await supabase
         .from('user_settings')
@@ -326,6 +373,8 @@ export default function SettingsScreen() {
           user_id: currentUser.id,
           notification_settings: settings,
           privacy_settings: existingPrivacy,
+          theme_preference: existingTheme,
+          language: existingLanguage,
         }, {
           onConflict: 'user_id'
         });
@@ -345,13 +394,19 @@ export default function SettingsScreen() {
     try {
       const { data: existingData } = await supabase
         .from('user_settings')
-        .select('notification_settings')
+        .select('notification_settings, theme_preference, language')
         .eq('user_id', currentUser.id)
         .limit(1);
 
       const existingNotifications = existingData && existingData.length > 0 
         ? existingData[0].notification_settings 
         : notifications;
+      const existingTheme = existingData && existingData.length > 0 
+        ? existingData[0].theme_preference || 'light'
+        : 'light';
+      const existingLanguage = existingData && existingData.length > 0 
+        ? existingData[0].language || 'en'
+        : 'en';
 
       const { error } = await supabase
         .from('user_settings')
@@ -359,6 +414,8 @@ export default function SettingsScreen() {
           user_id: currentUser.id,
           privacy_settings: settings,
           notification_settings: existingNotifications,
+          theme_preference: existingTheme,
+          language: existingLanguage,
         }, {
           onConflict: 'user_id'
         });
@@ -369,6 +426,43 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Failed to save privacy settings:', error);
       Alert.alert('Error', 'Failed to save privacy settings');
+    }
+  };
+
+  const saveAppPreferences = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data: existingData } = await supabase
+        .from('user_settings')
+        .select('notification_settings, privacy_settings')
+        .eq('user_id', currentUser.id)
+        .limit(1);
+
+      const existingNotifications = existingData && existingData.length > 0 
+        ? existingData[0].notification_settings 
+        : notifications;
+      const existingPrivacy = existingData && existingData.length > 0 
+        ? existingData[0].privacy_settings 
+        : privacy;
+
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: currentUser.id,
+          notification_settings: existingNotifications,
+          privacy_settings: existingPrivacy,
+          theme_preference: darkMode ? 'dark' : 'light',
+          language: language,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Failed to save app preferences:', error);
     }
   };
 
@@ -973,7 +1067,10 @@ export default function SettingsScreen() {
                 </View>
                 <Switch
                   value={darkMode}
-                  onValueChange={setDarkMode}
+                  onValueChange={(value) => {
+                    setDarkMode(value);
+                    saveAppPreferences();
+                  }}
                   trackColor={{
                     false: colors.border.light,
                     true: colors.primary + '50',
@@ -989,9 +1086,18 @@ export default function SettingsScreen() {
                     'Language',
                     'Select language',
                     [
-                      { text: 'English', onPress: () => setLanguage('en') },
-                      { text: 'Spanish', onPress: () => setLanguage('es') },
-                      { text: 'French', onPress: () => setLanguage('fr') },
+                      { text: 'English', onPress: () => {
+                        setLanguage('en');
+                        saveAppPreferences();
+                      }},
+                      { text: 'Spanish', onPress: () => {
+                        setLanguage('es');
+                        saveAppPreferences();
+                      }},
+                      { text: 'French', onPress: () => {
+                        setLanguage('fr');
+                        saveAppPreferences();
+                      }},
                       { text: 'Cancel', style: 'cancel' },
                     ]
                   );
@@ -1016,9 +1122,18 @@ export default function SettingsScreen() {
                     'Theme',
                     'Select theme',
                     [
-                      { text: 'Default', onPress: () => setTheme('default') },
-                      { text: 'Colorful', onPress: () => setTheme('colorful') },
-                      { text: 'Minimal', onPress: () => setTheme('minimal') },
+                      { text: 'Default', onPress: () => {
+                        setTheme('default');
+                        saveAppPreferences();
+                      }},
+                      { text: 'Colorful', onPress: () => {
+                        setTheme('colorful');
+                        saveAppPreferences();
+                      }},
+                      { text: 'Minimal', onPress: () => {
+                        setTheme('minimal');
+                        saveAppPreferences();
+                      }},
                       { text: 'Cancel', style: 'cancel' },
                     ]
                   );
