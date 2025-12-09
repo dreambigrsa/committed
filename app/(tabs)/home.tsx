@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -15,12 +16,19 @@ import colors from '@/constants/colors';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { currentUser, getCurrentUserRelationship, getPendingRequests } = useApp();
+  const { currentUser, isLoading, getCurrentUserRelationship, getPendingRequests } = useApp();
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
 
-  if (!currentUser) {
-    return null;
+  if (isLoading || !currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const getRelationshipTypeLabel = (type: string) => {
@@ -291,6 +299,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    fontWeight: '500' as const,
   },
   scrollContent: {
     paddingTop: 20,
