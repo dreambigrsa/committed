@@ -55,12 +55,21 @@ export default function SearchScreen() {
   };
 
   const renderUserItem = ({ item }: { item: any }) => {
-    const relationship = getUserRelationship(item.id);
+    const relationship = item.id ? getUserRelationship(item.id) : null;
+    const isNonRegistered = !item.isRegisteredUser || !item.id;
 
     return (
       <TouchableOpacity
         style={styles.userCard}
-        onPress={() => router.push(`/profile/${item.id}` as any)}
+        onPress={() => {
+          if (item.id) {
+            router.push(`/profile/${item.id}` as any);
+          } else {
+            // Non-registered user - can't view profile, but show info
+            // Could show a modal or just do nothing
+          }
+        }}
+        disabled={!item.id}
       >
         <View style={styles.userLeft}>
           {item.profilePicture ? (
@@ -74,12 +83,34 @@ export default function SearchScreen() {
           <View style={styles.userInfo}>
             <View style={styles.userNameRow}>
               <Text style={styles.userName}>{item.fullName}</Text>
-              {item.verifications.phone && (
+              {item.username && (
+                <Text style={styles.username}>@{item.username}</Text>
+              )}
+              {isNonRegistered && (
+                <View style={styles.nonRegisteredBadge}>
+                  <Text style={styles.nonRegisteredText}>Not Registered</Text>
+                </View>
+              )}
+              {item.verifications?.phone && (
                 <CheckCircle2 size={16} color={colors.secondary} />
               )}
             </View>
 
-            {relationship ? (
+            {item.phoneNumber && (
+              <Text style={styles.phoneNumber}>{item.phoneNumber}</Text>
+            )}
+
+            {isNonRegistered && item.relationshipType && (
+              <View style={styles.relationshipInfoContainer}>
+                <Text style={styles.relationshipInfo}>
+                  {item.relationshipStatus === 'verified' ? '❤️ ' : '⏳ '}
+                  Listed as partner in a {getRelationshipTypeLabel(item.relationshipType).toLowerCase()}
+                  {item.relationshipStatus === 'verified' && ' (Verified)'}
+                </Text>
+              </View>
+            )}
+
+            {relationship && !isNonRegistered ? (
               <>
                 <Text style={styles.relationshipInfo}>
                   {relationship.status === 'verified' ? '❤️ ' : '⏳ '}
@@ -94,7 +125,7 @@ export default function SearchScreen() {
                   </View>
                 )}
               </>
-            ) : (
+            ) : !isNonRegistered && (
               <Text style={styles.noRelationship}>No registered relationship</Text>
             )}
           </View>
@@ -269,11 +300,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   userName: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: colors.text.primary,
+  },
+  username: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  phoneNumber: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  relationshipInfoContainer: {
+    marginTop: 4,
+  },
+  nonRegisteredBadge: {
+    backgroundColor: colors.accent + '30',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  nonRegisteredText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: colors.accent,
   },
   relationshipInfo: {
     fontSize: 14,
