@@ -27,18 +27,19 @@ export default function CreatePostScreen() {
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const pickImages = async () => {
+  const pickMedia = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'You need to allow access to your photos to add images.');
+      Alert.alert('Permission Required', 'You need to allow access to your photos and videos.');
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
       quality: 0.8,
+      videoMaxDuration: 60,
     });
 
     if (!result.canceled && result.assets) {
@@ -98,7 +99,14 @@ export default function CreatePostScreen() {
         uploadedMediaUrls = await uploadMedia(mediaUrls);
       }
       
-      const mediaType: 'image' | 'video' | 'mixed' = uploadedMediaUrls.length > 0 ? 'image' : 'image';
+      const hasVideo = mediaUrls.some(url => url.includes('video') || url.includes('.mp4') || url.includes('.mov'));
+      const hasImage = mediaUrls.some(url => !url.includes('video') && !url.includes('.mp4') && !url.includes('.mov'));
+      let mediaType: 'image' | 'video' | 'mixed' = 'image';
+      if (hasVideo && hasImage) {
+        mediaType = 'mixed';
+      } else if (hasVideo) {
+        mediaType = 'video';
+      }
       await createPost(content.trim(), uploadedMediaUrls, mediaType);
       
       Alert.alert('Success', 'Post created successfully!');
@@ -180,9 +188,9 @@ export default function CreatePostScreen() {
               </View>
             )}
 
-            <TouchableOpacity style={styles.addMediaButton} onPress={pickImages}>
+            <TouchableOpacity style={styles.addMediaButton} onPress={pickMedia}>
               <ImageIcon size={24} color={colors.primary} />
-              <Text style={styles.addMediaText}>Add Photos</Text>
+              <Text style={styles.addMediaText}>Add Photos/Videos</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>

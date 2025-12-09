@@ -67,7 +67,34 @@ export default function AdminRolesScreen() {
     }
   };
 
-  const handleChangeRole = async (userId: string, newRole: UserRole) => {
+  const getRoleLevel = (role: UserRole): number => {
+    switch (role) {
+      case 'user': return 0;
+      case 'moderator': return 1;
+      case 'admin': return 2;
+      case 'super_admin': return 3;
+      default: return 0;
+    }
+  };
+
+  const canModifyRole = (targetRole: UserRole): boolean => {
+    if (!currentUser) return false;
+    const currentLevel = getRoleLevel(currentUser.role as UserRole);
+    const targetLevel = getRoleLevel(targetRole);
+    return currentLevel > targetLevel;
+  };
+
+  const handleChangeRole = async (userId: string, currentRole: UserRole, newRole: UserRole) => {
+    if (!canModifyRole(currentRole)) {
+      Alert.alert('Error', 'You cannot modify users with equal or higher role than yours');
+      return;
+    }
+
+    if (!canModifyRole(newRole) && newRole !== currentUser?.role) {
+      Alert.alert('Error', 'You cannot promote users to a role equal or higher than yours');
+      return;
+    }
+
     try {
       await supabase
         .from('users')
@@ -113,7 +140,12 @@ export default function AdminRolesScreen() {
     }
   };
 
-  const handleRemoveAdmin = async (userId: string, userName: string) => {
+  const handleRemoveAdmin = async (userId: string, userName: string, userRole: UserRole) => {
+    if (!canModifyRole(userRole)) {
+      Alert.alert('Error', 'You cannot remove users with equal or higher role than yours');
+      return;
+    }
+
     Alert.alert(
       'Remove Admin',
       `Are you sure you want to remove ${userName} as admin?`,
@@ -238,29 +270,29 @@ export default function AdminRolesScreen() {
                   </View>
                 </View>
 
-                {admin.id !== currentUser.id && (
+                {admin.id !== currentUser.id && canModifyRole(admin.role) && (
                   <View style={styles.adminActions}>
                     <View style={styles.roleButtons}>
-                      {admin.role !== 'moderator' && (
+                      {admin.role !== 'moderator' && canModifyRole('moderator') && (
                         <TouchableOpacity
                           style={[styles.roleButton, styles.moderatorButton]}
-                          onPress={() => handleChangeRole(admin.id, 'moderator')}
+                          onPress={() => handleChangeRole(admin.id, admin.role, 'moderator')}
                         >
                           <Text style={styles.roleButtonText}>Moderator</Text>
                         </TouchableOpacity>
                       )}
-                      {admin.role !== 'admin' && (
+                      {admin.role !== 'admin' && canModifyRole('admin') && (
                         <TouchableOpacity
                           style={[styles.roleButton, styles.adminButton]}
-                          onPress={() => handleChangeRole(admin.id, 'admin')}
+                          onPress={() => handleChangeRole(admin.id, admin.role, 'admin')}
                         >
                           <Text style={styles.roleButtonText}>Admin</Text>
                         </TouchableOpacity>
                       )}
-                      {admin.role !== 'super_admin' && (
+                      {admin.role !== 'super_admin' && currentUser.role === 'super_admin' && (
                         <TouchableOpacity
                           style={[styles.roleButton, styles.superAdminButton]}
-                          onPress={() => handleChangeRole(admin.id, 'super_admin')}
+                          onPress={() => handleChangeRole(admin.id, admin.role, 'super_admin')}
                         >
                           <Text style={styles.roleButtonText}>Super Admin</Text>
                         </TouchableOpacity>
@@ -268,7 +300,7 @@ export default function AdminRolesScreen() {
                     </View>
                     <TouchableOpacity
                       style={styles.removeButton}
-                      onPress={() => handleRemoveAdmin(admin.id, admin.fullName)}
+                      onPress={() => handleRemoveAdmin(admin.id, admin.fullName, admin.role)}
                     >
                       <Trash2 size={16} color={colors.text.white} />
                       <Text style={styles.removeButtonText}>Remove</Text>

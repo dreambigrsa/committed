@@ -14,6 +14,7 @@ import {
   Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, Share2, Plus, X, ExternalLink } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
@@ -60,6 +61,10 @@ export default function FeedScreen() {
   const renderPostMedia = (post: Post) => {
     if (post.mediaUrls.length === 0) return null;
 
+    const isVideo = (url: string) => {
+      return url.includes('.mp4') || url.includes('.mov') || url.includes('video');
+    };
+
     return (
       <ScrollView
         horizontal
@@ -67,14 +72,28 @@ export default function FeedScreen() {
         showsHorizontalScrollIndicator={false}
         style={styles.mediaContainer}
       >
-        {post.mediaUrls.map((url, index) => (
-          <Image
-            key={index}
-            source={{ uri: url }}
-            style={styles.postImage}
-            contentFit="cover"
-          />
-        ))}
+        {post.mediaUrls.map((url, index) => {
+          if (isVideo(url)) {
+            return (
+              <Video
+                key={index}
+                source={{ uri: url }}
+                style={styles.postImage}
+                useNativeControls
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={false}
+              />
+            );
+          }
+          return (
+            <Image
+              key={index}
+              source={{ uri: url }}
+              style={styles.postImage}
+              contentFit="cover"
+            />
+          );
+        })}
       </ScrollView>
     );
   };

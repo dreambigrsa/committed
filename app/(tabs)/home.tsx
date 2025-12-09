@@ -99,7 +99,10 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Welcome back,</Text>
             <Text style={styles.name}>{currentUser.fullName.split(' ')[0]} 👋</Text>
           </View>
-          <TouchableOpacity style={styles.avatarContainer}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={() => router.push('/settings')}
+          >
             {currentUser.profilePicture ? (
               <Image
                 source={{ uri: currentUser.profilePicture }}
