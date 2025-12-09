@@ -5,6 +5,7 @@ export type RelationshipStatus = 'pending' | 'verified' | 'ended';
 export interface User {
   id: string;
   fullName: string;
+  username?: string;
   email: string;
   phoneNumber: string;
   profilePicture?: string;
