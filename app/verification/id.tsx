@@ -5,132 +5,104 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
-  ScrollView,
-  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import { Image } from 'expo-image';
-import {
-  IdCard,
-  ArrowLeft,
-  CheckCircle2,
-  Camera,
-  Upload,
-  FileText,
-  X,
-} from 'lucide-react-native';
+import { IdCard, ArrowLeft, Upload, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
+import { supabase } from '@/lib/supabase';
 
 export default function IdVerificationScreen() {
   const router = useRouter();
   const { currentUser, updateUserProfile } = useApp();
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [idImageUrl, setIdImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const requestPermissions = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Camera permission is required to take photos'
-        );
-        return false;
-      }
-    }
-    return true;
-  };
+  const uploadIdDocument = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  const handleTakePhoto = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-      aspect: [4, 3],
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
-    }
-  };
-
-  const handleSelectImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-      aspect: [4, 3],
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
-    }
-  };
-
-  const handleSelectDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled === false && result.assets && result.assets[0]) {
-        if (result.assets[0].mimeType?.startsWith('image/')) {
-          setSelectedImage(result.assets[0].uri);
-        } else {
-          Alert.alert(
-            'File Selected',
-            'Document uploaded. Please note: Only images can be previewed.',
-            [{ text: 'OK' }]
-          );
-          setSelectedImage(result.assets[0].uri);
-        }
-      }
-    } catch (error) {
-      console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to select document');
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setSelectedImage(null);
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedImage) {
-      Alert.alert('Error', 'Please select or take a photo of your ID');
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'You need to allow access to your photos.');
       return;
     }
 
-    setIsUploading(true);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.9,
+    });
 
-    setTimeout(async () => {
+    if (!result.canceled && result.assets[0]) {
+      setIsUploading(true);
+      try {
+        const fileName = `id_${currentUser?.id}_${Date.now()}.jpg`;
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        const { error } = await supabase.storage
+          .from('media')
+          .upload(fileName, uint8Array, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('media')
+          .getPublicUrl(fileName);
+
+        setIdImageUrl(publicUrl);
+      } catch (error) {
+        console.error('Failed to upload ID:', error);
+        Alert.alert('Error', 'Failed to upload ID document');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const submitForVerification = async () => {
+    if (!idImageUrl) {
+      Alert.alert('Error', 'Please upload your ID document first');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await supabase
+        .from('id_verification_requests')
+        .insert({
+          user_id: currentUser?.id,
+          id_image_url: idImageUrl,
+          status: 'pending',
+        });
+
       await updateUserProfile({
         verifications: {
-          ...currentUser!.verifications,
+          ...currentUser?.verifications!,
           id: true,
         },
       });
-      setIsUploading(false);
+
       Alert.alert(
         'Success',
-        'ID verification submitted! Your document is being reviewed.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
+        'Your ID has been submitted for verification. You will be notified once it is approved.',
+        [{ text: 'OK', onPress: () => router.back() }]
       );
-    }, 2000);
+    } catch (error) {
+      console.error('Failed to submit verification:', error);
+      Alert.alert('Error', 'Failed to submit verification request');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -147,128 +119,84 @@ export default function IdVerificationScreen() {
         }}
       />
       <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <IdCard size={40} color={colors.primary} strokeWidth={2} />
-            </View>
-            <Text style={styles.title}>Upload Government ID</Text>
-            <Text style={styles.subtitle}>
-              Upload a photo of your driver&apos;s license, passport, or government-issued
-              ID for identity verification
-            </Text>
+        <View style={styles.content}>
+          <View style={styles.iconContainer}>
+            <IdCard size={48} color={colors.primary} />
           </View>
 
-          {selectedImage ? (
+          <Text style={styles.title}>Verify Your Identity</Text>
+          <Text style={styles.subtitle}>
+            Upload a government-issued ID to complete your identity verification
+          </Text>
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>Accepted Documents:</Text>
+            <Text style={styles.infoText}>• Driver&apos;s License</Text>
+            <Text style={styles.infoText}>• Passport</Text>
+            <Text style={styles.infoText}>• National ID Card</Text>
+            <Text style={styles.infoText}>• State ID</Text>
+          </View>
+
+          {idImageUrl ? (
             <View style={styles.previewContainer}>
-              <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={handleRemoveImage}
-              >
-                <X size={20} color={colors.text.white} />
-              </TouchableOpacity>
-              <View style={styles.previewLabel}>
-                <CheckCircle2 size={16} color={colors.secondary} />
-                <Text style={styles.previewLabelText}>ID Selected</Text>
+              <Text style={styles.previewLabel}>Uploaded Document</Text>
+              <View style={styles.imagePreview}>
+                <Image
+                  source={{ uri: idImageUrl }}
+                  style={styles.previewImage}
+                  contentFit="cover"
+                />
+                <View style={styles.checkBadge}>
+                  <CheckCircle2 size={24} color={colors.secondary} />
+                </View>
               </View>
+              <TouchableOpacity
+                style={styles.changeButton}
+                onPress={uploadIdDocument}
+              >
+                <Text style={styles.changeButtonText}>Change Document</Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.uploadOptions}>
-              {Platform.OS !== 'web' && (
-                <TouchableOpacity
-                  style={styles.uploadOption}
-                  onPress={handleTakePhoto}
-                >
-                  <View style={styles.uploadIconContainer}>
-                    <Camera size={32} color={colors.primary} />
-                  </View>
-                  <Text style={styles.uploadOptionTitle}>Take Photo</Text>
-                  <Text style={styles.uploadOptionDescription}>
-                    Use your camera to capture your ID
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={styles.uploadOption}
-                onPress={handleSelectImage}
-              >
-                <View style={styles.uploadIconContainer}>
+            <TouchableOpacity
+              style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
+              onPress={uploadIdDocument}
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <>
                   <Upload size={32} color={colors.primary} />
-                </View>
-                <Text style={styles.uploadOptionTitle}>Upload Photo</Text>
-                <Text style={styles.uploadOptionDescription}>
-                  Choose an image from your gallery
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.uploadOption}
-                onPress={handleSelectDocument}
-              >
-                <View style={styles.uploadIconContainer}>
-                  <FileText size={32} color={colors.primary} />
-                </View>
-                <Text style={styles.uploadOptionTitle}>Select Document</Text>
-                <Text style={styles.uploadOptionDescription}>
-                  Upload a PDF or image file
-                </Text>
-              </TouchableOpacity>
-            </View>
+                  <Text style={styles.uploadButtonText}>Upload ID Document</Text>
+                  <Text style={styles.uploadButtonSubtext}>
+                    Tap to select from your photos
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              (!selectedImage || isUploading) && styles.submitButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={!selectedImage || isUploading}
-          >
-            {isUploading ? (
-              <ActivityIndicator color={colors.text.white} />
-            ) : (
-              <>
-                <CheckCircle2 size={20} color={colors.text.white} />
+          {idImageUrl && (
+            <TouchableOpacity
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              onPress={submitForVerification}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color={colors.text.white} />
+              ) : (
                 <Text style={styles.submitButtonText}>Submit for Verification</Text>
-              </>
-            )}
-          </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          )}
 
-          <View style={styles.infoCards}>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>Accepted Documents</Text>
-              <Text style={styles.infoText}>
-                • Driver&apos;s License{'\n'}
-                • Passport{'\n'}
-                • National ID Card{'\n'}
-                • State ID
-              </Text>
-            </View>
-
-            <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>Tips for Best Results</Text>
-              <Text style={styles.infoText}>
-                • Ensure all text is clearly visible{'\n'}
-                • Take photo in good lighting{'\n'}
-                • Avoid glare and shadows{'\n'}
-                • Make sure ID is not expired
-              </Text>
-            </View>
-
-            <View style={[styles.infoCard, styles.securityCard]}>
-              <Text style={styles.infoTitle}>Your Privacy is Protected</Text>
-              <Text style={styles.infoText}>
-                Your ID is encrypted and only used for verification. We never share
-                your personal documents with third parties.
-              </Text>
-            </View>
+          <View style={styles.securityNote}>
+            <Text style={styles.securityText}>
+              🔒 Your ID is encrypted and securely stored. We will never share your personal information.
+            </Text>
           </View>
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </>
   );
@@ -279,149 +207,146 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.secondary,
   },
-  scrollContent: {
-    paddingTop: 32,
+  content: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
+    paddingTop: 40,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: colors.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderWidth: 3,
+    borderColor: colors.primary + '30',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700' as const,
     color: colors.text.primary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    marginBottom: 32,
     paddingHorizontal: 20,
   },
-  previewContainer: {
-    position: 'relative',
-    marginBottom: 24,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: colors.background.primary,
-    borderWidth: 2,
-    borderColor: colors.secondary,
-  },
-  previewImage: {
-    width: '100%',
-    height: 240,
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.badge.verified,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  previewLabelText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.badge.verifiedText,
-  },
-  uploadOptions: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  uploadOption: {
+  infoBox: {
     backgroundColor: colors.background.primary,
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    lineHeight: 24,
+  },
+  uploadButton: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 16,
+    padding: 40,
     alignItems: 'center',
+    marginBottom: 24,
     borderWidth: 2,
     borderColor: colors.border.light,
     borderStyle: 'dashed',
   },
-  uploadIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.background.secondary,
+  uploadButtonDisabled: {
+    opacity: 0.6,
+  },
+  uploadButtonText: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    marginTop: 16,
+  },
+  uploadButtonSubtext: {
+    fontSize: 14,
+    color: colors.text.tertiary,
+    marginTop: 4,
+  },
+  previewContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  previewLabel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
     marginBottom: 16,
   },
-  uploadOptionTitle: {
-    fontSize: 17,
-    fontWeight: '700' as const,
-    color: colors.text.primary,
-    marginBottom: 4,
+  imagePreview: {
+    position: 'relative',
+    marginBottom: 16,
   },
-  uploadOptionDescription: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    textAlign: 'center',
+  previewImage: {
+    width: 300,
+    height: 200,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.border.light,
+  },
+  checkBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  changeButtonText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600' as const,
   },
   submitButton: {
     backgroundColor: colors.primary,
+    paddingVertical: 18,
     borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
     marginBottom: 24,
   },
   submitButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text.white,
   },
-  infoCards: {
-    gap: 12,
-  },
-  infoCard: {
-    backgroundColor: colors.background.primary,
+  securityNote: {
+    backgroundColor: colors.badge.verified,
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border.light,
   },
-  securityCard: {
-    backgroundColor: colors.primary + '10',
-    borderColor: colors.primary + '30',
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: colors.text.primary,
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    color: colors.text.secondary,
+  securityText: {
+    fontSize: 14,
+    color: colors.badge.verifiedText,
     lineHeight: 20,
+    textAlign: 'center',
   },
 });

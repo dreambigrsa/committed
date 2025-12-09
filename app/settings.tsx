@@ -22,6 +22,7 @@ import {
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -45,23 +46,59 @@ export default function SettingsScreen() {
     return null;
   }
 
-  const handleToggleNotification = (key: keyof typeof notifications) => {
+  const handleToggleNotification = async (key: keyof typeof notifications) => {
+    const newValue = !notifications[key];
     setNotifications((prev) => ({
       ...prev,
-      [key]: !prev[key],
+      [key]: newValue,
     }));
+
+    await saveNotificationSettings({ ...notifications, [key]: newValue });
   };
 
-  const handleTogglePrivacy = (key: keyof typeof privacy) => {
+  const handleTogglePrivacy = async (key: keyof typeof privacy) => {
     if (key === 'profileVisibility') return;
 
+    const newValue = !privacy[key];
     setPrivacy((prev) => ({
       ...prev,
-      [key]: !prev[key],
+      [key]: newValue,
     }));
+
+    await savePrivacySettings({ ...privacy, [key]: newValue });
   };
 
-  const handleChangePrivacyLevel = () => {
+  const saveNotificationSettings = async (settings: typeof notifications) => {
+    if (!currentUser) return;
+    
+    try {
+      await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: currentUser.id,
+          notification_settings: settings,
+        });
+    } catch (error) {
+      console.error('Failed to save notification settings:', error);
+    }
+  };
+
+  const savePrivacySettings = async (settings: typeof privacy) => {
+    if (!currentUser) return;
+
+    try {
+      await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: currentUser.id,
+          privacy_settings: settings,
+        });
+    } catch (error) {
+      console.error('Failed to save privacy settings:', error);
+    }
+  };
+
+  const handleChangePrivacyLevel = async () => {
     Alert.alert(
       'Profile Visibility',
       'Choose who can see your relationship status',

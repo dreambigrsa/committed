@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle } from 'lucide-react-native';
+import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 
@@ -247,13 +247,40 @@ export default function HomeScreen() {
         </View>
 
         {relationship && relationship.status === 'verified' && (
-          <View style={styles.infoCard}>
-            <Shield size={20} color={colors.primary} />
-            <Text style={styles.infoText}>
-              Your relationship is verified and publicly visible. Others can now
-              search and see your committed status.
-            </Text>
-          </View>
+          <>
+            <View style={styles.actionsCard}>
+              <Text style={styles.actionsTitle}>Relationship Tools</Text>
+              <View style={styles.actionsGrid}>
+                <TouchableOpacity
+                  style={styles.actionItem}
+                  onPress={() => router.push(`/certificates/${relationship.id}` as any)}
+                >  
+                  <View style={styles.actionIconContainer}>
+                    <Award size={24} color={colors.primary} />
+                  </View>
+                  <Text style={styles.actionLabel}>Certificate</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionItem}
+                  onPress={() => router.push(`/anniversary/${relationship.id}` as any)}
+                >
+                  <View style={styles.actionIconContainer}>
+                    <Calendar size={24} color={colors.accent} />
+                  </View>
+                  <Text style={styles.actionLabel}>Anniversary</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.infoCard}>
+              <Shield size={20} color={colors.primary} />
+              <Text style={styles.infoText}>
+                Your relationship is verified and publicly visible. Others can now
+                search and see your committed status.
+              </Text>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -523,5 +550,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
     lineHeight: 18,
+  },
+  actionsCard: {
+    backgroundColor: colors.background.primary,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 20,
+  },
+  actionsTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 16,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionItem: {
+    flex: 1,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
   },
 });

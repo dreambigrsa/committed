@@ -1,86 +1,105 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  TouchableOpacity,
   TextInput,
-  ActivityIndicator,
+  TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Phone, ArrowLeft, CheckCircle2 } from 'lucide-react-native';
+import { Phone, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
 export default function PhoneVerificationScreen() {
   const router = useRouter();
   const { currentUser, updateUserProfile } = useApp();
-  const [step, setStep] = useState<'input' | 'verify'>('input');
-  const [phoneNumber, setPhoneNumber] = useState<string>(currentUser?.phoneNumber || '');
-  const [code, setCode] = useState<string>('');
-  const [generatedCode, setGeneratedCode] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [countdown, setCountdown] = useState<number>(0);
+  const [phoneNumber, setPhoneNumber] = useState(currentUser?.phoneNumber || '');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
-
-  const handleSendCode = async () => {
+  const sendVerificationCode = async () => {
     if (!phoneNumber.trim()) {
-      Alert.alert('Error', 'Please enter your phone number');
+      Alert.alert('Error', 'Please enter a phone number');
       return;
     }
 
     setIsLoading(true);
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(newCode);
+    try {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      await supabase
+        .from('verification_codes')
+        .insert({
+          user_id: currentUser?.id,
+          phone_number: phoneNumber,
+          code,
+          type: 'phone',
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
 
-    setTimeout(() => {
+      console.log('Verification code:', code);
+      setCodeSent(true);
+      Alert.alert('Code Sent', `Verification code sent to ${phoneNumber}. Code: ${code} (Demo mode)`);
+    } catch (error) {
+      console.error('Failed to send verification code:', error);
+      Alert.alert('Error', 'Failed to send verification code');
+    } finally {
       setIsLoading(false);
-      setStep('verify');
-      setCountdown(60);
-      Alert.alert(
-        'Verification Code Sent',
-        `Your code is: ${newCode}\n\n(In a real app, this would be sent via SMS)`,
-        [{ text: 'OK' }]
-      );
-    }, 1500);
+    }
   };
 
-  const handleVerifyCode = async () => {
-    if (code !== generatedCode) {
-      Alert.alert('Error', 'Invalid verification code. Please try again.');
+  const verifyCode = async () => {
+    if (!verificationCode.trim()) {
+      Alert.alert('Error', 'Please enter the verification code');
       return;
     }
 
     setIsLoading(true);
-    
-    setTimeout(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('verification_codes')
+        .select('*')
+        .eq('user_id', currentUser?.id)
+        .eq('phone_number', phoneNumber)
+        .eq('code', verificationCode)
+        .eq('type', 'phone')
+        .gte('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        throw new Error('Invalid or expired code');
+      }
+
       await updateUserProfile({
         verifications: {
-          ...currentUser!.verifications,
+          ...currentUser?.verifications!,
           phone: true,
         },
       });
-      setIsLoading(false);
-      Alert.alert('Success', 'Phone number verified successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]);
-    }, 1000);
-  };
 
-  const handleResendCode = () => {
-    if (countdown > 0) return;
-    handleSendCode();
+      await supabase
+        .from('verification_codes')
+        .delete()
+        .eq('user_id', currentUser?.id)
+        .eq('type', 'phone');
+
+      Alert.alert('Success', 'Phone number verified successfully!', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (error) {
+      console.error('Verification failed:', error);
+      Alert.alert('Error', 'Invalid or expired verification code');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -98,102 +117,81 @@ export default function PhoneVerificationScreen() {
       />
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Phone size={40} color={colors.primary} strokeWidth={2} />
-            </View>
-            <Text style={styles.title}>
-              {step === 'input' ? 'Verify Phone Number' : 'Enter Code'}
-            </Text>
-            <Text style={styles.subtitle}>
-              {step === 'input'
-                ? 'We\'ll send you a 6-digit verification code'
-                : `Enter the code sent to ${phoneNumber}`}
-            </Text>
+          <View style={styles.iconContainer}>
+            <Phone size={48} color={colors.primary} />
           </View>
 
-          {step === 'input' ? (
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number</Text>
+          <Text style={styles.title}>Verify Your Phone Number</Text>
+          <Text style={styles.subtitle}>
+            We&apos;ll send you a verification code to confirm your phone number
+          </Text>
+
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="+1 (555) 123-4567"
+                placeholderTextColor={colors.text.tertiary}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                editable={!codeSent}
+              />
+            </View>
+
+            {codeSent && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Verification Code</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="000000"
                   placeholderTextColor={colors.text.tertiary}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType="phone-pad"
-                  autoFocus
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
                 />
               </View>
+            )}
 
+            {!codeSent ? (
               <TouchableOpacity
                 style={[styles.button, isLoading && styles.buttonDisabled]}
-                onPress={handleSendCode}
+                onPress={sendVerificationCode}
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color={colors.text.white} />
+                  <ActivityIndicator size="small" color={colors.text.white} />
                 ) : (
                   <Text style={styles.buttonText}>Send Code</Text>
                 )}
               </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Verification Code</Text>
-                <TextInput
-                  style={[styles.input, styles.codeInput]}
-                  placeholder="000000"
-                  placeholderTextColor={colors.text.tertiary}
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoFocus
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.button, isLoading && styles.buttonDisabled]}
-                onPress={handleVerifyCode}
-                disabled={isLoading || code.length !== 6}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.text.white} />
-                ) : (
-                  <>
-                    <CheckCircle2 size={20} color={colors.text.white} />
-                    <Text style={styles.buttonText}>Verify</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.resendButton}
-                onPress={handleResendCode}
-                disabled={countdown > 0}
-              >
-                <Text
-                  style={[
-                    styles.resendText,
-                    countdown > 0 && styles.resendTextDisabled,
-                  ]}
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  onPress={verifyCode}
+                  disabled={isLoading}
                 >
-                  {countdown > 0
-                    ? `Resend code in ${countdown}s`
-                    : 'Resend code'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color={colors.text.white} />
+                  ) : (
+                    <Text style={styles.buttonText}>Verify Code</Text>
+                  )}
+                </TouchableOpacity>
 
-          <View style={styles.infoCard}>
-            <Text style={styles.infoText}>
-              This verification helps confirm your identity and builds trust in
-              your relationship status.
-            </Text>
+                <TouchableOpacity
+                  style={styles.resendButton}
+                  onPress={() => {
+                    setCodeSent(false);
+                    setVerificationCode('');
+                  }}
+                >
+                  <Text style={styles.resendText}>Send New Code</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -209,47 +207,45 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
+    paddingTop: 40,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: colors.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderWidth: 3,
+    borderColor: colors.primary + '30',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700' as const,
     color: colors.text.primary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    marginBottom: 40,
     paddingHorizontal: 20,
   },
   form: {
-    marginBottom: 24,
+    gap: 20,
   },
-  inputGroup: {
-    marginBottom: 24,
+  inputContainer: {
+    gap: 8,
   },
   label: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text.primary,
-    marginBottom: 10,
   },
   input: {
     backgroundColor: colors.background.primary,
@@ -261,53 +257,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border.light,
   },
-  codeInput: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    textAlign: 'center',
-    letterSpacing: 8,
-  },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
     paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
+    marginTop: 10,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text.white,
   },
   resendButton: {
-    alignItems: 'center',
-    marginTop: 20,
+    alignSelf: 'center',
     paddingVertical: 12,
   },
   resendText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 16,
     color: colors.primary,
-  },
-  resendTextDisabled: {
-    color: colors.text.tertiary,
-  },
-  infoCard: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  infoText: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    lineHeight: 18,
-    textAlign: 'center',
+    fontWeight: '600' as const,
   },
 });

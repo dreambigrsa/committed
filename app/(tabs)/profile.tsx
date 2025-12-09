@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -17,14 +19,18 @@ import {
   Shield,
   Plus,
   BarChart3,
+  Camera,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { currentUser, logout, getCurrentUserRelationship } = useApp();
+  const { currentUser, logout, getCurrentUserRelationship, updateUserProfile } = useApp();
   const relationship = getCurrentUserRelationship();
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!currentUser) {
     return null;
@@ -38,6 +44,55 @@ export default function ProfileScreen() {
       dating: 'Dating',
     };
     return labels[type as keyof typeof labels] || type;
+  };
+
+  const uploadProfilePicture = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'You need to allow access to your photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploading(true);
+      try {
+        const fileName = `profile_${currentUser?.id}_${Date.now()}.jpg`;
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        const { error: uploadError } = await supabase.storage
+          .from('media')
+          .upload(fileName, uint8Array, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('media')
+          .getPublicUrl(fileName);
+
+        await updateUserProfile({ profilePicture: publicUrl });
+
+        Alert.alert('Success', 'Profile picture updated!');
+      } catch (error) {
+        console.error('Failed to upload profile picture:', error);
+        Alert.alert('Error', 'Failed to upload profile picture');
+      } finally {
+        setIsUploading(false);
+      }
+    }
   };
 
   const handleLogout = async () => {
@@ -56,7 +111,11 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={uploadProfilePicture}
+            disabled={isUploading}
+          >
             {currentUser.profilePicture ? (
               <Image
                 source={{ uri: currentUser.profilePicture }}
@@ -69,7 +128,15 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             )}
-          </View>
+            {isUploading && (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator size="small" color={colors.text.white} />
+              </View>
+            )}
+            <View style={styles.cameraIcon}>
+              <Camera size={16} color={colors.text.white} />
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{currentUser.fullName}</Text>
@@ -241,6 +308,7 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: 16,
+    position: 'relative',
   },
   avatar: {
     width: 100,
@@ -259,6 +327,30 @@ const styles = StyleSheet.create({
     fontSize: 40,
     fontWeight: '600' as const,
     color: colors.text.white,
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.background.secondary,
   },
   profileInfo: {
     alignItems: 'center',
