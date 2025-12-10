@@ -24,6 +24,7 @@ function RootLayoutNav() {
       <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: "Active Sessions" }} />
       <Stack.Screen name="settings/blocked-users" options={{ headerShown: true, title: "Blocked Users" }} />
       <Stack.Screen name="settings/2fa" options={{ headerShown: true, title: "Two-Factor Authentication" }} />
+      <Stack.Screen name="settings/change-password" options={{ headerShown: true, title: "Change Password" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
