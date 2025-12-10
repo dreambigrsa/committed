@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useColorScheme } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import createContextHook from '@nkzw/create-context-hook';
+import { updateGlobalColors } from '@/constants/colors';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -92,13 +93,22 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [isDark, setIsDark] = useState(false);
 
+  // Initialize colors on mount
+  useEffect(() => {
+    const initialIsDark = systemColorScheme === 'dark';
+    setIsDark(initialIsDark);
+    updateGlobalColors(initialIsDark);
+  }, []);
+
   // Determine if dark mode should be active
   useEffect(() => {
-    if (themeMode === 'system') {
-      setIsDark(systemColorScheme === 'dark');
-    } else {
-      setIsDark(themeMode === 'dark');
-    }
+    const newIsDark = themeMode === 'system' 
+      ? systemColorScheme === 'dark' 
+      : themeMode === 'dark';
+    
+    setIsDark(newIsDark);
+    // Update global colors so all files using `import colors from '@/constants/colors'` work
+    updateGlobalColors(newIsDark);
   }, [themeMode, systemColorScheme]);
 
   // Load theme preference from database
