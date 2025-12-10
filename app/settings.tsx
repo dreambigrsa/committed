@@ -658,7 +658,7 @@ export default function SettingsScreen() {
                       !editMode && styles.editInputDisabled,
                       { 
                         backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: colors.border.light,
+                        borderColor: defaultColors.border.light,
                         color: colors.text.primary 
                       }
                     ]}
@@ -677,7 +677,7 @@ export default function SettingsScreen() {
                       !editMode && styles.editInputDisabled,
                       { 
                         backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: colors.border.light,
+                        borderColor: defaultColors.border.light,
                         color: colors.text.primary 
                       }
                     ]}
@@ -697,7 +697,7 @@ export default function SettingsScreen() {
                       styles.editInputDisabled,
                       { 
                         backgroundColor: colors.background.primary,
-                        borderColor: colors.border.light,
+                        borderColor: defaultColors.border.light,
                         color: colors.text.secondary 
                       }
                     ]}
@@ -715,7 +715,7 @@ export default function SettingsScreen() {
                       !editMode && styles.editInputDisabled,
                       { 
                         backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: colors.border.light,
+                        borderColor: defaultColors.border.light,
                         color: colors.text.primary 
                       }
                     ]}
@@ -734,7 +734,7 @@ export default function SettingsScreen() {
                       !editMode && styles.editInputDisabled,
                       { 
                         backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: colors.border.light,
+                        borderColor: defaultColors.border.light,
                         color: colors.text.primary 
                       }
                     ]}
@@ -1440,7 +1440,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: colors.background.primary,
+    borderColor: defaultColors.background.primary,
   },
   profileEditSection: {
     padding: 16,
@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: defaultColors.text.primary,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: defaultColors.border.light,
   },
   editInputDisabled: {
     backgroundColor: defaultColors.background.primary,
@@ -1497,7 +1497,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: defaultColors.border.light,
   },
   cancelButtonText: {
     fontSize: 15,
@@ -1552,7 +1552,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: defaultColors.border.light,
     backgroundColor: defaultColors.primary + '10',
   },
   reverifyButtonText: {
