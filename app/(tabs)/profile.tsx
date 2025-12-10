@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,8 @@ export default function ProfileScreen() {
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   React.useEffect(() => {
     Animated.parallel([
@@ -336,10 +338,10 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     paddingTop: 20,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ export default function ReelsScreen() {
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -215,10 +217,10 @@ export default function ReelsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.text.primary,
+    backgroundColor: '#000000',
   },
   scrollView: {
     flex: 1,
@@ -257,7 +259,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 2,
-    borderColor: colors.text.white,
+    borderColor: '#FFFFFF',
   },
   avatarPlaceholder: {
     width: 44,
@@ -267,7 +269,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.text.white,
+    borderColor: '#FFFFFF',
   },
   avatarPlaceholderText: {
     fontSize: 18,
@@ -310,7 +312,7 @@ const styles = StyleSheet.create({
   },
   actionIconContainerActive: {
     backgroundColor: colors.danger,
-    borderColor: colors.text.white,
+    borderColor: '#FFFFFF',
   },
   actionCount: {
     fontSize: 13,

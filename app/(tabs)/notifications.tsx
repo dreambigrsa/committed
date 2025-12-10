@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ export default function NotificationsScreen() {
   const pendingRequests = getPendingRequests();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -245,7 +247,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ export default function MessagesScreen() {
   const { currentUser, conversations } = useApp();
   const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -134,7 +136,7 @@ export default function MessagesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,

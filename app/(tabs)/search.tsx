@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,16 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Search as SearchIcon, CheckCircle2, X, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SearchScreen() {
   const router = useRouter();
   const { searchUsers, getUserRelationship, searchByFace } = useApp();
+  const { colors } = useTheme();
   const [query, setQuery] = useState<string>('');
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchMode, setSearchMode] = useState<'text' | 'face'>('text');
@@ -376,7 +379,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,
