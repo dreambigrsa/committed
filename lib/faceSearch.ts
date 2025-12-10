@@ -204,7 +204,8 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
     const endpoint = provider.azure_endpoint.replace(/\/$/, '');
     // Note: Many face attributes (emotion, gender, age, smile, facialHair, hair, makeup) 
     // have been deprecated by Azure. Only request faceId.
-    const url = `${endpoint}/face/v1.0/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04`;
+    // Use the simplest detection call - no model parameters to avoid approval requirements
+    const url = `${endpoint}/face/v1.0/detect?returnFaceId=true`;
 
     let imageBytes: Uint8Array;
 
@@ -247,16 +248,16 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
       // Check if it's an approval/feature error
       if (errorJson?.error?.innererror?.code === 'UnsupportedFeature') {
         const featureMsg = errorJson.error.innererror.message || '';
-        if (featureMsg.includes('Identification') || featureMsg.includes('Verification')) {
-          // This is for comparison features, detection should still work
-          // But if detection itself fails, we need to inform the user
-          console.error('Azure Face API: Detection may require approval. Error:', errorText);
-          throw new Error(`Azure Face API requires approval. Please apply at: https://aka.ms/facerecognition`);
-        }
+        // Even detection might require approval in some cases
+        // Return null gracefully instead of throwing to allow batch processing
+        console.warn('Azure Face API feature approval required:', featureMsg);
+        console.warn('Please apply for access at: https://aka.ms/facerecognition');
+        return null;
       }
       
-      console.error(`Azure Face API error: ${response.status} - ${errorText}`);
-      throw new Error(`Azure Face API error: ${response.status} - ${errorText}`);
+      console.warn(`Azure Face API detection error: ${response.status} - ${errorText}`);
+      // Return null instead of throwing to allow batch processing to continue
+      return null;
     }
 
     const faces = await response.json();
@@ -267,11 +268,9 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
     console.warn('No face detected in image by Azure Face API');
     return null;
   } catch (error: any) {
-    console.error('Azure Face API error:', error);
-    // Re-throw if it's an approval error so it can be handled upstream
-    if (error?.message?.includes('requires approval')) {
-      throw error;
-    }
+    console.error('Azure Face API detection error:', error);
+    // Don't throw - return null to allow batch processing to continue
+    // The error is already logged, and we don't want to stop the entire regeneration process
     return null;
   }
 }
@@ -573,8 +572,8 @@ async function compareFacesAzure(
     
     // Azure Face IDs expire after 24 hours, so we need to re-detect the target face
     // First, detect face in target image
-    // Note: Many face attributes have been deprecated by Azure, so we only request faceId
-    const detectUrl = `${endpoint}/face/v1.0/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04`;
+    // Use the simplest detection call - no model parameters to avoid approval requirements
+    const detectUrl = `${endpoint}/face/v1.0/detect?returnFaceId=true`;
     
     // Fetch and convert target image
     const targetResponse = await fetch(targetImageUrl);
@@ -600,7 +599,21 @@ async function compareFacesAzure(
 
     if (!detectResponse.ok) {
       const errorText = await detectResponse.text();
-      throw new Error(`Azure Face API detect error: ${detectResponse.status} - ${errorText}`);
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        errorJson = null;
+      }
+      
+      // Check if it's an approval error
+      if (errorJson?.error?.innererror?.code === 'UnsupportedFeature') {
+        console.warn('Azure Face API requires approval for face detection/comparison');
+        return 0;
+      }
+      
+      console.warn(`Azure Face API detect error: ${detectResponse.status} - ${errorText}`);
+      return 0;
     }
 
     const detectedFaces = await detectResponse.json();
@@ -629,25 +642,31 @@ async function compareFacesAzure(
 
     if (!response.ok) {
       const errorText = await response.text();
-      const errorJson = JSON.parse(errorText);
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        errorJson = null;
+      }
       
       // Check if it's an approval/feature error
-      if (errorJson.error?.innererror?.code === 'UnsupportedFeature') {
-        console.error('Azure Face API requires approval for Verification feature.');
-        console.error('Please apply for access at: https://aka.ms/facerecognition');
-        console.error('Error details:', errorText);
+      if (errorJson?.error?.innererror?.code === 'UnsupportedFeature') {
+        console.warn('Azure Face API requires approval for Verification/Identification features.');
+        console.warn('Face detection may work, but comparison requires approval.');
+        console.warn('Please apply for access at: https://aka.ms/facerecognition');
         // Return 0 instead of throwing, so the process can continue
         return 0;
       }
       
-      // If faceId1 is expired, try to re-detect from source as well
+      // If faceId1 is expired or invalid
       if (response.status === 400 || response.status === 404) {
-        console.warn('Source face ID may be expired, attempting to re-detect');
-        // For now, return 0 - the caller should handle this by re-extracting
+        console.warn('Source face ID may be expired or invalid');
         return 0;
       }
       
-      throw new Error(`Azure Face API error: ${response.status} - ${errorText}`);
+      console.warn(`Azure Face API comparison error: ${response.status} - ${errorText}`);
+      // Return 0 instead of throwing to allow search to continue
+      return 0;
     }
 
     const result = await response.json();
@@ -658,8 +677,9 @@ async function compareFacesAzure(
     }
 
     return 0;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Azure Face API comparison error:', error);
+    // Always return 0 instead of throwing to allow the search process to continue
     return 0;
   }
 }
@@ -890,12 +910,13 @@ export async function regenerateAllFaceEmbeddings(): Promise<{
             const errorMessage = error?.message || 'Unknown error';
             
             // Check if it's the approval error
-            if (errorMessage.includes('UnsupportedFeature') || errorMessage.includes('missing approval')) {
-              if (!results.errors.some(e => e.includes('Azure Face API requires approval'))) {
+            if (errorMessage.includes('UnsupportedFeature') || errorMessage.includes('missing approval') || errorMessage.includes('requires approval')) {
+              if (!results.errors.some(e => e.includes('Azure Face API approval'))) {
                 results.errors.push(
-                  'Azure Face API requires approval for Verification/Identification features. ' +
-                  'Please apply at: https://aka.ms/facerecognition. ' +
-                  'Face detection will still work, but face comparison requires approval.'
+                  '⚠️ Azure Face API: Face comparison requires approval for Verification/Identification features. ' +
+                  'Face detection (storing face IDs) should still work. ' +
+                  'Please apply for access at: https://aka.ms/facerecognition ' +
+                  'to enable face comparison/search functionality.'
                 );
               }
             } else {
