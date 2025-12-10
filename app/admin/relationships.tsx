@@ -54,6 +54,10 @@ export default function AdminRelationshipsScreen() {
           verifiedDate: r.verified_date || undefined,
           endDate: r.end_date || undefined,
           privacyLevel: r.privacy_level || 'public',
+          partnerFacePhoto: r.partner_face_photo,
+          partnerDateOfBirthMonth: r.partner_date_of_birth_month,
+          partnerDateOfBirthYear: r.partner_date_of_birth_year,
+          partnerCity: r.partner_city,
         }));
         setRelationships(formattedRelationships);
       }
