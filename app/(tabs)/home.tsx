@@ -13,11 +13,12 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar, Settings } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { currentUser, isLoading, getCurrentUserRelationship, getPendingRequests } = useApp();
+  const { colors } = useTheme();
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,7 +48,7 @@ export default function HomeScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading your profile...</Text>
@@ -58,9 +59,9 @@ export default function HomeScreen() {
 
   if (!currentUser) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Please log in to continue</Text>
+          <Text style={[styles.loadingText, { color: colors.text.secondary }]}>Please log in to continue</Text>
         </View>
       </SafeAreaView>
     );
@@ -81,7 +82,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -411,7 +412,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,
