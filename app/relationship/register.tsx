@@ -22,7 +22,6 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 
 const RELATIONSHIP_TYPES: { value: RelationshipType; label: string }[] = [
@@ -177,18 +176,11 @@ export default function RegisterRelationshipScreen() {
         const fileName = `partner-face-${Date.now()}.${fileExt}`;
         const filePath = `partner-photos/${fileName}`;
 
-        // Convert URI to Uint8Array for React Native compatibility using expo-file-system
-        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-          encoding: 'base64' as any,
-        });
-        
-        // Convert base64 to Uint8Array (React Native compatible)
-        // Use atob which is available in React Native environments
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+        // Convert URI to Uint8Array using fetch (modern approach, no deprecated APIs)
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
 
         const { data, error } = await supabase.storage
           .from('avatars')
