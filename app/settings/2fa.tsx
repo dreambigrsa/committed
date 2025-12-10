@@ -16,7 +16,7 @@ import { ArrowLeft, Shield, Key, Copy, CheckCircle2, XCircle } from 'lucide-reac
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import * as Clipboard from 'expo-clipboard';
+import { Clipboard } from 'react-native';
 
 export default function TwoFactorAuthScreen() {
   const router = useRouter();
@@ -175,9 +175,9 @@ export default function TwoFactorAuthScreen() {
     );
   };
 
-  const copyBackupCodes = async () => {
+  const copyBackupCodes = () => {
     if (backupCodes.length === 0) return;
-    await Clipboard.setStringAsync(backupCodes.join('\n'));
+    Clipboard.setString(backupCodes.join('\n'));
     Alert.alert('Copied', 'Backup codes copied to clipboard');
   };
 
@@ -273,7 +273,10 @@ export default function TwoFactorAuthScreen() {
               </Text>
               <View style={[styles.secretContainer, { backgroundColor: colors.background.secondary, borderColor: colors.border.light }]}>
                 <Text style={[styles.secretText, { color: colors.text.primary }]}>{secret}</Text>
-                <TouchableOpacity onPress={() => Clipboard.setStringAsync(secret)}>
+                <TouchableOpacity onPress={() => {
+                  Clipboard.setString(secret);
+                  Alert.alert('Copied', 'Secret key copied to clipboard');
+                }}>
                   <Copy size={18} color={colors.primary} />
                 </TouchableOpacity>
               </View>
