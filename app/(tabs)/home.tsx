@@ -13,11 +13,12 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar, Settings } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useColors } from '@/constants/colors';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { currentUser, isLoading, getCurrentUserRelationship, getPendingRequests } = useApp();
+  const colors = useColors();
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
   const fadeAnim = useRef(new Animated.Value(0)).current;
