@@ -1332,6 +1332,92 @@ export const [AppContext, useApp] = createContextHook(() => {
     return messages[conversationId] || [];
   }, [messages]);
 
+  const createOrGetConversation = useCallback(async (otherUserId: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      // Check if a conversation already exists between these two users
+      const { data: existingConversations } = await supabase
+        .from('conversations')
+        .select('*')
+        .contains('participant_ids', [currentUser.id, otherUserId])
+        .limit(1);
+
+      // Filter to ensure both participants are in the conversation
+      const existingConv = existingConversations?.find((conv: any) => {
+        const participants = conv.participant_ids || [];
+        return participants.includes(currentUser.id) && participants.includes(otherUserId) && participants.length === 2;
+      });
+
+      if (existingConv) {
+        // Conversation exists, return it
+        const { data: participantsData } = await supabase
+          .from('users')
+          .select('id, full_name, profile_picture')
+          .in('id', existingConv.participant_ids);
+
+        const participantNames = participantsData?.map((p: any) => p.full_name) || [];
+        const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+
+        const conversation: Conversation = {
+          id: existingConv.id,
+          participants: existingConv.participant_ids,
+          participantNames,
+          participantAvatars,
+          lastMessage: existingConv.last_message || '',
+          lastMessageAt: existingConv.last_message_at,
+          unreadCount: 0,
+        };
+
+        // Add to conversations if not already there
+        const isAlreadyInList = conversations.some(c => c.id === conversation.id);
+        if (!isAlreadyInList) {
+          setConversations([conversation, ...conversations]);
+        }
+
+        return conversation;
+      }
+
+      // Create new conversation
+      const { data: newConversation, error } = await supabase
+        .from('conversations')
+        .insert({
+          participant_ids: [currentUser.id, otherUserId],
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Get participant data
+      const { data: participantsData } = await supabase
+        .from('users')
+        .select('id, full_name, profile_picture')
+        .in('id', [currentUser.id, otherUserId]);
+
+      const participantNames = participantsData?.map((p: any) => p.full_name) || [];
+      const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+
+      const conversation: Conversation = {
+        id: newConversation.id,
+        participants: newConversation.participant_ids,
+        participantNames,
+        participantAvatars,
+        lastMessage: '',
+        lastMessageAt: newConversation.created_at,
+        unreadCount: 0,
+      };
+
+      // Add to conversations list
+      setConversations([conversation, ...conversations]);
+
+      return conversation;
+    } catch (error) {
+      console.error('Create or get conversation error:', error);
+      return null;
+    }
+  }, [currentUser, conversations]);
+
   const getComments = useCallback((postId: string) => {
     return comments[postId] || [];
   }, [comments]);
@@ -2381,6 +2467,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     sendMessage,
     getConversation,
     getMessages,
+    createOrGetConversation,
     getComments,
     advertisements,
     createAdvertisement,
