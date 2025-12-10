@@ -187,7 +187,10 @@ export default function SearchScreen() {
               <View style={styles.relationshipInfoContainer}>
                 <Text style={styles.relationshipInfo}>
                   {item.relationshipStatus === 'verified' ? '❤️ ' : '⏳ '}
-                  Listed as partner in a {getRelationshipTypeLabel(item.relationshipType).toLowerCase()}
+                  {item.partnerName 
+                    ? `In a ${getRelationshipTypeLabel(item.relationshipType).toLowerCase()} with ${item.partnerName}`
+                    : `Listed as partner in a ${getRelationshipTypeLabel(item.relationshipType).toLowerCase()}`
+                  }
                   {item.relationshipStatus === 'verified' && ' (Verified)'}
                 </Text>
               </View>
