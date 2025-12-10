@@ -178,7 +178,7 @@ export default function RegisterRelationshipScreen() {
 
         // Convert URI to Uint8Array for React Native compatibility using expo-file-system
         const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64' as any,
         });
         
         // Convert base64 to Uint8Array (React Native compatible)
