@@ -1595,7 +1595,7 @@ const styles = StyleSheet.create({
   dangerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: colors.danger,
+    color: defaultColors.danger,
     marginBottom: 8,
   },
   dangerText: {
@@ -1629,7 +1629,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: defaultColors.primary + '30',
   },
   infoText: {
     flex: 1,
