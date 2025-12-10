@@ -83,16 +83,9 @@ const darkColors = {
 };
 
 // Default export for backward compatibility (uses light theme)
-// This is used in StyleSheet.create() blocks which are evaluated at module scope
 const colors = lightColors;
 
-// Named export for StyleSheet usage (same as default)
-export { colors };
-
-// Also export lightColors and darkColors for direct access if needed
-export { lightColors, darkColors };
-
-// Hook to get theme-aware colors (use this in component JSX for dynamic theming)
+// Hook to get theme-aware colors
 export const useColors = () => {
   try {
     const { isDark } = useTheme();
