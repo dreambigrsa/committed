@@ -871,32 +871,129 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!lowerQuery) return [];
     
     try {
-      const { data, error } = await supabase.rpc('search_users', {
+      // Search registered users
+      const { data: usersData, error: usersError } = await supabase.rpc('search_users', {
         search_query: lowerQuery,
       });
 
-      if (error) throw error;
+      if (usersError) throw usersError;
 
-      return (data || []).map((u: any) => ({
-        id: u.id,
-        fullName: u.full_name,
-        username: u.username,
-        email: u.email || '',
-        phoneNumber: u.phone_number || '',
-        profilePicture: u.profile_picture,
-        role: u.role || 'user',
-        isRegisteredUser: u.is_registered_user !== false, // Default to true if not specified
-        relationshipType: u.relationship_type,
-        relationshipStatus: u.relationship_status,
-        verifications: {
-          phone: u.phone_verified || false,
-          email: u.email_verified || false,
-          id: u.id_verified || false,
-        },
-        createdAt: '',
-      }));
+      // Get relationship info for all users
+      const usersWithRelationships = await Promise.all(
+        (usersData || []).map(async (u: any) => {
+          // Get user's relationship
+          const { data: userRel } = await supabase
+            .from('relationships')
+            .select('type, status, partner_name, partner_phone, partner_user_id, partner_face_photo')
+            .eq('user_id', u.id)
+            .in('status', ['pending', 'verified'])
+            .limit(1)
+            .single();
+
+          return {
+            id: u.id,
+            fullName: u.full_name,
+            username: u.username,
+            email: u.email || '',
+            phoneNumber: u.phone_number || '',
+            profilePicture: u.profile_picture,
+            role: u.role || 'user',
+            isRegisteredUser: true,
+            relationshipType: userRel?.type,
+            relationshipStatus: userRel?.status,
+            partnerName: userRel?.partner_name,
+            partnerPhone: userRel?.partner_phone,
+            partnerUserId: userRel?.partner_user_id,
+            verifications: {
+              phone: u.phone_verified || false,
+              email: u.email_verified || false,
+              id: u.id_verified || false,
+            },
+            createdAt: '',
+          };
+        })
+      );
+
+      // Search non-registered partners (people listed as partners but not registered)
+      const { data: partnerData, error: partnerError } = await supabase
+        .from('relationships')
+        .select(`
+          partner_name,
+          partner_phone,
+          partner_user_id,
+          partner_face_photo,
+          type,
+          status,
+          user_id,
+          users!relationships_user_id_fkey(full_name, phone_number, profile_picture)
+        `)
+        .or(`partner_name.ilike.%${lowerQuery}%,partner_phone.ilike.%${lowerQuery}%`)
+        .is('partner_user_id', null)
+        .in('status', ['pending', 'verified'])
+        .limit(20);
+
+      if (!partnerError && partnerData) {
+        const nonRegisteredPartners = partnerData.map((rel: any) => ({
+          id: null,
+          fullName: rel.partner_name,
+          phoneNumber: rel.partner_phone,
+          profilePicture: rel.partner_face_photo,
+          isRegisteredUser: false,
+          relationshipType: rel.type,
+          relationshipStatus: rel.status,
+          partnerName: rel.users?.full_name,
+          partnerPhone: rel.users?.phone_number,
+          partnerUserId: rel.user_id,
+          verifications: {
+            phone: false,
+            email: false,
+            id: false,
+          },
+          createdAt: '',
+        }));
+
+        return [...usersWithRelationships, ...nonRegisteredPartners];
+      }
+
+      return usersWithRelationships;
     } catch (error) {
       console.error('Search users error:', error);
+      return [];
+    }
+  }, []);
+
+  const searchByFace = useCallback(async (imageUri: string) => {
+    try {
+      // Import face search service
+      const { searchByFace: faceSearch } = await import('@/lib/faceSearch');
+      
+      // Convert local URI to a format the service can use
+      // For now, we'll pass the URI directly (in production, you might need to upload to storage first)
+      const results = await faceSearch(imageUri);
+      
+      // Format results for display
+      return results.map((match) => ({
+        relationshipId: match.relationshipId,
+        id: match.partnerUserId || null, // Partner's user ID if registered
+        fullName: match.partnerName,
+        phoneNumber: match.partnerPhone,
+        profilePicture: match.facePhotoUrl,
+        facePhotoUrl: match.facePhotoUrl, // Also include explicitly for face search results
+        isRegisteredUser: !!match.partnerUserId,
+        relationshipType: match.relationshipType,
+        relationshipStatus: match.relationshipStatus,
+        partnerName: match.userName, // The person they're in a relationship with
+        partnerPhone: match.userPhone,
+        partnerUserId: match.userId,
+        similarityScore: match.similarityScore,
+        verifications: {
+          phone: false,
+          email: false,
+          id: false,
+        },
+      }));
+    } catch (error) {
+      console.error('Face search error:', error);
       return [];
     }
   }, []);
@@ -1838,6 +1935,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     getCurrentUserRelationship,
     getUserRelationship,
     searchUsers,
+    searchByFace,
     getPendingRequests,
     posts,
     reels,
