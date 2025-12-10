@@ -20,6 +20,7 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 
 const RELATIONSHIP_TYPES: { value: RelationshipType; label: string }[] = [
@@ -171,15 +172,22 @@ export default function RegisterRelationshipScreen() {
         const fileName = `partner-face-${Date.now()}.${fileExt}`;
         const filePath = `partner-photos/${fileName}`;
 
-        // Convert URI to Uint8Array for React Native compatibility
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
+        // Convert URI to Uint8Array for React Native compatibility using expo-file-system
+        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        // Convert base64 to Uint8Array (React Native compatible)
+        // Use atob which is available in React Native environments
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
 
         const { data, error } = await supabase.storage
           .from('avatars')
-          .upload(filePath, uint8Array, {
+          .upload(filePath, bytes, {
             contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
           });
 
