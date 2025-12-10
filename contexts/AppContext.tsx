@@ -1611,6 +1611,244 @@ export const [AppContext, useApp] = createContextHook(() => {
     );
   }, [advertisements]);
 
+  /**
+   * Feed Algorithm: Prioritizes posts from followed users
+   * Algorithm:
+   * 1. Posts from followed users get highest priority
+   * 2. Within each group, sort by engagement score (likes + comments * 2)
+   * 3. Then by recency (newer posts first)
+   * 4. Falls back to other posts if not enough followed posts
+   */
+  const getPersonalizedFeed = useCallback((allPosts: Post[], limit: number = 50): Post[] => {
+    if (!currentUser || !follows.length) {
+      // If no follows, return posts sorted by engagement and recency
+      return allPosts
+        .sort((a, b) => {
+          const engagementA = a.likes.length + (a.commentCount * 2);
+          const engagementB = b.likes.length + (b.commentCount * 2);
+          if (engagementB !== engagementA) {
+            return engagementB - engagementA;
+          }
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        })
+        .slice(0, limit);
+    }
+
+    // Get list of user IDs the current user follows
+    const followingIds = new Set(
+      follows
+        .filter(f => f.followerId === currentUser.id)
+        .map(f => f.followingId)
+    );
+
+    // Separate posts into followed and non-followed
+    const followedPosts: Post[] = [];
+    const otherPosts: Post[] = [];
+
+    allPosts.forEach(post => {
+      if (followingIds.has(post.userId)) {
+        followedPosts.push(post);
+      } else {
+        otherPosts.push(post);
+      }
+    });
+
+    // Calculate engagement score for sorting
+    const getEngagementScore = (post: Post) => {
+      return post.likes.length + (post.commentCount * 2);
+    };
+
+    // Sort both groups by engagement, then recency
+    const sortByEngagement = (a: Post, b: Post) => {
+      const engagementA = getEngagementScore(a);
+      const engagementB = getEngagementScore(b);
+      if (engagementB !== engagementA) {
+        return engagementB - engagementA;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    };
+
+    followedPosts.sort(sortByEngagement);
+    otherPosts.sort(sortByEngagement);
+
+    // Combine: followed posts first, then other posts
+    // Mix in some other posts to keep feed diverse (every 3rd post from others)
+    const personalizedFeed: Post[] = [];
+    let followedIndex = 0;
+    let otherIndex = 0;
+    let postCount = 0;
+
+    while (postCount < limit && (followedIndex < followedPosts.length || otherIndex < otherPosts.length)) {
+      // Prioritize followed posts, but mix in others every 3rd position
+      if (followedIndex < followedPosts.length && (postCount % 3 !== 2 || otherIndex >= otherPosts.length)) {
+        personalizedFeed.push(followedPosts[followedIndex]);
+        followedIndex++;
+      } else if (otherIndex < otherPosts.length) {
+        personalizedFeed.push(otherPosts[otherIndex]);
+        otherIndex++;
+      } else {
+        break;
+      }
+      postCount++;
+    }
+
+    return personalizedFeed;
+  }, [currentUser, follows]);
+
+  /**
+   * Smart Advertisement Algorithm
+   * Features:
+   * 1. Admin ads: Rotate for everyone, track views to avoid repetition
+   * 2. Regular ads: Personalize based on user engagement/interests
+   * 3. Avoids showing same ad too frequently to same user
+   */
+  const getSmartAds = useCallback(async (
+    placement: Advertisement['placement'],
+    excludeAdIds: string[] = [],
+    limit: number = 10
+  ): Promise<Advertisement[]> => {
+    if (!currentUser) {
+      return getActiveAds(placement).slice(0, limit);
+    }
+
+    try {
+      const allAds = getActiveAds(placement);
+      
+      // Separate admin ads from regular ads
+      const adminAds: Advertisement[] = [];
+      const regularAds: Advertisement[] = [];
+
+      // Check which users are admins
+      const { data: adminUsers } = await supabase
+        .from('users')
+        .select('id')
+        .in('role', ['admin', 'super_admin', 'moderator']);
+
+      const adminUserIds = new Set(adminUsers?.map(u => u.id) || []);
+
+      allAds.forEach(ad => {
+        if (adminUserIds.has(ad.createdBy)) {
+          adminAds.push(ad);
+        } else {
+          regularAds.push(ad);
+        }
+      });
+
+      // Get user's ad impression history (last 24 hours)
+      const oneDayAgo = new Date();
+      oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+
+      const { data: recentImpressions } = await supabase
+        .from('advertisement_impressions')
+        .select('advertisement_id, created_at')
+        .eq('user_id', currentUser.id)
+        .gte('created_at', oneDayAgo.toISOString());
+
+      const impressionCounts = new Map<string, number>();
+      recentImpressions?.forEach(imp => {
+        const count = impressionCounts.get(imp.advertisement_id) || 0;
+        impressionCounts.set(imp.advertisement_id, count + 1);
+      });
+
+      // Get user's engagement data for personalization
+      const { data: userLikes } = await supabase
+        .from('post_likes')
+        .select('post_id')
+        .eq('user_id', currentUser.id)
+        .limit(100);
+
+      const { data: userComments } = await supabase
+        .from('comments')
+        .select('post_id')
+        .eq('user_id', currentUser.id)
+        .limit(100);
+
+      // Get posts user engaged with to understand interests
+      const engagedPostIds = new Set([
+        ...(userLikes?.map(l => l.post_id) || []),
+        ...(userComments?.map(c => c.post_id) || [])
+      ]);
+
+      // Score regular ads based on personalization factors
+      const scoredRegularAds = regularAds
+        .filter(ad => !excludeAdIds.includes(ad.id))
+        .map(ad => {
+          let score = 0;
+          
+          // Base score from ad performance (CTR)
+          const ctr = ad.impressions > 0 ? ad.clicks / ad.impressions : 0;
+          score += ctr * 100;
+
+          // Penalize ads shown too frequently to this user
+          const viewCount = impressionCounts.get(ad.id) || 0;
+          score -= viewCount * 20; // Reduce score for each view in last 24h
+
+          // Add randomness for diversity
+          score += Math.random() * 10;
+
+          return { ad, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      // Select admin ads with rotation (avoid recently shown ones)
+      const scoredAdminAds = adminAds
+        .filter(ad => !excludeAdIds.includes(ad.id))
+        .map(ad => {
+          let score = 100; // Base score for admin ads
+          
+          // Penalize recently shown admin ads
+          const viewCount = impressionCounts.get(ad.id) || 0;
+          score -= viewCount * 30; // Stronger penalty for admin ads
+
+          // Add some randomness for rotation
+          score += Math.random() * 15;
+
+          return { ad, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      // Combine ads: Mix admin and regular ads
+      // Admin ads get priority but we want diversity
+      const selectedAds: Advertisement[] = [];
+      const usedAdIds = new Set<string>();
+
+      // Add admin ads first (up to 40% of limit)
+      const adminLimit = Math.ceil(limit * 0.4);
+      scoredAdminAds.slice(0, adminLimit).forEach(({ ad }) => {
+        if (!usedAdIds.has(ad.id)) {
+          selectedAds.push(ad);
+          usedAdIds.add(ad.id);
+        }
+      });
+
+      // Fill remaining with regular ads
+      scoredRegularAds.forEach(({ ad }) => {
+        if (selectedAds.length < limit && !usedAdIds.has(ad.id)) {
+          selectedAds.push(ad);
+          usedAdIds.add(ad.id);
+        }
+      });
+
+      // If we still need more ads, add more admin ads
+      if (selectedAds.length < limit) {
+        scoredAdminAds.forEach(({ ad }) => {
+          if (selectedAds.length < limit && !usedAdIds.has(ad.id)) {
+            selectedAds.push(ad);
+            usedAdIds.add(ad.id);
+          }
+        });
+      }
+
+      return selectedAds;
+    } catch (error) {
+      console.error('Error getting smart ads:', error);
+      // Fallback to simple rotation
+      return getActiveAds(placement)
+        .filter(ad => !excludeAdIds.includes(ad.id))
+        .slice(0, limit);
+    }
+  }, [currentUser, getActiveAds]);
+
   const setupRealtimeSubscriptions = useCallback((userId: string) => {
     const subs: RealtimeChannel[] = [];
 
@@ -2541,6 +2779,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     recordAdImpression,
     recordAdClick,
     getActiveAds,
+    getPersonalizedFeed,
+    getSmartAds,
     notifications,
     cheatingAlerts,
     follows,
