@@ -12,11 +12,12 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useColors } from '@/constants/colors';
 
 export default function MessagesScreen() {
   const router = useRouter();
   const { currentUser, conversations } = useApp();
+  const colors = useColors();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
