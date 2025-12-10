@@ -4,15 +4,10 @@ import { supabase } from '@/lib/supabase';
 import createContextHook from '@nkzw/create-context-hook';
 import { updateGlobalColors } from '@/constants/colors';
 
-// Initialize colors immediately based on system preference
+// Initialize colors immediately - default to light mode
 // This ensures colors is always available, even before the context mounts
-try {
-  const systemColorScheme = Appearance.getColorScheme();
-  updateGlobalColors(systemColorScheme === 'dark');
-} catch {
-  // If Appearance is not available, default to light
-  updateGlobalColors(false);
-}
+// The ThemeContext will update this based on user preference once it mounts
+updateGlobalColors(false);
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -103,14 +98,8 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [isDark, setIsDark] = useState(false);
 
-  // Initialize colors on mount
-  useEffect(() => {
-    const initialIsDark = systemColorScheme === 'dark';
-    setIsDark(initialIsDark);
-    updateGlobalColors(initialIsDark);
-  }, []);
-
   // Determine if dark mode should be active
+  // This effect runs on mount and whenever themeMode or systemColorScheme changes
   useEffect(() => {
     const newIsDark = themeMode === 'system' 
       ? systemColorScheme === 'dark' 
