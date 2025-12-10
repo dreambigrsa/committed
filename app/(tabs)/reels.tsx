@@ -26,6 +26,7 @@ export default function ReelsScreen() {
   const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, follows, followUser, unfollowUser } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [currentReelId, setCurrentReelId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [showReelMenu, setShowReelMenu] = useState<string | null>(null);
   const [editingReel, setEditingReel] = useState<string | null>(null);
@@ -48,27 +49,65 @@ export default function ReelsScreen() {
   // Stop all videos when component unmounts or loses focus
   useFocusEffect(
     React.useCallback(() => {
+      // Play current video when screen gains focus
+      if (currentReelId && videoRefs.current[currentReelId]) {
+        videoRefs.current[currentReelId]?.playAsync().catch(() => {});
+      }
+      
       return () => {
         // Stop all videos when leaving the screen
-        Object.values(videoRefs.current).forEach((video) => {
+        Object.keys(videoRefs.current).forEach((reelId) => {
+          const video = videoRefs.current[reelId];
           if (video) {
             video.pauseAsync().catch(() => {});
           }
         });
       };
-    }, [])
+    }, [currentReelId])
   );
 
   useEffect(() => {
+    // Initialize: play first video if available
+    if (reels.length > 0 && !currentReelId) {
+      const firstReelId = reels[0]?.id;
+      if (firstReelId) {
+        setCurrentReelId(firstReelId);
+        setCurrentIndex(0);
+        // Wait a bit for the ref to be set
+        setTimeout(() => {
+          if (videoRefs.current[firstReelId]) {
+            videoRefs.current[firstReelId]?.playAsync().catch(() => {});
+          }
+        }, 100);
+      }
+    }
+    
     return () => {
       // Cleanup: stop all videos on unmount
-      Object.values(videoRefs.current).forEach((video) => {
+      Object.keys(videoRefs.current).forEach((reelId) => {
+        const video = videoRefs.current[reelId];
         if (video) {
           video.pauseAsync().catch(() => {});
         }
       });
     };
-  }, []);
+  }, [reels.length]);
+  
+  // Ensure only the current reel is playing
+  useEffect(() => {
+    Object.keys(videoRefs.current).forEach((reelId) => {
+      const video = videoRefs.current[reelId];
+      if (video) {
+        if (reelId === currentReelId) {
+          // This is the current reel, ensure it's playing
+          video.playAsync().catch(() => {});
+        } else {
+          // This is not the current reel, ensure it's paused
+          video.pauseAsync().catch(() => {});
+        }
+      }
+    });
+  }, [currentReelId]);
 
   if (!currentUser) {
     return null;
@@ -87,18 +126,25 @@ export default function ReelsScreen() {
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / height);
-    if (index !== currentIndex) {
-      setCurrentIndex(index);
+    
+    if (index !== currentIndex && index >= 0 && index < reels.length) {
+      const newReelId = reels[index]?.id;
       
-      Object.keys(videoRefs.current).forEach((key, idx) => {
-        if (videoRefs.current[key]) {
-          if (idx === index) {
-            videoRefs.current[key]?.playAsync();
-          } else {
-            videoRefs.current[key]?.pauseAsync();
-          }
+      // Pause all videos first
+      Object.keys(videoRefs.current).forEach((reelId) => {
+        const video = videoRefs.current[reelId];
+        if (video && reelId !== newReelId) {
+          video.pauseAsync().catch(() => {});
         }
       });
+      
+      // Play the current video
+      if (newReelId && videoRefs.current[newReelId]) {
+        videoRefs.current[newReelId]?.playAsync().catch(() => {});
+      }
+      
+      setCurrentIndex(index);
+      setCurrentReelId(newReelId || null);
     }
   };
 
@@ -250,11 +296,18 @@ export default function ReelsScreen() {
             style={styles.video}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay={index === currentIndex}
+            shouldPlay={index === currentIndex && reel.id === currentReelId}
             isMuted={isMuted}
             onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-              if (status.isLoaded && !status.isPlaying && index === currentIndex) {
-                videoRefs.current[reel.id]?.playAsync();
+              if (status.isLoaded) {
+                // Only auto-play if this is the current reel and it's not playing
+                if (index === currentIndex && reel.id === currentReelId && !status.isPlaying) {
+                  videoRefs.current[reel.id]?.playAsync().catch(() => {});
+                }
+                // Pause if this is not the current reel
+                if (reel.id !== currentReelId && status.isPlaying) {
+                  videoRefs.current[reel.id]?.pauseAsync().catch(() => {});
+                }
               }
             }}
           />
@@ -264,25 +317,36 @@ export default function ReelsScreen() {
           {/* Left side - User info and caption */}
           <View style={styles.leftSide}>
             <View style={styles.userInfo}>
-              <TouchableOpacity style={styles.userHeader}>
-                {reel.userAvatar ? (
-                  <Image
-                    source={{ uri: reel.userAvatar }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarPlaceholderText}>
-                      {reel.userName.charAt(0)}
-                    </Text>
-                  </View>
-                )}
+              <View style={styles.userHeader}>
+                <TouchableOpacity 
+                  onPress={() => router.push(`/profile/${reel.userId}` as any)}
+                  activeOpacity={0.7}
+                >
+                  {reel.userAvatar ? (
+                    <Image
+                      source={{ uri: reel.userAvatar }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarPlaceholderText}>
+                        {reel.userName.charAt(0)}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
                 <View style={styles.userNameContainer}>
-                  <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
+                  <TouchableOpacity 
+                    onPress={() => router.push(`/profile/${reel.userId}` as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
+                  </TouchableOpacity>
                   {!isOwner && (
                     <TouchableOpacity
-                      style={styles.followButton}
+                      style={[styles.followButton, isFollowing(reel.userId) && styles.followButtonActive]}
                       onPress={() => handleFollow(reel.userId)}
+                      activeOpacity={0.8}
                     >
                       <Text style={styles.followButtonText}>
                         {isFollowing(reel.userId) ? 'Following' : 'Follow'}
@@ -290,7 +354,7 @@ export default function ReelsScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              </TouchableOpacity>
+              </View>
               
               {editingReel === reel.id ? (
                 <View style={styles.editCaptionContainer}>
@@ -517,30 +581,35 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 60,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
+    // Gradient overlay for better text readability
+    backgroundColor: 'transparent',
   },
   leftSide: {
     flex: 1,
     paddingRight: 16,
+    maxWidth: width * 0.7, // Limit width so it doesn't cover too much
   },
   rightSide: {
     alignItems: 'center',
     gap: 24,
+    paddingLeft: 8,
   },
   userInfo: {
     flex: 1,
   },
   userHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   userNameContainer: {
     flex: 1,
+    justifyContent: 'flex-start',
   },
   avatar: {
     width: 48,
@@ -574,14 +643,22 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginBottom: 4,
   },
   followButton: {
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
+    marginTop: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 6,
     backgroundColor: colors.primary,
+    alignSelf: 'flex-start',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  followButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   followButtonText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700' as const,
     color: colors.text.white,
   },
@@ -589,10 +666,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
     color: colors.text.white,
     lineHeight: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    marginTop: 8,
+    textShadowRadius: 4,
+    marginTop: 4,
+    paddingRight: 8,
   },
   actionButton: {
     alignItems: 'center',
