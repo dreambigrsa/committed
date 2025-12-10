@@ -51,7 +51,7 @@ export default function SessionsScreen() {
         // Fallback: create a session entry for current device
         if (currentSession) {
           setSessions([{
-            id: currentSession.id,
+            id: currentSession.id || `session-current-${Date.now()}`,
             device: 'Current Device',
             lastActive: new Date().toISOString(),
             isCurrent: true,
@@ -60,8 +60,8 @@ export default function SessionsScreen() {
         return;
       }
 
-      const formattedSessions = (data || []).map((s: any) => ({
-        id: s.id,
+      const formattedSessions = (data || []).map((s: any, index: number) => ({
+        id: s.id || `session-${index}`,
         device: s.device_info || 'Unknown Device',
         lastActive: s.last_active,
         ipAddress: s.ip_address,
@@ -72,7 +72,7 @@ export default function SessionsScreen() {
       // If no sessions found, add current one
       if (formattedSessions.length === 0 && currentSession) {
         formattedSessions.push({
-          id: currentSession.id,
+          id: currentSession.id || `session-current-${Date.now()}`,
           device: 'Current Device',
           lastActive: new Date().toISOString(),
           isCurrent: true,
@@ -218,7 +218,7 @@ export default function SessionsScreen() {
 
         <FlatList
           data={sessions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.id || `session-${index}`}
           renderItem={({ item }) => (
             <View style={[styles.sessionCard, { backgroundColor: colors.background.primary }]}>
               <View style={styles.sessionHeader}>
