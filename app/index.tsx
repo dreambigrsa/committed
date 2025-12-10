@@ -25,11 +25,11 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
 
 export default function LandingScreen() {
   const router = useRouter();
   const { currentUser } = useApp();
+  const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -92,6 +92,8 @@ export default function LandingScreen() {
     { number: '98%', label: 'Trust Score' },
     { number: '24/7', label: 'Monitoring' },
   ];
+
+  const styles = createStyles(colors);
 
   return (
     <View style={styles.container}>
@@ -333,7 +335,7 @@ export default function LandingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: typeof import('@/constants/colors').default) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
