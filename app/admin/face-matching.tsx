@@ -301,10 +301,27 @@ export default function FaceMatchingProvidersScreen() {
               message += `✅ Success: ${results.success}\n`;
               message += `❌ Failed: ${results.failed}\n`;
               
+              // Check if there are approval-related errors
+              const hasApprovalError = results.errors.some(e => 
+                e.includes('Azure Face API approval') || 
+                e.includes('requires approval') ||
+                e.includes('UnsupportedFeature')
+              );
+              
+              if (hasApprovalError) {
+                message += `\n\n⚠️ IMPORTANT:\n`;
+                message += `Azure Face API requires approval for face detection/matching.\n\n`;
+                message += `To enable face matching:\n`;
+                message += `1. Apply at: https://aka.ms/facerecognition\n`;
+                message += `2. Wait for approval (5-10 business days)\n`;
+                message += `3. Run regeneration again after approval\n\n`;
+                message += `Note: Image URLs are stored and will be processed after approval.`;
+              }
+              
               if (results.errors.length > 0) {
-                message += `\nFirst few errors:\n${results.errors.slice(0, 3).join('\n')}`;
-                if (results.errors.length > 3) {
-                  message += `\n... and ${results.errors.length - 3} more`;
+                message += `\n\nErrors:\n${results.errors.slice(0, 5).join('\n')}`;
+                if (results.errors.length > 5) {
+                  message += `\n... and ${results.errors.length - 5} more`;
                 }
               }
               
