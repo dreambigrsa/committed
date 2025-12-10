@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film, MoreVertical, Edit2, Trash2, X } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film, MoreVertical, Edit2, Trash2, X, UserPlus } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -23,7 +23,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, follows, followUser, unfollowUser } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -197,11 +197,37 @@ export default function ReelsScreen() {
       toggleReelLike(reelId);
       setLastTap(null);
     } else {
-      // Single tap - toggle mute
-      setIsMuted(!isMuted);
+      // Single tap - pause/play video
+      const video = videoRefs.current[reelId];
+      if (video) {
+        video.getStatusAsync().then((status: any) => {
+          if (status.isLoaded) {
+            if (status.isPlaying) {
+              video.pauseAsync();
+            } else {
+              video.playAsync();
+            }
+          }
+        });
+      }
       setLastTap({ time: now, reelId });
       setTimeout(() => setLastTap(null), DOUBLE_TAP_DELAY);
     }
+  };
+
+  const handleFollow = async (userId: string) => {
+    if (!currentUser) return;
+    const following = isFollowing(userId);
+    if (following) {
+      await unfollowUser(userId);
+    } else {
+      await followUser(userId);
+    }
+  };
+
+  const isFollowing = (userId: string) => {
+    if (!currentUser || !follows) return false;
+    return follows.some((f: any) => f.followerId === currentUser.id && f.followingId === userId);
   };
 
   const renderReel = (reel: Reel, index: number) => {
@@ -235,62 +261,75 @@ export default function ReelsScreen() {
         </TouchableOpacity>
 
         <View style={styles.overlay}>
-          <View style={styles.userInfo}>
-            <View style={styles.userHeader}>
-              {reel.userAvatar ? (
-                <Image
-                  source={{ uri: reel.userAvatar }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarPlaceholderText}>
-                    {reel.userName.charAt(0)}
-                  </Text>
+          {/* Left side - User info and caption */}
+          <View style={styles.leftSide}>
+            <View style={styles.userInfo}>
+              <TouchableOpacity style={styles.userHeader}>
+                {reel.userAvatar ? (
+                  <Image
+                    source={{ uri: reel.userAvatar }}
+                    style={styles.avatar}
+                  />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarPlaceholderText}>
+                      {reel.userName.charAt(0)}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.userNameContainer}>
+                  <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
+                  {!isOwner && (
+                    <TouchableOpacity
+                      style={styles.followButton}
+                      onPress={() => handleFollow(reel.userId)}
+                    >
+                      <Text style={styles.followButtonText}>
+                        {isFollowing(reel.userId) ? 'Following' : 'Follow'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              )}
-              <Text style={styles.userName}>{reel.userName}</Text>
-              {(isOwner || isAdmin) && (
-                <TouchableOpacity
-                  style={styles.reelMenuButton}
-                  onPress={() => setShowReelMenu(showReelMenu === reel.id ? null : reel.id)}
-                >
-                  <MoreVertical size={18} color={colors.text.white} />
-                </TouchableOpacity>
+              </TouchableOpacity>
+              
+              {editingReel === reel.id ? (
+                <View style={styles.editCaptionContainer}>
+                  <TextInput
+                    style={styles.editCaptionInput}
+                    value={editCaption}
+                    onChangeText={setEditCaption}
+                    multiline
+                    placeholder="Edit caption..."
+                    placeholderTextColor={colors.text.tertiary}
+                  />
+                  <View style={styles.editCaptionActions}>
+                    <TouchableOpacity
+                      style={styles.editCaptionButton}
+                      onPress={() => {
+                        setEditingReel(null);
+                        setEditCaption('');
+                      }}
+                    >
+                      <X size={16} color={colors.text.white} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.editCaptionButton}
+                      onPress={() => handleSaveEdit(reel.id)}
+                    >
+                      <Text style={styles.editCaptionSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.caption} numberOfLines={3}>
+                  {reel.caption}
+                </Text>
               )}
             </View>
-            {editingReel === reel.id ? (
-              <View style={styles.editCaptionContainer}>
-                <TextInput
-                  style={styles.editCaptionInput}
-                  value={editCaption}
-                  onChangeText={setEditCaption}
-                  multiline
-                  placeholder="Edit caption..."
-                  placeholderTextColor={colors.text.tertiary}
-                />
-                <View style={styles.editCaptionActions}>
-                  <TouchableOpacity
-                    style={styles.editCaptionButton}
-                    onPress={() => {
-                      setEditingReel(null);
-                      setEditCaption('');
-                    }}
-                  >
-                    <X size={16} color={colors.text.white} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.editCaptionButton}
-                    onPress={() => handleSaveEdit(reel.id)}
-                  >
-                    <Text style={styles.editCaptionSaveText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.caption}>{reel.caption}</Text>
-            )}
           </View>
+
+          {/* Right side - Action buttons */}
+          <View style={styles.rightSide}>
 
           {showReelMenu === reel.id && (
             <View style={styles.reelMenu}>
@@ -333,17 +372,16 @@ export default function ReelsScreen() {
             </View>
           )}
 
-          <View style={styles.actions}>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => toggleReelLike(reel.id)}
             >
               <View style={[styles.actionIconContainer, isLiked && styles.actionIconContainerActive]}>
                 <Heart
-                  size={28}
+                  size={32}
                   color={colors.text.white}
                   fill={isLiked ? colors.text.white : 'transparent'}
-                  strokeWidth={isLiked ? 0 : 2}
+                  strokeWidth={isLiked ? 0 : 2.5}
                 />
               </View>
               <Text style={styles.actionCount}>{formatCount(reel.likes.length)}</Text>
@@ -351,7 +389,7 @@ export default function ReelsScreen() {
 
             <TouchableOpacity style={styles.actionButton}>
               <View style={styles.actionIconContainer}>
-                <MessageCircle size={28} color={colors.text.white} strokeWidth={2} />
+                <MessageCircle size={32} color={colors.text.white} strokeWidth={2.5} />
               </View>
               <Text style={styles.actionCount}>{formatCount(reel.commentCount)}</Text>
             </TouchableOpacity>
@@ -361,7 +399,7 @@ export default function ReelsScreen() {
               onPress={() => shareReel(reel.id)}
             >
               <View style={styles.actionIconContainer}>
-                <Share2 size={28} color={colors.text.white} strokeWidth={2} />
+                <Share2 size={32} color={colors.text.white} strokeWidth={2.5} />
               </View>
             </TouchableOpacity>
 
@@ -371,12 +409,23 @@ export default function ReelsScreen() {
             >
               <View style={styles.actionIconContainer}>
                 {isMuted ? (
-                  <VolumeX size={26} color={colors.text.white} strokeWidth={2} />
+                  <VolumeX size={30} color={colors.text.white} strokeWidth={2.5} />
                 ) : (
-                  <Volume2 size={26} color={colors.text.white} strokeWidth={2} />
+                  <Volume2 size={30} color={colors.text.white} strokeWidth={2.5} />
                 )}
               </View>
             </TouchableOpacity>
+
+            {(isOwner || isAdmin) && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowReelMenu(showReelMenu === reel.id ? null : reel.id)}
+              >
+                <View style={styles.actionIconContainer}>
+                  <MoreVertical size={28} color={colors.text.white} strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -468,13 +517,21 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
+    paddingBottom: 40,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
+  leftSide: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  rightSide: {
+    alignItems: 'center',
+    gap: 24,
+  },
   userInfo: {
     flex: 1,
-    marginBottom: 90,
   },
   userHeader: {
     flexDirection: 'row',
@@ -482,17 +539,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  userNameContainer: {
+    flex: 1,
+  },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -505,12 +565,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.text.white,
   },
   userName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700' as const,
     color: colors.text.white,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+    marginBottom: 4,
+  },
+  followButton: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  followButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.text.white,
   },
   caption: {
     fontSize: 14,
@@ -519,36 +592,34 @@ const createStyles = (colors: any) => StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
-  },
-  actions: {
-    gap: 20,
-    marginBottom: 90,
+    marginTop: 8,
   },
   actionButton: {
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   actionIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   actionIconContainerActive: {
     backgroundColor: colors.danger,
-    borderColor: '#FFFFFF',
+    borderColor: colors.danger,
   },
   actionCount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700' as const,
     color: colors.text.white,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+    marginTop: 2,
   },
   header: {
     position: 'absolute',
@@ -674,7 +745,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   reelMenu: {
     position: 'absolute',
-    bottom: 200,
+    bottom: 100,
     right: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
     borderRadius: 12,
