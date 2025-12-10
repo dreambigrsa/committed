@@ -21,6 +21,7 @@ import {
   MessageSquare,
   DollarSign,
   Video,
+  ScanFace,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -138,6 +139,14 @@ export default function AdminDashboardScreen() {
       route: '/admin/settings',
       color: '#9B59B6',
       visible: currentUser.role === 'super_admin',
+    },
+    {
+      title: 'Face Matching',
+      icon: ScanFace,
+      description: 'Manage face recognition providers',
+      route: '/admin/face-matching',
+      color: '#E74C3C',
+      visible: currentUser.role === 'super_admin' || currentUser.role === 'admin',
     },
   ];
 
