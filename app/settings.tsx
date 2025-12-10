@@ -41,14 +41,16 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { currentUser, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
+  const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference } = useTheme();
   const relationship = getCurrentUserRelationship();
+  const styles = createStyles(colors);
 
   const [editMode, setEditMode] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -80,7 +82,6 @@ export default function SettingsScreen() {
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
 
   // App Preferences
-  const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState('en');
   const [theme, setTheme] = useState('default');
 
@@ -100,6 +101,8 @@ export default function SettingsScreen() {
       loadSettings();
       loadSessions();
       loadBlockedUsers();
+      load2FAStatus();
+      loadThemePreference(currentUser.id);
     }
   }, [currentUser]);
 
@@ -124,9 +127,6 @@ export default function SettingsScreen() {
         }
         if (settings.privacy_settings) {
           setPrivacy(settings.privacy_settings);
-        }
-        if (settings.theme_preference) {
-          setDarkMode(settings.theme_preference === 'dark');
         }
         if (settings.language) {
           setLanguage(settings.language);
@@ -153,12 +153,47 @@ export default function SettingsScreen() {
     if (!currentUser) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const { data: dbSessions } = await supabase
+        .from('user_sessions')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('is_active', true);
+      
+      const sessionList = [];
       if (session) {
-        // In a real app, you'd fetch all active sessions from your backend
-        setSessions([{ id: session.id, device: 'Current Device', lastActive: new Date().toISOString() }]);
+        sessionList.push({ id: session.id, device: 'Current Device', lastActive: new Date().toISOString() });
       }
+      if (dbSessions) {
+        dbSessions.forEach(s => {
+          if (s.session_token !== session?.access_token) {
+            sessionList.push({ id: s.id, device: s.device_info || 'Unknown Device', lastActive: s.last_active });
+          }
+        });
+      }
+      setSessions(sessionList);
     } catch (error) {
       console.error('Failed to load sessions:', error);
+      setSessions([]);
+    }
+  };
+
+  const load2FAStatus = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_2fa')
+        .select('enabled')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading 2FA:', error);
+        return;
+      }
+
+      setTwoFactorEnabled(data?.enabled || false);
+    } catch (error) {
+      console.error('Failed to load 2FA status:', error);
     }
   };
 
@@ -452,7 +487,7 @@ export default function SettingsScreen() {
           user_id: currentUser.id,
           notification_settings: existingNotifications,
           privacy_settings: existingPrivacy,
-          theme_preference: darkMode ? 'dark' : 'light',
+          theme_preference: isDark ? 'dark' : 'light',
           language: language,
         }, {
           onConflict: 'user_id'
@@ -564,7 +599,7 @@ export default function SettingsScreen() {
           ),
         }}
       />
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -884,25 +919,25 @@ export default function SettingsScreen() {
                 <ChevronRight size={20} color={colors.text.tertiary} />
               </TouchableOpacity>
 
-              <View style={styles.settingItem}>
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => router.push('/settings/2fa' as any)}
+              >
                 <View style={styles.settingLeft}>
                   <Shield size={20} color={colors.text.secondary} />
                   <Text style={styles.settingLabel}>Two-Factor Authentication</Text>
                 </View>
-                <Switch
-                  value={twoFactorEnabled}
-                  onValueChange={setTwoFactorEnabled}
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={twoFactorEnabled ? colors.primary : colors.text.tertiary}
-                />
-              </View>
+                <View style={styles.settingRight}>
+                  <Text style={styles.settingValue}>
+                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                  </Text>
+                  <ChevronRight size={20} color={colors.text.tertiary} />
+                </View>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.settingItem}
-                onPress={() => Alert.alert('Sessions', 'Session management coming soon')}
+                onPress={() => router.push('/settings/sessions' as any)}
               >
                 <View style={styles.settingLeft}>
                   <Smartphone size={20} color={colors.text.secondary} />
@@ -916,7 +951,7 @@ export default function SettingsScreen() {
 
               <TouchableOpacity
                 style={styles.settingItem}
-                onPress={() => Alert.alert('Blocked Users', 'Blocked users management coming soon')}
+                onPress={() => router.push('/settings/blocked-users' as any)}
               >
                 <View style={styles.settingLeft}>
                   <Users size={20} color={colors.text.secondary} />
@@ -1066,16 +1101,19 @@ export default function SettingsScreen() {
                   <Text style={styles.settingLabel}>Dark Mode</Text>
                 </View>
                 <Switch
-                  value={darkMode}
-                  onValueChange={(value) => {
-                    setDarkMode(value);
-                    saveAppPreferences();
+                  value={isDark}
+                  onValueChange={async (value) => {
+                    const newMode = value ? 'dark' : 'light';
+                    setThemeMode(newMode);
+                    if (currentUser) {
+                      await saveThemePreference(currentUser.id, newMode);
+                    }
                   }}
                   trackColor={{
                     false: colors.border.light,
                     true: colors.primary + '50',
                   }}
-                  thumbColor={darkMode ? colors.primary : colors.text.tertiary}
+                  thumbColor={isDark ? colors.primary : colors.text.tertiary}
                 />
               </View>
 
@@ -1221,10 +1259,9 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
   },
   scrollContent: {
     paddingTop: 20,
