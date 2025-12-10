@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, Share2, Plus, X, ExternalLink } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useColors } from '@/constants/colors';
+import defaultColors from '@/constants/colors';
 import { Post, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -377,7 +378,7 @@ function CommentsModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
   },
   header: {
     flexDirection: 'row',
@@ -385,20 +386,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: defaultColors.border.light,
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   createButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary + '15',
+    backgroundColor: defaultColors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   post: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     marginBottom: 12,
     paddingTop: 16,
     shadowColor: '#000',
@@ -436,28 +437,28 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   postAvatarPlaceholderText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   postUserName: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   postTime: {
     fontSize: 13,
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
     marginTop: 2,
   },
   postContent: {
     fontSize: 15,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     lineHeight: 22,
     paddingHorizontal: 16,
     marginBottom: 12,
@@ -483,15 +484,15 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     fontWeight: '600' as const,
   },
   actionTextActive: {
-    color: colors.danger,
+    color: defaultColors.danger,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -500,18 +501,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: defaultColors.border.light,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   closeButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -522,7 +523,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: defaultColors.border.light,
   },
   commentHeader: {
     flexDirection: 'row',
@@ -537,14 +538,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   commentAvatarPlaceholderText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   commentContent: {
     flex: 1,
@@ -552,18 +553,18 @@ const styles = StyleSheet.create({
   commentUserName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     lineHeight: 20,
     marginBottom: 4,
   },
   commentTime: {
     fontSize: 12,
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
   },
   commentInputContainer: {
     flexDirection: 'row',
@@ -572,38 +573,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
-    backgroundColor: colors.background.primary,
+    borderTopColor: defaultColors.border.light,
+    backgroundColor: defaultColors.background.primary,
   },
   commentInput: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     maxHeight: 100,
   },
   sendButton: {
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
   },
   sendButtonDisabled: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
   },
   sendButtonText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   sendButtonTextDisabled: {
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
   },
   adCard: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     marginBottom: 12,
     position: 'relative',
     overflow: 'hidden',
@@ -626,7 +627,7 @@ const styles = StyleSheet.create({
   adBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   adImage: {
     width: '100%',
@@ -638,12 +639,12 @@ const styles = StyleSheet.create({
   adTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   adDescription: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
   adLinkText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   emptyState: {
     alignItems: 'center',
@@ -667,14 +668,14 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginTop: 32,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyStateText: {
     fontSize: 16,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
@@ -683,12 +684,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     paddingHorizontal: 28,
     paddingVertical: 16,
     borderRadius: 14,
     marginBottom: 24,
-    shadowColor: colors.primary,
+    shadowColor: defaultColors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -697,11 +698,11 @@ const styles = StyleSheet.create({
   emptyStateButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   emptyStateNote: {
     fontSize: 13,
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
     textAlign: 'center',
     lineHeight: 18,
     fontStyle: 'italic' as const,
