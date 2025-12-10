@@ -869,6 +869,17 @@ export const [AppContext, useApp] = createContextHook(() => {
         partnerCity: relationshipData.partner_city,
       };
 
+      // Store face embedding for face matching if face photo is provided
+      if (partnerFacePhoto && relationshipData.id) {
+        try {
+          const { storeFaceEmbedding } = await import('@/lib/faceSearch');
+          await storeFaceEmbedding(relationshipData.id, partnerFacePhoto);
+        } catch (error) {
+          // Don't fail relationship creation if face matching fails
+          console.warn('Failed to store face embedding:', error);
+        }
+      }
+
       // Refresh relationships from database to get latest data
       await refreshRelationships();
       
