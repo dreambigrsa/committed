@@ -1921,6 +1921,380 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, relationships, logActivity]);
 
+  const editPost = useCallback(async (postId: string, content: string, mediaUrls: string[], mediaType: Post['mediaType']) => {
+    if (!currentUser) return null;
+    
+    try {
+      const post = posts.find(p => p.id === postId);
+      if (!post || post.userId !== currentUser.id) {
+        throw new Error('Unauthorized');
+      }
+
+      const { data, error } = await supabase
+        .from('posts')
+        .update({
+          content,
+          media_urls: mediaUrls,
+          media_type: mediaType,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedPosts = posts.map(p => 
+        p.id === postId 
+          ? { ...p, content, mediaUrls, mediaType }
+          : p
+      );
+      setPosts(updatedPosts);
+      
+      await logActivity('edit_post', 'post', postId);
+      return data;
+    } catch (error) {
+      console.error('Edit post error:', error);
+      return null;
+    }
+  }, [currentUser, posts, logActivity]);
+
+  const deletePost = useCallback(async (postId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      const post = posts.find(p => p.id === postId);
+      if (!post || post.userId !== currentUser.id) {
+        throw new Error('Unauthorized');
+      }
+
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId);
+
+      if (error) throw error;
+
+      const updatedPosts = posts.filter(p => p.id !== postId);
+      setPosts(updatedPosts);
+      
+      await logActivity('delete_post', 'post', postId);
+      return true;
+    } catch (error) {
+      console.error('Delete post error:', error);
+      return false;
+    }
+  }, [currentUser, posts, logActivity]);
+
+  const editComment = useCallback(async (commentId: string, content: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      let foundComment: Comment | null = null;
+      let postId: string | null = null;
+
+      for (const [pid, commentList] of Object.entries(comments)) {
+        const comment = commentList.find(c => c.id === commentId);
+        if (comment) {
+          foundComment = comment;
+          postId = pid;
+          break;
+        }
+      }
+
+      if (!foundComment || foundComment.userId !== currentUser.id || !postId) {
+        throw new Error('Unauthorized');
+      }
+
+      const { data, error } = await supabase
+        .from('comments')
+        .update({
+          content,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedComments = {
+        ...comments,
+        [postId]: comments[postId].map(c => 
+          c.id === commentId ? { ...c, content } : c
+        ),
+      };
+      setComments(updatedComments);
+      
+      await logActivity('edit_comment', 'comment', commentId);
+      return data;
+    } catch (error) {
+      console.error('Edit comment error:', error);
+      return null;
+    }
+  }, [currentUser, comments, logActivity]);
+
+  const deleteComment = useCallback(async (commentId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      let foundComment: Comment | null = null;
+      let postId: string | null = null;
+
+      for (const [pid, commentList] of Object.entries(comments)) {
+        const comment = commentList.find(c => c.id === commentId);
+        if (comment) {
+          foundComment = comment;
+          postId = pid;
+          break;
+        }
+      }
+
+      if (!foundComment || foundComment.userId !== currentUser.id || !postId) {
+        throw new Error('Unauthorized');
+      }
+
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) throw error;
+
+      const updatedComments = {
+        ...comments,
+        [postId]: comments[postId].filter(c => c.id !== commentId),
+      };
+      setComments(updatedComments);
+
+      const updatedPosts = posts.map(p => 
+        p.id === postId ? { ...p, commentCount: Math.max(0, p.commentCount - 1) } : p
+      );
+      setPosts(updatedPosts);
+      
+      await logActivity('delete_comment', 'comment', commentId);
+      return true;
+    } catch (error) {
+      console.error('Delete comment error:', error);
+      return false;
+    }
+  }, [currentUser, comments, posts, logActivity]);
+
+  const editReel = useCallback(async (reelId: string, caption: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const reel = reels.find(r => r.id === reelId);
+      if (!reel || reel.userId !== currentUser.id) {
+        throw new Error('Unauthorized');
+      }
+
+      const { data, error } = await supabase
+        .from('reels')
+        .update({
+          caption,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', reelId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedReels = reels.map(r => 
+        r.id === reelId ? { ...r, caption } : r
+      );
+      setReels(updatedReels);
+      
+      await logActivity('edit_reel', 'reel', reelId);
+      return data;
+    } catch (error) {
+      console.error('Edit reel error:', error);
+      return null;
+    }
+  }, [currentUser, reels, logActivity]);
+
+  const deleteReel = useCallback(async (reelId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      const reel = reels.find(r => r.id === reelId);
+      if (!reel || reel.userId !== currentUser.id) {
+        throw new Error('Unauthorized');
+      }
+
+      const { error } = await supabase
+        .from('reels')
+        .delete()
+        .eq('id', reelId);
+
+      if (error) throw error;
+
+      const updatedReels = reels.filter(r => r.id !== reelId);
+      setReels(updatedReels);
+      
+      await logActivity('delete_reel', 'reel', reelId);
+      return true;
+    } catch (error) {
+      console.error('Delete reel error:', error);
+      return false;
+    }
+  }, [currentUser, reels, logActivity]);
+
+  const sharePost = useCallback(async (postId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const post = posts.find(p => p.id === postId);
+      if (!post) return;
+
+      const shareUrl = `https://yourapp.com/post/${postId}`;
+      const shareText = post.content ? `${post.content.substring(0, 100)}... ${shareUrl}` : shareUrl;
+      
+      // Use React Native Share API
+      const Share = require('react-native').Share;
+      await Share.share({
+        message: shareText,
+        url: shareUrl,
+        title: `Post by ${post.userName}`,
+      });
+      
+      await logActivity('share_post', 'post', postId);
+    } catch (error) {
+      console.error('Share post error:', error);
+    }
+  }, [currentUser, posts, logActivity]);
+
+  const shareReel = useCallback(async (reelId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const reel = reels.find(r => r.id === reelId);
+      if (!reel) return;
+
+      const shareUrl = `https://yourapp.com/reel/${reelId}`;
+      const shareText = reel.caption ? `${reel.caption.substring(0, 100)}... ${shareUrl}` : shareUrl;
+      
+      // Use React Native Share API
+      const Share = require('react-native').Share;
+      await Share.share({
+        message: shareText,
+        url: shareUrl,
+        title: `Reel by ${reel.userName}`,
+      });
+      
+      await logActivity('share_reel', 'reel', reelId);
+    } catch (error) {
+      console.error('Share reel error:', error);
+    }
+  }, [currentUser, reels, logActivity]);
+
+  const adminDeletePost = useCallback(async (postId: string) => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId);
+
+      if (error) throw error;
+
+      const updatedPosts = posts.filter(p => p.id !== postId);
+      setPosts(updatedPosts);
+      
+      await logActivity('admin_delete_post', 'post', postId, { adminId: currentUser.id });
+      return true;
+    } catch (error) {
+      console.error('Admin delete post error:', error);
+      return false;
+    }
+  }, [currentUser, posts, logActivity]);
+
+  const adminRejectPost = useCallback(async (postId: string, reason?: string) => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          moderation_status: 'rejected',
+          moderation_reason: reason,
+          moderated_at: new Date().toISOString(),
+          moderated_by: currentUser.id,
+        })
+        .eq('id', postId);
+
+      if (error) throw error;
+
+      const updatedPosts = posts.filter(p => p.id !== postId);
+      setPosts(updatedPosts);
+      
+      await logActivity('admin_reject_post', 'post', postId, { adminId: currentUser.id, reason });
+      return true;
+    } catch (error) {
+      console.error('Admin reject post error:', error);
+      return false;
+    }
+  }, [currentUser, posts, logActivity]);
+
+  const adminDeleteReel = useCallback(async (reelId: string) => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('reels')
+        .delete()
+        .eq('id', reelId);
+
+      if (error) throw error;
+
+      const updatedReels = reels.filter(r => r.id !== reelId);
+      setReels(updatedReels);
+      
+      await logActivity('admin_delete_reel', 'reel', reelId, { adminId: currentUser.id });
+      return true;
+    } catch (error) {
+      console.error('Admin delete reel error:', error);
+      return false;
+    }
+  }, [currentUser, reels, logActivity]);
+
+  const adminRejectReel = useCallback(async (reelId: string, reason?: string) => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('reels')
+        .update({
+          moderation_status: 'rejected',
+          moderation_reason: reason,
+          moderated_at: new Date().toISOString(),
+          moderated_by: currentUser.id,
+        })
+        .eq('id', reelId);
+
+      if (error) throw error;
+
+      const updatedReels = reels.filter(r => r.id !== reelId);
+      setReels(updatedReels);
+      
+      await logActivity('admin_reject_reel', 'reel', reelId, { adminId: currentUser.id, reason });
+      return true;
+    } catch (error) {
+      console.error('Admin reject reel error:', error);
+      return false;
+    }
+  }, [currentUser, reels, logActivity]);
+
   return {
     currentUser,
     isLoading,
@@ -1990,6 +2364,18 @@ export const [AppContext, useApp] = createContextHook(() => {
     getCoupleLevel,
     detectDuplicateRelationships,
     savePushToken,
+    editPost,
+    deletePost,
+    editComment,
+    deleteComment,
+    editReel,
+    deleteReel,
+    sharePost,
+    shareReel,
+    adminDeletePost,
+    adminRejectPost,
+    adminDeleteReel,
+    adminRejectReel,
   };
 });
 
