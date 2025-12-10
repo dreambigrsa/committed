@@ -111,13 +111,18 @@ export const [AppContext, useApp] = createContextHook(() => {
         .or(`moderation_status.eq.approved,user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(50);
+      
+      // Deduplicate posts by ID (in case the OR query returns duplicates)
+      const uniquePostsData = postsData ? Array.from(
+        new Map(postsData.map((p: any) => [p.id, p])).values()
+      ) : [];
 
       const { data: postLikesData } = await supabase
         .from('post_likes')
         .select('post_id, user_id');
 
-      if (postsData) {
-        const formattedPosts: Post[] = postsData.map((p: any) => {
+      if (uniquePostsData) {
+        const formattedPosts: Post[] = uniquePostsData.map((p: any) => {
           const likes = postLikesData
             ?.filter((like: any) => like.post_id === p.id)
             .map((like: any) => like.user_id) || [];
@@ -952,7 +957,61 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: '',
         }));
 
-        return [...usersWithRelationships, ...nonRegisteredPartners];
+        // First, deduplicate non-registered partners themselves (same person might be in multiple relationships)
+        // Prefer entries with relationship info (partnerName) and verified status
+        const partnerMap = new Map<string, any>();
+        for (const partner of nonRegisteredPartners) {
+          const normalizedPhone = partner.phoneNumber?.toLowerCase().trim().replace(/\D/g, '') || '';
+          const normalizedName = partner.fullName?.toLowerCase().trim() || '';
+          const key = normalizedPhone || normalizedName;
+          
+          if (!key) continue; // Skip if no identifying info
+          
+          const existing = partnerMap.get(key);
+          if (!existing) {
+            partnerMap.set(key, partner);
+          } else {
+            // Priority: 1) Has partnerName (relationship info), 2) Verified status
+            const hasPartnerName = !!partner.partnerName;
+            const existingHasPartnerName = !!existing.partnerName;
+            const isVerified = partner.relationshipStatus === 'verified';
+            const existingIsVerified = existing.relationshipStatus === 'verified';
+            
+            // Prefer entry with partnerName if the other doesn't have it
+            if (hasPartnerName && !existingHasPartnerName) {
+              partnerMap.set(key, partner);
+            } else if (!hasPartnerName && existingHasPartnerName) {
+              // Keep existing
+            } else if (isVerified && !existingIsVerified) {
+              // Both have or both don't have partnerName, prefer verified
+              partnerMap.set(key, partner);
+            }
+            // Otherwise keep existing
+          }
+        }
+        const uniqueNonRegisteredPartners = Array.from(partnerMap.values());
+
+        // Now deduplicate: if a person appears in both registered users and non-registered partners,
+        // prefer the non-registered partner entry (as it shows relationship info)
+        const nonRegisteredPhoneNumbers = new Set(
+          uniqueNonRegisteredPartners.map((p: any) => p.phoneNumber?.toLowerCase().trim().replace(/\D/g, '')).filter(Boolean)
+        );
+        const nonRegisteredNames = new Set(
+          uniqueNonRegisteredPartners.map((p: any) => p.fullName?.toLowerCase().trim()).filter(Boolean)
+        );
+
+        // Filter out registered users that match non-registered partners by phone or name
+        // (prefer non-registered partner entries as they show relationship info)
+        const uniqueRegisteredUsers = usersWithRelationships.filter((user: any) => {
+          const userPhone = user.phoneNumber?.toLowerCase().trim().replace(/\D/g, '');
+          const userName = user.fullName?.toLowerCase().trim();
+          
+          // Keep registered user only if they don't match any non-registered partner
+          return !(userPhone && nonRegisteredPhoneNumbers.has(userPhone)) &&
+                 !(userName && nonRegisteredNames.has(userName));
+        });
+
+        return [...uniqueRegisteredUsers, ...uniqueNonRegisteredPartners];
       }
 
       return usersWithRelationships;
