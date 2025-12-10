@@ -16,7 +16,7 @@ import {
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { Heart, MessageCircle, Share2, Plus, X, ExternalLink } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
@@ -26,10 +26,13 @@ const { width } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { currentUser, posts, toggleLike, getComments, getActiveAds, recordAdImpression, recordAdClick, addComment } = useApp();
+  const { currentUser, posts, toggleLike, getComments, getActiveAds, recordAdImpression, recordAdClick, addComment, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [viewedAds, setViewedAds] = useState<Set<string>>(new Set());
+  const [showPostMenu, setShowPostMenu] = useState<string | null>(null);
+  const [editingPost, setEditingPost] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState<string>('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -215,10 +218,38 @@ export default function FeedScreen() {
     commentContent: {
       flex: 1,
     },
+    commentHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
     commentUserName: {
       fontSize: 15,
       fontWeight: '700' as const,
       color: colors.text.primary,
+    },
+    commentActions: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'center',
+    },
+    commentActionText: {
+      fontSize: 13,
+      color: colors.text.secondary,
+      fontWeight: '600' as const,
+    },
+    commentActionSave: {
+      color: colors.primary,
+    },
+    commentEditInput: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: 8,
+      padding: 8,
+      fontSize: 14,
+      color: colors.text.primary,
+      minHeight: 60,
+      textAlignVertical: 'top',
       marginBottom: 4,
     },
     commentText: {
@@ -372,6 +403,70 @@ export default function FeedScreen() {
       lineHeight: 18,
       fontStyle: 'italic' as const,
     },
+    menuButton: {
+      padding: 8,
+    },
+    postMenu: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: 8,
+      padding: 8,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.border.light,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+    },
+    menuItemText: {
+      fontSize: 15,
+      color: colors.text.primary,
+      fontWeight: '500' as const,
+    },
+    deleteText: {
+      color: colors.danger,
+    },
+    editContainer: {
+      paddingHorizontal: 16,
+      marginBottom: 12,
+    },
+    editInput: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 15,
+      color: colors.text.primary,
+      minHeight: 100,
+      textAlignVertical: 'top',
+      marginBottom: 12,
+    },
+    editActions: {
+      flexDirection: 'row',
+      gap: 12,
+      justifyContent: 'flex-end',
+    },
+    editButton: {
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 8,
+    },
+    cancelButton: {
+      backgroundColor: colors.background.secondary,
+    },
+    saveButton: {
+      backgroundColor: colors.primary,
+    },
+    editButtonText: {
+      fontSize: 15,
+      fontWeight: '600' as const,
+      color: colors.text.secondary,
+    },
+    saveButtonText: {
+      color: colors.text.white,
+    },
   }), [colors]);
 
   if (!currentUser) {
@@ -473,9 +568,100 @@ export default function FeedScreen() {
     );
   };
 
+  const handleDeletePost = async (postId: string) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deletePost(postId);
+            if (success) {
+              Alert.alert('Success', 'Post deleted successfully');
+            } else {
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+    setShowPostMenu(null);
+  };
+
+  const handleEditPost = (post: Post) => {
+    setEditingPost(post.id);
+    setEditContent(post.content);
+    setShowPostMenu(null);
+  };
+
+  const handleSaveEdit = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    const success = await editPost(postId, editContent, post.mediaUrls, post.mediaType);
+    if (success) {
+      setEditingPost(null);
+      setEditContent('');
+      Alert.alert('Success', 'Post updated successfully');
+    } else {
+      Alert.alert('Error', 'Failed to update post');
+    }
+  };
+
+  const handleAdminDeletePost = async (postId: string) => {
+    Alert.alert(
+      'Delete Post (Admin)',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await adminDeletePost(postId);
+            if (success) {
+              Alert.alert('Success', 'Post deleted successfully');
+            } else {
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+    setShowPostMenu(null);
+  };
+
+  const handleAdminRejectPost = async (postId: string) => {
+    Alert.alert(
+      'Reject Post (Admin)',
+      'Are you sure you want to reject this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await adminRejectPost(postId, 'Rejected by admin');
+            if (success) {
+              Alert.alert('Success', 'Post rejected successfully');
+            } else {
+              Alert.alert('Error', 'Failed to reject post');
+            }
+          },
+        },
+      ]
+    );
+    setShowPostMenu(null);
+  };
+
   const renderPost = (post: Post) => {
     const isLiked = post.likes.includes(currentUser.id);
     const postComments = getComments(post.id);
+    const isOwner = post.userId === currentUser.id;
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'moderator';
 
     return (
       <View key={post.id} style={styles.post}>
@@ -501,7 +687,93 @@ export default function FeedScreen() {
               <Text style={styles.postTime}>{formatTimeAgo(post.createdAt)}</Text>
             </View>
           </TouchableOpacity>
+          {(isOwner || isAdmin) && (
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => setShowPostMenu(showPostMenu === post.id ? null : post.id)}
+            >
+              <MoreVertical size={20} color={colors.text.secondary} />
+            </TouchableOpacity>
+          )}
         </View>
+
+        {showPostMenu === post.id && (
+          <View style={styles.postMenu}>
+            {isOwner && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleEditPost(post)}
+                >
+                  <Edit2 size={18} color={colors.text.primary} />
+                  <Text style={styles.menuItemText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleDeletePost(post.id)}
+                >
+                  <Trash2 size={18} color={colors.danger} />
+                  <Text style={[styles.menuItemText, styles.deleteText]}>Delete</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {isAdmin && !isOwner && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleAdminDeletePost(post.id)}
+                >
+                  <Trash2 size={18} color={colors.danger} />
+                  <Text style={[styles.menuItemText, styles.deleteText]}>Delete (Admin)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleAdminRejectPost(post.id)}
+                >
+                  <X size={18} color={colors.danger} />
+                  <Text style={[styles.menuItemText, styles.deleteText]}>Reject (Admin)</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
+        {editingPost === post.id ? (
+          <View style={styles.editContainer}>
+            <TextInput
+              style={styles.editInput}
+              value={editContent}
+              onChangeText={setEditContent}
+              multiline
+              placeholder="Edit your post..."
+              placeholderTextColor={colors.text.tertiary}
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={[styles.editButton, styles.cancelButton]}
+                onPress={() => {
+                  setEditingPost(null);
+                  setEditContent('');
+                }}
+              >
+                <Text style={styles.editButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editButton, styles.saveButton]}
+                onPress={() => handleSaveEdit(post.id)}
+              >
+                <Text style={[styles.editButtonText, styles.saveButtonText]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <>
+            {post.content.length > 0 && (
+              <Text style={styles.postContent}>{post.content}</Text>
+            )}
+            {renderPostMedia(post)}
+          </>
+        )}
 
         {post.content.length > 0 && (
           <Text style={styles.postContent}>{post.content}</Text>
@@ -532,7 +804,10 @@ export default function FeedScreen() {
             <Text style={styles.actionText}>{post.commentCount}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => sharePost(post.id)}
+          >
             <Share2 size={24} color={colors.text.secondary} />
           </TouchableOpacity>
         </View>
@@ -590,6 +865,8 @@ export default function FeedScreen() {
         ) : (
           posts.map((post, index) => {
             const ads = getActiveAds('feed');
+            // Improved ad distribution: show ad every 3 posts, rotating through available ads
+            // This ensures fair distribution across all active ads
             const shouldShowAd = (index + 1) % 3 === 0 && ads.length > 0;
             const adIndex = Math.floor(index / 3) % ads.length;
             
@@ -623,13 +900,51 @@ function CommentsModal({
   styles: any;
   addComment: (postId: string, content: string) => Promise<any>;
 }) {
+  const { currentUser, editComment, deleteComment } = useApp();
   const [commentText, setCommentText] = useState<string>('');
+  const [editingComment, setEditingComment] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState<string>('');
 
   const handleSubmit = async () => {
     if (commentText.trim()) {
       await addComment(postId, commentText.trim());
       setCommentText('');
     }
+  };
+
+  const handleEditComment = (comment: any) => {
+    setEditingComment(comment.id);
+    setEditCommentText(comment.content);
+  };
+
+  const handleSaveEdit = async (commentId: string) => {
+    const success = await editComment(commentId, editCommentText);
+    if (success) {
+      setEditingComment(null);
+      setEditCommentText('');
+    } else {
+      Alert.alert('Error', 'Failed to update comment');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deleteComment(commentId);
+            if (!success) {
+              Alert.alert('Error', 'Failed to delete comment');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -656,29 +971,78 @@ function CommentsModal({
         </View>
 
         <ScrollView style={styles.commentsList}>
-          {comments.map((comment) => (
-            <View key={comment.id} style={styles.comment}>
-              <View style={styles.commentHeader}>
-                {comment.userAvatar ? (
-                  <Image
-                    source={{ uri: comment.userAvatar }}
-                    style={styles.commentAvatar}
-                  />
-                ) : (
-                  <View style={styles.commentAvatarPlaceholder}>
-                    <Text style={styles.commentAvatarPlaceholderText}>
-                      {comment.userName.charAt(0)}
-                    </Text>
+          {comments.map((comment) => {
+            const isOwner = comment.userId === currentUser?.id;
+            return (
+              <View key={comment.id} style={styles.comment}>
+                <View style={styles.commentHeader}>
+                  {comment.userAvatar ? (
+                    <Image
+                      source={{ uri: comment.userAvatar }}
+                      style={styles.commentAvatar}
+                    />
+                  ) : (
+                    <View style={styles.commentAvatarPlaceholder}>
+                      <Text style={styles.commentAvatarPlaceholderText}>
+                        {comment.userName.charAt(0)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.commentContent}>
+                    <View style={styles.commentHeaderRow}>
+                      <Text style={styles.commentUserName}>{comment.userName}</Text>
+                      {isOwner && (
+                        <View style={styles.commentActions}>
+                          {editingComment === comment.id ? (
+                            <>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setEditingComment(null);
+                                  setEditCommentText('');
+                                }}
+                              >
+                                <Text style={styles.commentActionText}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => handleSaveEdit(comment.id)}
+                              >
+                                <Text style={[styles.commentActionText, styles.commentActionSave]}>Save</Text>
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              <TouchableOpacity
+                                onPress={() => handleEditComment(comment)}
+                              >
+                                <Edit2 size={14} color={colors.text.secondary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => handleDeleteComment(comment.id)}
+                              >
+                                <Trash2 size={14} color={colors.danger} />
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                    {editingComment === comment.id ? (
+                      <TextInput
+                        style={styles.commentEditInput}
+                        value={editCommentText}
+                        onChangeText={setEditCommentText}
+                        multiline
+                        placeholderTextColor={colors.text.tertiary}
+                      />
+                    ) : (
+                      <Text style={styles.commentText}>{comment.content}</Text>
+                    )}
+                    <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
                   </View>
-                )}
-                <View style={styles.commentContent}>
-                  <Text style={styles.commentUserName}>{comment.userName}</Text>
-                  <Text style={styles.commentText}>{comment.content}</Text>
-                  <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
         <KeyboardAvoidingView
