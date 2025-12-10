@@ -20,6 +20,7 @@ export default function AdminDisputesScreen() {
   const { currentUser } = useApp();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDisputes();
@@ -28,6 +29,7 @@ export default function AdminDisputesScreen() {
   const loadDisputes = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data, error } = await supabase
         .from('disputes')
         .select('*')
@@ -51,9 +53,11 @@ export default function AdminDisputesScreen() {
         }));
         setDisputes(formattedDisputes);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load disputes:', error);
-      Alert.alert('Error', 'Failed to load disputes');
+      // Extract proper error message
+      const errorMessage = error?.message || error?.toString() || 'Failed to load disputes';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -96,6 +100,12 @@ export default function AdminDisputesScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Shield size={64} color={colors.danger} />
+          <Text style={styles.errorText}>Failed to load disputes</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -210,10 +220,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
   errorText: {
-    fontSize: 18,
+    fontSize: 24,
+    fontWeight: '700' as const,
     color: colors.text.primary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorSubtext: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
