@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Image } from 'expo-image';
-import { CheckCircle, XCircle, RefreshCw, Eye } from 'lucide-react-native';
+import { CheckCircle, XCircle, RefreshCw, Eye, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import colors from '@/constants/colors';
@@ -31,10 +31,10 @@ interface ReviewPost {
 }
 
 export default function AdminPostsReviewScreen() {
-  const { currentUser } = useApp();
+  const { currentUser, adminDeletePost, adminRejectPost } = useApp();
   const [posts, setPosts] = useState<ReviewPost[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'rejected' | 'resubmit'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'resubmit'>('pending');
   const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -132,7 +132,7 @@ export default function AdminPostsReviewScreen() {
       <Stack.Screen options={{ title: 'Review Posts', headerShown: true }} />
       
       <View style={styles.filterContainer}>
-        {(['all', 'pending', 'rejected', 'resubmit'] as const).map((f) => (
+        {(['all', 'pending', 'approved', 'rejected', 'resubmit'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.filterButton, filter === f && styles.filterButtonActive]}
@@ -157,6 +157,12 @@ export default function AdminPostsReviewScreen() {
                 {posts.filter(p => p.moderationStatus === 'pending').length}
               </Text>
               <Text style={styles.statLabel}>Pending</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {posts.filter(p => p.moderationStatus === 'approved').length}
+              </Text>
+              <Text style={styles.statLabel}>Approved</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
@@ -194,6 +200,7 @@ export default function AdminPostsReviewScreen() {
                   <View style={[
                     styles.statusBadge,
                     post.moderationStatus === 'pending' && styles.pendingBadge,
+                    post.moderationStatus === 'approved' && styles.approvedBadge,
                     post.moderationStatus === 'rejected' && styles.rejectedBadge,
                     post.moderationStatus === 'resubmit' && styles.resubmitBadge,
                   ]}>
@@ -220,7 +227,7 @@ export default function AdminPostsReviewScreen() {
                   </View>
                 )}
 
-                {post.moderationStatus === 'pending' && (
+                {(post.moderationStatus === 'pending' || post.moderationStatus === 'approved') && (
                   <View style={styles.reasonInputContainer}>
                     <TextInput
                       style={styles.reasonInput}
@@ -256,6 +263,59 @@ export default function AdminPostsReviewScreen() {
                       >
                         <RefreshCw size={16} color={colors.text.white} />
                         <Text style={styles.actionButtonText}>Resubmit</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {post.moderationStatus === 'approved' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={async () => {
+                          const reason = rejectionReason[post.id] || 'Rejected by admin';
+                          const success = await adminRejectPost(post.id, reason);
+                          if (success) {
+                            Alert.alert('Success', 'Post rejected successfully');
+                            setRejectionReason(prev => {
+                              const next = { ...prev };
+                              delete next[post.id];
+                              return next;
+                            });
+                            loadPosts();
+                          } else {
+                            Alert.alert('Error', 'Failed to reject post');
+                          }
+                        }}
+                      >
+                        <XCircle size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.deleteButton]}
+                        onPress={async () => {
+                          Alert.alert(
+                            'Delete Post',
+                            'Are you sure you want to delete this approved post? This action cannot be undone.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  const success = await adminDeletePost(post.id);
+                                  if (success) {
+                                    Alert.alert('Success', 'Post deleted successfully');
+                                    loadPosts();
+                                  } else {
+                                    Alert.alert('Error', 'Failed to delete post');
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Trash2 size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Delete</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -421,6 +481,9 @@ const styles = StyleSheet.create({
   pendingBadge: {
     backgroundColor: colors.accent,
   },
+  approvedBadge: {
+    backgroundColor: colors.secondary,
+  },
   rejectedBadge: {
     backgroundColor: colors.danger,
   },
@@ -495,6 +558,9 @@ const styles = StyleSheet.create({
   },
   rejectButton: {
     backgroundColor: colors.danger,
+  },
+  deleteButton: {
+    backgroundColor: '#8B0000',
   },
   resubmitButton: {
     backgroundColor: '#FFA500',
