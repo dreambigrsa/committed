@@ -676,6 +676,62 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, []);
 
+  const refreshRelationships = useCallback(async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data: relationshipsData } = await supabase
+        .from('relationships')
+        .select('*')
+        .or(`user_id.eq.${currentUser.id},partner_user_id.eq.${currentUser.id}`)
+        .in('status', ['pending', 'verified']);
+
+      if (relationshipsData) {
+        const formattedRelationships: Relationship[] = relationshipsData.map((r: any) => ({
+          id: r.id,
+          userId: r.user_id,
+          partnerName: r.partner_name,
+          partnerPhone: r.partner_phone,
+          partnerUserId: r.partner_user_id,
+          type: r.type,
+          status: r.status,
+          startDate: r.start_date,
+          verifiedDate: r.verified_date,
+          endDate: r.end_date,
+          privacyLevel: r.privacy_level,
+          partnerFacePhoto: r.partner_face_photo,
+          partnerDateOfBirthMonth: r.partner_date_of_birth_month,
+          partnerDateOfBirthYear: r.partner_date_of_birth_year,
+          partnerCity: r.partner_city,
+        }));
+        setRelationships(formattedRelationships);
+      }
+
+      // Also refresh relationship requests
+      const { data: requestsData } = await supabase
+        .from('relationship_requests')
+        .select('*')
+        .eq('to_user_id', currentUser.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (requestsData) {
+        const formattedRequests: RelationshipRequest[] = requestsData.map((req: any) => ({
+          id: req.id,
+          fromUserId: req.from_user_id,
+          fromUserName: req.from_user_name,
+          toUserId: req.to_user_id,
+          relationshipType: req.relationship_type,
+          status: req.status,
+          createdAt: req.created_at,
+        }));
+        setRelationshipRequests(formattedRequests);
+      }
+    } catch (error) {
+      console.error('Failed to refresh relationships:', error);
+    }
+  }, [currentUser]);
+
   const createRelationship = useCallback(async (
     partnerName: string,
     partnerPhone: string,
@@ -813,13 +869,15 @@ export const [AppContext, useApp] = createContextHook(() => {
         partnerCity: relationshipData.partner_city,
       };
 
-      setRelationships([...relationships, newRelationship]);
+      // Refresh relationships from database to get latest data
+      await refreshRelationships();
+      
       return newRelationship;
     } catch (error) {
       console.error('Create relationship error:', error);
       return null;
     }
-  }, [currentUser, relationships, createNotification]);
+  }, [currentUser, refreshRelationships, createNotification]);
 
   const acceptRelationshipRequest = useCallback(async (requestId: string) => {
     if (!currentUser) return;
@@ -846,10 +904,13 @@ export const [AppContext, useApp] = createContextHook(() => {
           })
           .eq('user_id', request.from_user_id);
       }
+
+      // Refresh relationships to get updated status
+      await refreshRelationships();
     } catch (error) {
       console.error('Accept relationship request error:', error);
     }
-  }, [currentUser]);
+  }, [currentUser, refreshRelationships]);
 
   const rejectRelationshipRequest = useCallback(async (requestId: string) => {
     try {
@@ -857,10 +918,13 @@ export const [AppContext, useApp] = createContextHook(() => {
         .from('relationship_requests')
         .update({ status: 'rejected' })
         .eq('id', requestId);
+
+      // Refresh relationships to update request list
+      await refreshRelationships();
     } catch (error) {
       console.error('Reject relationship request error:', error);
     }
-  }, []);
+  }, [refreshRelationships]);
 
   const getCurrentUserRelationship = useCallback(() => {
     if (!currentUser) return null;
@@ -2448,6 +2512,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     logout,
     resetPassword,
     updateUserProfile,
+    refreshRelationships,
     createRelationship,
     acceptRelationshipRequest,
     rejectRelationshipRequest,
