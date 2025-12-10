@@ -111,9 +111,13 @@ export async function extractFaceFeatures(imageUrl: string): Promise<string | nu
       return null;
     }
 
-    // Convert image URL to base64 if needed
+    // For Azure, we can pass the URL directly as it handles HTTP URLs
+    // For other providers, convert to data URL if needed
     let imageData: string;
-    if (imageUrl.startsWith('data:') || imageUrl.startsWith('http')) {
+    if (provider.provider_type === 'azure_face') {
+      // Azure can handle HTTP URLs directly, so pass it through
+      imageData = imageUrl;
+    } else if (imageUrl.startsWith('data:') || imageUrl.startsWith('http')) {
       // If it's already a data URL or HTTP URL, fetch and convert
       if (imageUrl.startsWith('http')) {
         const response = await fetch(imageUrl);
@@ -198,11 +202,29 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
     }
 
     const endpoint = provider.azure_endpoint.replace(/\/$/, '');
-    const url = `${endpoint}/face/v1.0/detect?returnFaceId=true&returnFaceAttributes=age,gender,smile,facialHair,glasses,emotion,hair,makeup,occlusion,accessories,blur,exposure,noise`;
+    // Note: Many face attributes (emotion, gender, age, smile, facialHair, hair, makeup) 
+    // have been deprecated by Azure. Only request faceId.
+    const url = `${endpoint}/face/v1.0/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04`;
 
-    // Convert data URL to base64 if needed
-    const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
-    const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    let imageBytes: Uint8Array;
+
+    // Handle different input formats
+    if (imageData.startsWith('data:')) {
+      // Data URL format: data:image/jpeg;base64,/9j/4AAQ...
+      const base64Data = imageData.split(',')[1];
+      imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    } else if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
+      // HTTP URL - fetch the image as binary
+      const response = await fetch(imageData);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      imageBytes = new Uint8Array(arrayBuffer);
+    } else {
+      // Assume it's base64 string without data URL prefix
+      imageBytes = Uint8Array.from(atob(imageData), c => c.charCodeAt(0));
+    }
 
     const response = await fetch(url, {
       method: 'POST',
@@ -215,6 +237,7 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`Azure Face API error: ${response.status} - ${errorText}`);
       throw new Error(`Azure Face API error: ${response.status} - ${errorText}`);
     }
 
@@ -223,6 +246,7 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
       return faces[0].faceId;
     }
 
+    console.warn('No face detected in image by Azure Face API');
     return null;
   } catch (error) {
     console.error('Azure Face API error:', error);
@@ -527,7 +551,8 @@ async function compareFacesAzure(
     
     // Azure Face IDs expire after 24 hours, so we need to re-detect the target face
     // First, detect face in target image
-    const detectUrl = `${endpoint}/face/v1.0/detect?returnFaceId=true&returnFaceAttributes=`;
+    // Note: Many face attributes have been deprecated by Azure, so we only request faceId
+    const detectUrl = `${endpoint}/face/v1.0/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04`;
     
     // Fetch and convert target image
     const targetResponse = await fetch(targetImageUrl);
@@ -692,28 +717,45 @@ export async function storeFaceEmbedding(
   facePhotoUrl: string
 ): Promise<boolean> {
   try {
+    console.log(`[storeFaceEmbedding] Starting for relationship ${relationshipId} with photo: ${facePhotoUrl}`);
+    
     const provider = await getActiveProvider();
     
     if (!provider) {
-      console.warn('No active face matching provider configured');
+      console.warn('[storeFaceEmbedding] No active face matching provider configured');
       return false;
     }
+
+    console.log(`[storeFaceEmbedding] Active provider: ${provider.name} (${provider.provider_type})`);
 
     // Extract face features using the active provider
+    console.log(`[storeFaceEmbedding] Extracting face features...`);
     const faceServiceId = await extractFaceFeatures(facePhotoUrl);
     if (!faceServiceId) {
-      console.warn('Could not extract face features');
+      console.warn('[storeFaceEmbedding] Could not extract face features from image');
       return false;
     }
 
+    console.log(`[storeFaceEmbedding] Face features extracted, service ID: ${faceServiceId}`);
+
     // Get relationship info
-    const { data: relationship } = await supabase
+    const { data: relationship, error: relError } = await supabase
       .from('relationships')
       .select('partner_name, partner_phone, partner_face_photo')
       .eq('id', relationshipId)
       .single();
 
-    if (!relationship) return false;
+    if (relError) {
+      console.error('[storeFaceEmbedding] Error fetching relationship:', relError);
+      return false;
+    }
+
+    if (!relationship) {
+      console.warn(`[storeFaceEmbedding] Relationship ${relationshipId} not found`);
+      return false;
+    }
+
+    console.log(`[storeFaceEmbedding] Relationship found, upserting face embedding...`);
 
     // Upsert face embedding
     const { error } = await supabase
@@ -722,7 +764,7 @@ export async function storeFaceEmbedding(
         relationship_id: relationshipId,
         partner_name: relationship.partner_name,
         partner_phone: relationship.partner_phone,
-        face_photo_url: relationship.partner_face_photo,
+        face_photo_url: relationship.partner_face_photo || facePhotoUrl,
         face_service_id: faceServiceId,
         face_service_type: provider.provider_type,
         updated_at: new Date().toISOString(),
@@ -730,10 +772,15 @@ export async function storeFaceEmbedding(
         onConflict: 'relationship_id'
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[storeFaceEmbedding] Error upserting face embedding:', error);
+      throw error;
+    }
+
+    console.log(`[storeFaceEmbedding] Successfully stored face embedding for relationship ${relationshipId}`);
     return true;
   } catch (error) {
-    console.error('Error storing face embedding:', error);
+    console.error('[storeFaceEmbedding] Error storing face embedding:', error);
     return false;
   }
 }
