@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   FlatList,
   Dimensions,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film } from 'lucide-react-native';
+import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film, X } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { User, Post, Reel } from '@/types';
@@ -36,6 +38,9 @@ export default function UserProfileScreen() {
   const [followingCount, setFollowingCount] = useState<number>(0);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [userReels, setUserReels] = useState<Reel[]>([]);
+  const [viewingImages, setViewingImages] = useState<{ urls: string[]; index: number } | null>(null);
+  const [viewingReel, setViewingReel] = useState<Reel | null>(null);
+  const imageViewerScrollRef = useRef<ScrollView>(null);
   
   const relationship = user ? getUserRelationship(user.id) : null;
 
@@ -189,6 +194,20 @@ export default function UserProfileScreen() {
     return labels[type as keyof typeof labels] || type;
   };
 
+  const handlePostPress = (post: Post) => {
+    const imageUrls = post.mediaUrls.filter(url => {
+      const isVideo = url.includes('.mp4') || url.includes('.mov') || url.includes('video');
+      return !isVideo;
+    });
+    if (imageUrls.length > 0) {
+      setViewingImages({ urls: imageUrls, index: 0 });
+    }
+  };
+
+  const handleReelPress = (reel: Reel) => {
+    setViewingReel(reel);
+  };
+
   const renderPostGrid = () => {
     if (activeTab === 'posts') {
       if (userPosts.length === 0) {
@@ -206,7 +225,11 @@ export default function UserProfileScreen() {
           key="posts"
           scrollEnabled={false}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.gridItem}>
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => handlePostPress(item)}
+              activeOpacity={0.8}
+            >
               {item.mediaUrls[0] ? (
                 <Image source={{ uri: item.mediaUrls[0] }} style={styles.gridImage} contentFit="cover" />
               ) : (
@@ -235,7 +258,11 @@ export default function UserProfileScreen() {
           key="reels"
           scrollEnabled={false}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.gridItem}>
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => handleReelPress(item)}
+              activeOpacity={0.8}
+            >
               {item.thumbnailUrl ? (
                 <Image source={{ uri: item.thumbnailUrl }} style={styles.gridImage} contentFit="cover" />
               ) : (
@@ -450,6 +477,83 @@ export default function UserProfileScreen() {
 
         {renderPostGrid()}
       </ScrollView>
+
+      {/* Full-screen Image Viewer Modal */}
+      {viewingImages && (
+        <Modal
+          visible={!!viewingImages}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setViewingImages(null)}
+        >
+          <View style={styles.imageViewerContainer}>
+            <TouchableOpacity
+              style={styles.imageViewerCloseButton}
+              onPress={() => setViewingImages(null)}
+            >
+              <X size={24} color={colors.text.white} />
+            </TouchableOpacity>
+            
+            <ScrollView
+              ref={imageViewerScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(event) => {
+                const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+                setViewingImages(prev => prev ? { ...prev, index: newIndex } : null);
+              }}
+              style={styles.imageViewerScroll}
+              contentOffset={{ x: viewingImages.index * Dimensions.get('window').width, y: 0 }}
+            >
+              {viewingImages.urls.map((url, index) => (
+                <View key={index} style={styles.imageViewerItem}>
+                  <Image
+                    source={{ uri: url }}
+                    style={styles.imageViewerImage}
+                    contentFit="contain"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            
+            {viewingImages.urls.length > 1 && (
+              <View style={styles.imageViewerIndicator}>
+                <Text style={styles.imageViewerIndicatorText}>
+                  {viewingImages.index + 1} / {viewingImages.urls.length}
+                </Text>
+              </View>
+            )}
+          </View>
+        </Modal>
+      )}
+
+      {/* Reel Viewer Modal */}
+      {viewingReel && (
+        <Modal
+          visible={!!viewingReel}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setViewingReel(null)}
+        >
+          <View style={styles.reelViewerContainer}>
+            <TouchableOpacity
+              style={styles.imageViewerCloseButton}
+              onPress={() => setViewingReel(null)}
+            >
+              <X size={24} color={colors.text.white} />
+            </TouchableOpacity>
+            
+            <Video
+              source={{ uri: viewingReel.videoUrl }}
+              style={styles.reelViewerVideo}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+            />
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -742,5 +846,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.secondary,
     marginTop: 16,
+  },
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerItem: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  imageViewerIndicator: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  imageViewerIndicatorText: {
+    color: colors.text.white,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  reelViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reelViewerVideo: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
   },
 });
