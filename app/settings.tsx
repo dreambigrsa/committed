@@ -161,7 +161,7 @@ export default function SettingsScreen() {
       
       const sessionList = [];
       if (session) {
-        sessionList.push({ id: session.id, device: 'Current Device', lastActive: new Date().toISOString() });
+        sessionList.push({ id: session.access_token, device: 'Current Device', lastActive: new Date().toISOString() });
       }
       if (dbSessions) {
         dbSessions.forEach(s => {
@@ -338,7 +338,7 @@ export default function SettingsScreen() {
             },
           },
         ],
-        'secure-text-input'
+        'plain-text' as any
       );
     } else {
       // For Android/Web, show an alert directing to password reset

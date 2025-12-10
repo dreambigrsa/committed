@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { StyleSheet, StyleSheetStatic } from 'react-native';
 import colors from '@/constants/colors';
 import { useTheme } from '@/contexts/ThemeContext';
+
+type ColorType = typeof colors;
 
 /**
  * Hook to create styles that automatically update with theme changes
@@ -10,7 +11,7 @@ import { useTheme } from '@/contexts/ThemeContext';
  * @param createStylesFn Function that takes colors and returns StyleSheet
  */
 export function useStyles<T extends Record<string, any>>(
-  createStylesFn: (colors: typeof colors) => T
+  createStylesFn: (colors: ColorType) => T
 ): T {
   const { colors: themeColors } = useTheme();
   
@@ -24,7 +25,7 @@ export function useStyles<T extends Record<string, any>>(
  * This will use the global colors object which gets updated by ThemeContext
  */
 export function createStyles<T extends Record<string, any>>(
-  createStylesFn: (colors: typeof colors) => T
+  createStylesFn: (colors: ColorType) => T
 ): T {
   return createStylesFn(colors);
 }

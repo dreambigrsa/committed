@@ -61,7 +61,7 @@ export default function SessionsScreen() {
       if (session) {
         const deviceInfo = `${Platform.OS} Device`;
         sessionList.push({
-          id: session.id,
+          id: session.access_token,
           device_info: `${deviceInfo} (Current)`,
           last_active: new Date().toISOString(),
           created_at: new Date(session.expires_at! - 3600000).toISOString(), // Approximate
