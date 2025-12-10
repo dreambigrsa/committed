@@ -28,7 +28,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -160,8 +160,17 @@ export default function UserProfileScreen() {
     }
   };
 
-  const handleMessage = () => {
-    console.log('Message user');
+  const handleMessage = async () => {
+    if (!currentUser || !userId || currentUser.id === userId) return;
+    
+    try {
+      const conversation = await createOrGetConversation(userId);
+      if (conversation) {
+        router.push(`/messages/${conversation.id}` as any);
+      }
+    } catch (error) {
+      console.error('Failed to start conversation:', error);
+    }
   };
 
   if (isLoading) {
