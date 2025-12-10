@@ -13,7 +13,7 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Reel } from '@/types';
 
 const { width, height } = Dimensions.get('window');
@@ -21,6 +21,7 @@ const { width, height } = Dimensions.get('window');
 export default function ReelsScreen() {
   const router = useRouter();
   const { currentUser, reels, toggleReelLike } = useApp();
+  const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
