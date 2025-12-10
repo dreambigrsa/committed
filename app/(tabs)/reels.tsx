@@ -10,6 +10,8 @@ import {
   Alert,
   TextInput,
   Modal,
+  SafeAreaView,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -342,7 +344,7 @@ export default function ReelsScreen() {
                   >
                     <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
                   </TouchableOpacity>
-                  {!isOwner && (
+                  {!isOwner && currentUser && (
                     <TouchableOpacity
                       style={[styles.followButton, isFollowing(reel.userId) && styles.followButtonActive]}
                       onPress={() => handleFollow(reel.userId)}
@@ -581,12 +583,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    paddingBottom: 60,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    // Gradient overlay for better text readability
-    backgroundColor: 'transparent',
   },
   leftSide: {
     flex: 1,
@@ -643,24 +643,31 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginBottom: 4,
   },
   followButton: {
-    marginTop: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 6,
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
     backgroundColor: colors.primary,
     alignSelf: 'flex-start',
-    minWidth: 80,
+    minWidth: 90,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   followButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   followButtonText: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: colors.text.white,
+    letterSpacing: 0.5,
   },
   caption: {
     fontSize: 14,
