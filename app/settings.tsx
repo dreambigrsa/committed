@@ -322,45 +322,7 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = () => {
-    // Note: Alert.prompt is iOS only, for cross-platform use a modal or navigation
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Change Password',
-        'Enter your new password (min 6 characters)',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Change',
-            onPress: async (newPassword?: string) => {
-              if (!newPassword || newPassword.length < 6) {
-                Alert.alert('Error', 'Password must be at least 6 characters');
-                return;
-              }
-
-              try {
-                const { error } = await supabase.auth.updateUser({
-                  password: newPassword,
-                });
-
-                if (error) throw error;
-                Alert.alert('Success', 'Password updated successfully!');
-              } catch (error: any) {
-                console.error('Failed to change password:', error);
-                Alert.alert('Error', error.message || 'Failed to change password');
-              }
-            },
-          },
-        ],
-        'secure-text-input'
-      );
-    } else {
-      // For Android/Web, show an alert directing to password reset
-      Alert.alert(
-        'Change Password',
-        'Please use the password reset feature from the login screen to change your password.',
-        [{ text: 'OK' }]
-      );
-    }
+    router.push('/settings/change-password' as any);
   };
 
   const handleReVerify = (type: 'phone' | 'email' | 'id') => {
@@ -1236,15 +1198,15 @@ export default function SettingsScreen() {
                     'Select theme',
                     [
                       { text: 'Default', onPress: () => {
-                        setTheme('default');
+                        setAppTheme('default');
                         saveAppPreferences();
                       }},
                       { text: 'Colorful', onPress: () => {
-                        setTheme('colorful');
+                        setAppTheme('colorful');
                         saveAppPreferences();
                       }},
                       { text: 'Minimal', onPress: () => {
-                        setTheme('minimal');
+                        setAppTheme('minimal');
                         saveAppPreferences();
                       }},
                       { text: 'Cancel', style: 'cancel' },
@@ -1595,7 +1557,7 @@ const styles = StyleSheet.create({
   dangerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: defaultColors.danger,
+    color: colors.danger,
     marginBottom: 8,
   },
   dangerText: {
@@ -1629,7 +1591,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: defaultColors.primary + '30',
+    borderColor: colors.primary + '30',
   },
   infoText: {
     flex: 1,
