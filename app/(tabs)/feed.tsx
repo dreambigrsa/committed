@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -374,7 +374,8 @@ function CommentsModal({
   );
 }
 
-const styles = StyleSheet.create({
+  // Create styles inside component so they update with theme
+  const styles = useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.secondary,
@@ -706,4 +707,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic' as const,
   },
-});
+  }), [colors]);
