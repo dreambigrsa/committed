@@ -13,11 +13,12 @@ import {
 import { useRouter } from 'expo-router';
 import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function AuthScreen() {
   const router = useRouter();
   const { currentUser, signup, login, resetPassword } = useApp();
+  const { colors } = useTheme();
   const [isSignUp, setIsSignUp] = useState<boolean>(true);
   const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -100,6 +101,8 @@ export default function AuthScreen() {
       setIsLoading(false);
     }
   };
+
+  const styles = createStyles(colors);
 
   return (
     <KeyboardAvoidingView
@@ -261,7 +264,7 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: typeof import('@/constants/colors').default) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
