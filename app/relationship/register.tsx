@@ -22,6 +22,8 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
 import * as ImagePicker from 'expo-image-picker';
+// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
 const RELATIONSHIP_TYPES: { value: RelationshipType; label: string }[] = [
@@ -176,11 +178,17 @@ export default function RegisterRelationshipScreen() {
         const fileName = `partner-face-${Date.now()}.${fileExt}`;
         const filePath = `partner-photos/${fileName}`;
 
-        // Convert URI to Uint8Array using fetch (modern approach, no deprecated APIs)
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
+        // Convert URI to Uint8Array using legacy API (no deprecation warnings)
+        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        // Convert base64 to Uint8Array
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
 
         const { data, error } = await supabase.storage
           .from('avatars')
