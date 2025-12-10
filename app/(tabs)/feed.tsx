@@ -35,7 +35,6 @@ export default function FeedScreen() {
   const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
-  const [viewedAds, setViewedAds] = useState<Set<string>>(new Set());
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
   const [personalizedPosts, setPersonalizedPosts] = useState<Post[]>([]);
   const [showPostMenu, setShowPostMenu] = useState<string | null>(null);
@@ -70,7 +69,9 @@ export default function FeedScreen() {
   useEffect(() => {
     const loadSmartAds = async () => {
       try {
-        const ads = await getSmartAds('feed', Array.from(viewedAds), 20);
+        // Don't exclude ads - let the smart rotation algorithm handle it
+        // The algorithm will naturally rotate ads based on recent impressions
+        const ads = await getSmartAds('feed', [], 20);
         setSmartAds(ads);
       } catch (error) {
         console.error('Error loading smart ads:', error);
@@ -82,7 +83,23 @@ export default function FeedScreen() {
     if (currentUser) {
       loadSmartAds();
     }
-  }, [getSmartAds, getActiveAds, viewedAds, currentUser]);
+  }, [getSmartAds, getActiveAds, currentUser]);
+  
+  // Reload ads periodically to ensure rotation (every 30 seconds or when posts change)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (currentUser && smartAds.length > 0) {
+        try {
+          const ads = await getSmartAds('feed', [], 20);
+          setSmartAds(ads);
+        } catch (error) {
+          console.error('Error refreshing smart ads:', error);
+        }
+      }
+    }, 30000); // Refresh every 30 seconds for better rotation
+    
+    return () => clearInterval(interval);
+  }, [currentUser, getSmartAds, smartAds.length]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -753,10 +770,9 @@ export default function FeedScreen() {
   };
 
   const renderAd = (ad: Advertisement) => {
-    if (!viewedAds.has(ad.id)) {
-      recordAdImpression(ad.id);
-      setViewedAds(prev => new Set([...prev, ad.id]));
-    }
+    // Record impression when ad is rendered (for analytics and rotation)
+    // This will be used by getSmartAds to rotate ads naturally
+    recordAdImpression(ad.id);
 
     return (
       <TouchableOpacity
@@ -1213,8 +1229,10 @@ export default function FeedScreen() {
         ) : (
           personalizedPosts.map((post, index) => {
             // Smart ad distribution: show ad every 3 posts using smart algorithm
-            // Algorithm ensures rotation and avoids showing same ad repeatedly
+            // Algorithm ensures rotation - ads that were shown recently will have lower scores
+            // and different ads will be selected, but ads can still appear again later
             const shouldShowAd = (index + 1) % 3 === 0 && smartAds.length > 0;
+            // Use modulo to cycle through ads, ensuring rotation
             const adIndex = Math.floor(index / 3) % smartAds.length;
             const ad = shouldShowAd ? smartAds[adIndex] : null;
             
