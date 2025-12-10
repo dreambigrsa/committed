@@ -23,7 +23,7 @@ import {
   ArrowRight,
   Sparkles,
 } from 'lucide-react-native';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useApp } from '@/contexts/AppContext';
 
 export default function LandingScreen() {
