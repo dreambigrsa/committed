@@ -28,6 +28,7 @@ export default function AdminLogsScreen() {
   const { currentUser } = useApp();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadLogs();
@@ -36,6 +37,7 @@ export default function AdminLogsScreen() {
   const loadLogs = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data, error } = await supabase
         .from('activity_logs')
         .select(`
@@ -60,8 +62,11 @@ export default function AdminLogsScreen() {
         }));
         setLogs(formattedLogs);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load logs:', error);
+      // Extract proper error message
+      const errorMessage = error?.message || error?.toString() || 'Failed to load logs';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -102,6 +107,12 @@ export default function AdminLogsScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Shield size={64} color={colors.danger} />
+          <Text style={styles.errorText}>Failed to load logs</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
