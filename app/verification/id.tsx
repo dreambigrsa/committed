@@ -13,7 +13,6 @@ import { IdCard, ArrowLeft, Upload, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';
 
@@ -43,17 +42,11 @@ export default function IdVerificationScreen() {
       try {
         const fileName = `id_${currentUser?.id}_${Date.now()}.jpg`;
         
-        // Convert URI to Uint8Array for React Native compatibility using expo-file-system
-        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-          encoding: 'base64' as any,
-        });
-        
-        // Convert base64 to Uint8Array
-        const binaryString = atob(base64);
-        const uint8Array = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          uint8Array[i] = binaryString.charCodeAt(i);
-        }
+        // Convert URI to Uint8Array using fetch (modern approach, no deprecated APIs)
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
 
         const { error } = await supabase.storage
           .from('media')
