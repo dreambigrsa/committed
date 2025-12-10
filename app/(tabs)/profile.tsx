@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useColors } from '@/constants/colors';
+import defaultColors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
@@ -352,13 +353,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   profileSection: {
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 24,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     marginHorizontal: 20,
     borderRadius: 24,
     paddingVertical: 32,
@@ -381,14 +382,14 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
     fontSize: 40,
     fontWeight: '600' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   uploadingOverlay: {
     position: 'absolute',
@@ -408,11 +409,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 4,
-    borderColor: colors.background.primary,
+    borderColor: defaultColors.background.primary,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -426,17 +427,17 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     marginBottom: 2,
   },
   profilePhone: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
   },
   verificationBadges: {
     flexDirection: 'row',
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.badge.verified,
+    backgroundColor: defaultColors.badge.verified,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
@@ -456,10 +457,10 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: colors.badge.verifiedText,
+    color: defaultColors.badge.verifiedText,
   },
   card: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     marginHorizontal: 20,
     marginBottom: 24,
     borderRadius: 20,
@@ -481,7 +482,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   relationshipContent: {
     gap: 14,
@@ -493,12 +494,12 @@ const styles = StyleSheet.create({
   },
   relationshipLabel: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     fontWeight: '500' as const,
   },
   relationshipValue: {
     fontSize: 15,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     fontWeight: '600' as const,
   },
   statusBadge: {
@@ -507,20 +508,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusBadgeVerified: {
-    backgroundColor: colors.badge.verified,
+    backgroundColor: defaultColors.badge.verified,
   },
   statusBadgePending: {
-    backgroundColor: colors.badge.pending,
+    backgroundColor: defaultColors.badge.pending,
   },
   statusBadgeText: {
     fontSize: 13,
     fontWeight: '600' as const,
   },
   statusTextVerified: {
-    color: colors.badge.verifiedText,
+    color: defaultColors.badge.verifiedText,
   },
   statusTextPending: {
-    color: colors.badge.pendingText,
+    color: defaultColors.badge.pendingText,
   },
   noRelationshipContainer: {
     alignItems: 'center',
@@ -528,14 +529,14 @@ const styles = StyleSheet.create({
   },
   noRelationshipText: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     marginBottom: 12,
   },
   addRelationshipButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -543,7 +544,7 @@ const styles = StyleSheet.create({
   addRelationshipButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   section: {
     paddingHorizontal: 20,
@@ -551,14 +552,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 12,
   },
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     paddingVertical: 18,
     paddingHorizontal: 20,
     borderRadius: 16,
@@ -576,14 +577,14 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 16,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     fontWeight: '500' as const,
   },
   logoutText: {
-    color: colors.danger,
+    color: defaultColors.danger,
   },
   adminText: {
-    color: colors.primary,
+    color: defaultColors.primary,
     fontWeight: '600' as const,
   },
 });
