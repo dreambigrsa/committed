@@ -14,13 +14,12 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Search as SearchIcon, CheckCircle2, X, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
+import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SearchScreen() {
   const router = useRouter();
   const { searchUsers, getUserRelationship, searchByFace } = useApp();
-  const colors = useColors();
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -68,22 +67,9 @@ export default function SearchScreen() {
         try {
           const faceResults = await searchByFace(result.assets[0].uri);
           setResults(faceResults);
-          
-          if (faceResults.length === 0) {
-            Alert.alert(
-              'No Matches Found',
-              'No matching faces were found in the system. This feature uses placeholder face recognition - integrate a face recognition service for production use.',
-              [{ text: 'OK' }]
-            );
-          }
-        } catch (error: any) {
+        } catch (error) {
           console.error('Face search error:', error);
-          const errorMessage = error?.message || 'Failed to search by face. Please try again.';
-          Alert.alert(
-            'Face Search Error',
-            errorMessage + '\n\nNote: This feature requires a face recognition service integration (AWS Rekognition, Azure Face API, etc.) for production use.',
-            [{ text: 'OK' }]
-          );
+          Alert.alert('Error', 'Failed to search by face. Please try again.');
         } finally {
           setIsSearching(false);
         }

@@ -41,16 +41,13 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useColors } from '@/constants/colors';
+import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { currentUser, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
-  const { theme, isDark, setThemeMode } = useTheme();
-  const colors = useColors();
   const relationship = getCurrentUserRelationship();
 
   const [editMode, setEditMode] = useState(false);
@@ -83,8 +80,9 @@ export default function SettingsScreen() {
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
 
   // App Preferences
+  const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState('en');
-  const [appTheme, setAppTheme] = useState('default');
+  const [theme, setTheme] = useState('default');
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -127,7 +125,9 @@ export default function SettingsScreen() {
         if (settings.privacy_settings) {
           setPrivacy(settings.privacy_settings);
         }
-        // Theme is handled by ThemeContext
+        if (settings.theme_preference) {
+          setDarkMode(settings.theme_preference === 'dark');
+        }
         if (settings.language) {
           setLanguage(settings.language);
         }
@@ -144,17 +144,6 @@ export default function SettingsScreen() {
         if (userData.gender) setGender(userData.gender);
         if (userData.date_of_birth) setDateOfBirth(userData.date_of_birth);
       }
-
-      // Load 2FA status
-      const { data: twoFactorData } = await supabase
-        .from('user_2fa')
-        .select('enabled')
-        .eq('user_id', currentUser.id)
-        .single();
-
-      if (twoFactorData) {
-        setTwoFactorEnabled(twoFactorData.enabled || false);
-      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -163,47 +152,10 @@ export default function SettingsScreen() {
   const loadSessions = async () => {
     if (!currentUser) return;
     try {
-      // Load from user_sessions table
-      const { data, error } = await supabase
-        .from('user_sessions')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .eq('is_active', true)
-        .order('last_active', { ascending: false });
-
-      if (error) {
-        // Fallback to current session if table doesn't exist
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setSessions([{ 
-            id: session.id, 
-            device: 'Current Device', 
-            lastActive: new Date().toISOString(),
-            device_info: 'Current Device'
-          }]);
-        }
-        return;
-      }
-
-      if (data && data.length > 0) {
-        setSessions(data.map((s: any) => ({
-          id: s.id,
-          device: s.device_info || 'Unknown Device',
-          lastActive: s.last_active,
-          ipAddress: s.ip_address,
-          userAgent: s.user_agent,
-        })));
-      } else {
-        // Fallback to current session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setSessions([{ 
-            id: session.id, 
-            device: 'Current Device', 
-            lastActive: new Date().toISOString(),
-            device_info: 'Current Device'
-          }]);
-        }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // In a real app, you'd fetch all active sessions from your backend
+        setSessions([{ id: session.id, device: 'Current Device', lastActive: new Date().toISOString() }]);
       }
     } catch (error) {
       console.error('Failed to load sessions:', error);
@@ -322,7 +274,45 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = () => {
-    router.push('/settings/change-password' as any);
+    // Note: Alert.prompt is iOS only, for cross-platform use a modal or navigation
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Change Password',
+        'Enter your new password (min 6 characters)',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Change',
+            onPress: async (newPassword?: string) => {
+              if (!newPassword || newPassword.length < 6) {
+                Alert.alert('Error', 'Password must be at least 6 characters');
+                return;
+              }
+
+              try {
+                const { error } = await supabase.auth.updateUser({
+                  password: newPassword,
+                });
+
+                if (error) throw error;
+                Alert.alert('Success', 'Password updated successfully!');
+              } catch (error: any) {
+                console.error('Failed to change password:', error);
+                Alert.alert('Error', error.message || 'Failed to change password');
+              }
+            },
+          },
+        ],
+        'secure-text-input'
+      );
+    } else {
+      // For Android/Web, show an alert directing to password reset
+      Alert.alert(
+        'Change Password',
+        'Please use the password reset feature from the login screen to change your password.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleReVerify = (type: 'phone' | 'email' | 'id') => {
@@ -462,7 +452,7 @@ export default function SettingsScreen() {
           user_id: currentUser.id,
           notification_settings: existingNotifications,
           privacy_settings: existingPrivacy,
-          theme_preference: isDark ? 'dark' : 'light',
+          theme_preference: darkMode ? 'dark' : 'light',
           language: language,
         }, {
           onConflict: 'user_id'
@@ -574,7 +564,7 @@ export default function SettingsScreen() {
           ),
         }}
       />
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
+      <SafeAreaView style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -583,29 +573,23 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <User size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Basic Information</Text>
+              <Text style={styles.sectionTitle}>Basic Information</Text>
             </View>
 
-            <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
-              <View style={[styles.profilePhotoSection, { borderBottomColor: colors.border.light }]}>
+            <View style={styles.settingsList}>
+              <View style={styles.profilePhotoSection}>
                 <TouchableOpacity onPress={handleProfilePhotoChange}>
                   {currentUser.profilePicture ? (
                     <Image
                       source={{ uri: currentUser.profilePicture }}
-                      style={[styles.profilePhoto, { borderColor: colors.primary }]}
+                      style={styles.profilePhoto}
                     />
                   ) : (
-                    <View style={[styles.profilePhotoPlaceholder, { 
-                      backgroundColor: colors.background.secondary,
-                      borderColor: colors.primary 
-                    }]}>
+                    <View style={styles.profilePhotoPlaceholder}>
                       <Camera size={24} color={colors.text.tertiary} />
                     </View>
                   )}
-                  <View style={[styles.profilePhotoEditBadge, { 
-                    backgroundColor: colors.primary,
-                    borderColor: colors.background.primary 
-                  }]}>
+                  <View style={styles.profilePhotoEditBadge}>
                     <Camera size={16} color={colors.text.white} />
                   </View>
                 </TouchableOpacity>
@@ -615,15 +599,7 @@ export default function SettingsScreen() {
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Full Name</Text>
                   <TextInput
-                    style={[
-                      styles.editInput, 
-                      !editMode && styles.editInputDisabled,
-                      { 
-                        backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: defaultColors.border.light,
-                        color: colors.text.primary 
-                      }
-                    ]}
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
                     value={fullName}
                     onChangeText={setFullName}
                     editable={editMode}
@@ -634,15 +610,7 @@ export default function SettingsScreen() {
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Phone Number</Text>
                   <TextInput
-                    style={[
-                      styles.editInput, 
-                      !editMode && styles.editInputDisabled,
-                      { 
-                        backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: defaultColors.border.light,
-                        color: colors.text.primary 
-                      }
-                    ]}
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
                     value={phoneNumber}
                     onChangeText={setPhoneNumber}
                     editable={editMode}
@@ -654,15 +622,7 @@ export default function SettingsScreen() {
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Email Address</Text>
                   <TextInput
-                    style={[
-                      styles.editInput, 
-                      styles.editInputDisabled,
-                      { 
-                        backgroundColor: colors.background.primary,
-                        borderColor: defaultColors.border.light,
-                        color: colors.text.secondary 
-                      }
-                    ]}
+                    style={[styles.editInput, styles.editInputDisabled]}
                     value={email}
                     editable={false}
                     placeholderTextColor={colors.text.tertiary}
@@ -672,15 +632,7 @@ export default function SettingsScreen() {
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Gender (Optional)</Text>
                   <TextInput
-                    style={[
-                      styles.editInput, 
-                      !editMode && styles.editInputDisabled,
-                      { 
-                        backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: defaultColors.border.light,
-                        color: colors.text.primary 
-                      }
-                    ]}
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
                     value={gender}
                     onChangeText={setGender}
                     editable={editMode}
@@ -691,15 +643,7 @@ export default function SettingsScreen() {
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Date of Birth (Optional)</Text>
                   <TextInput
-                    style={[
-                      styles.editInput, 
-                      !editMode && styles.editInputDisabled,
-                      { 
-                        backgroundColor: editMode ? colors.background.secondary : colors.background.primary,
-                        borderColor: defaultColors.border.light,
-                        color: colors.text.primary 
-                      }
-                    ]}
+                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
                     value={dateOfBirth}
                     onChangeText={setDateOfBirth}
                     editable={editMode}
@@ -710,10 +654,7 @@ export default function SettingsScreen() {
                 {editMode ? (
                   <View style={styles.editButtons}>
                     <TouchableOpacity
-                      style={[styles.cancelButton, { 
-                        backgroundColor: colors.background.secondary,
-                        borderColor: colors.border.light 
-                      }]}
+                      style={styles.cancelButton}
                       onPress={() => {
                         setEditMode(false);
                         setFullName(currentUser?.fullName || '');
@@ -722,21 +663,21 @@ export default function SettingsScreen() {
                         setDateOfBirth('');
                       }}
                     >
-                      <Text style={[styles.cancelButtonText, { color: colors.text.secondary }]}>Cancel</Text>
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                      style={styles.saveButton}
                       onPress={handleSaveProfile}
                     >
-                      <Text style={[styles.saveButtonText, { color: colors.text.white }]}>Save Changes</Text>
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <TouchableOpacity
-                    style={[styles.editButton, { backgroundColor: colors.primary }]}
+                    style={styles.editButton}
                     onPress={() => setEditMode(true)}
                   >
-                    <Text style={[styles.editButtonText, { color: colors.text.white }]}>Edit Profile</Text>
+                    <Text style={styles.editButtonText}>Edit Profile</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -747,19 +688,19 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Shield size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Verification Status</Text>
+              <Text style={styles.sectionTitle}>Verification Status</Text>
             </View>
 
-            <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
+            <View style={styles.settingsList}>
               <TouchableOpacity
-                style={[styles.verificationItem, { borderBottomColor: colors.border.light }]}
+                style={styles.verificationItem}
                 onPress={() => !getVerificationStatus('phone') && handleReVerify('phone')}
               >
                 <View style={styles.verificationLeft}>
                   <Phone size={20} color={colors.text.secondary} />
                   <View style={styles.verificationInfo}>
-                <Text style={[styles.verificationLabel, { color: colors.text.primary }]}>Phone Verification</Text>
-                <Text style={[styles.verificationStatus, { color: colors.text.secondary }]}>
+                    <Text style={styles.verificationLabel}>Phone Verification</Text>
+                    <Text style={styles.verificationStatus}>
                       {getVerificationStatus('phone') ? 'Verified' : 'Not Verified'}
                     </Text>
                   </View>
@@ -772,14 +713,14 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.verificationItem, { borderBottomColor: colors.border.light }]}
+                style={styles.verificationItem}
                 onPress={() => !getVerificationStatus('email') && handleReVerify('email')}
               >
                 <View style={styles.verificationLeft}>
                   <Mail size={20} color={colors.text.secondary} />
                   <View style={styles.verificationInfo}>
-                <Text style={[styles.verificationLabel, { color: colors.text.primary }]}>Email Verification</Text>
-                <Text style={[styles.verificationStatus, { color: colors.text.secondary }]}>
+                    <Text style={styles.verificationLabel}>Email Verification</Text>
+                    <Text style={styles.verificationStatus}>
                       {getVerificationStatus('email') ? 'Verified' : 'Not Verified'}
                     </Text>
                   </View>
@@ -792,14 +733,14 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.verificationItem, { borderBottomColor: colors.border.light }]}
+                style={styles.verificationItem}
                 onPress={() => !getVerificationStatus('id') && handleReVerify('id')}
               >
                 <View style={styles.verificationLeft}>
                   <IdCard size={20} color={colors.text.secondary} />
                   <View style={styles.verificationInfo}>
-                <Text style={[styles.verificationLabel, { color: colors.text.primary }]}>Government ID Verification</Text>
-                <Text style={[styles.verificationStatus, { color: colors.text.secondary }]}>
+                    <Text style={styles.verificationLabel}>Government ID Verification</Text>
+                    <Text style={styles.verificationStatus}>
                       {getVerificationStatus('id') ? 'Verified' : 'Not Verified'}
                     </Text>
                   </View>
@@ -812,14 +753,14 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.verificationItem, { borderBottomColor: colors.border.light }]}
+                style={styles.verificationItem}
                 onPress={() => relationship && router.push('/verification/couple-selfie' as any)}
               >
                 <View style={styles.verificationLeft}>
                   <Heart size={20} color={colors.text.secondary} />
                   <View style={styles.verificationInfo}>
-                <Text style={[styles.verificationLabel, { color: colors.text.primary }]}>Relationship Verification</Text>
-                <Text style={[styles.verificationStatus, { color: colors.text.secondary }]}>
+                    <Text style={styles.verificationLabel}>Relationship Verification</Text>
+                    <Text style={styles.verificationStatus}>
                       {getRelationshipVerificationStatus() ? 'Verified' : relationship ? 'Pending' : 'None'}
                     </Text>
                   </View>
@@ -832,14 +773,11 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.reverifyButton, { 
-                  borderTopColor: colors.border.light,
-                  backgroundColor: colors.primary + '10' 
-                }]}
+                style={styles.reverifyButton}
                 onPress={() => router.push('/verification' as any)}
               >
                 <Shield size={18} color={colors.primary} />
-                <Text style={[styles.reverifyButtonText, { color: colors.primary }]}>Re-verify Identity</Text>
+                <Text style={styles.reverifyButtonText}>Re-verify Identity</Text>
                 <ChevronRight size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -850,35 +788,26 @@ export default function SettingsScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Heart size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Relationship Settings</Text>
+                <Text style={styles.sectionTitle}>Relationship Settings</Text>
               </View>
 
-              <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
-                <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingsList}>
+                <View style={styles.settingItem}>
                   <View style={styles.settingLeft}>
                     <Heart size={20} color={colors.text.secondary} />
                     <Text style={styles.settingLabel}>Relationship Status</Text>
                   </View>
-                  <View style={[styles.statusBadge, { 
-                    backgroundColor: relationship.status === 'verified' 
-                      ? colors.badge.verified 
-                      : colors.badge.pending 
-                  }]}>
+                  <View style={styles.statusBadge}>
                     <Text style={[
                       styles.statusBadgeText,
-                      relationship.status === 'verified' && styles.statusBadgeTextVerified,
-                      { 
-                        color: relationship.status === 'verified' 
-                          ? colors.badge.verifiedText 
-                          : colors.badge.pendingText 
-                      }
+                      relationship.status === 'verified' && styles.statusBadgeTextVerified
                     ]}>
                       {relationship.status === 'verified' ? 'Verified' : relationship.status === 'pending' ? 'Pending' : 'Ended'}
                     </Text>
                   </View>
                 </View>
 
-                <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+                <View style={styles.settingItem}>
                   <View style={styles.settingLeft}>
                     <User size={20} color={colors.text.secondary} />
                     <Text style={styles.settingLabel}>Partner Name</Text>
@@ -886,7 +815,7 @@ export default function SettingsScreen() {
                   <Text style={styles.settingValue}>{relationship.partnerName}</Text>
                 </View>
 
-                <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+                <View style={styles.settingItem}>
                   <View style={styles.settingLeft}>
                     <Phone size={20} color={colors.text.secondary} />
                     <Text style={styles.settingLabel}>Partner Phone</Text>
@@ -894,7 +823,7 @@ export default function SettingsScreen() {
                   <Text style={styles.settingValue}>{relationship.partnerPhone}</Text>
                 </View>
 
-                <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+                <View style={styles.settingItem}>
                   <View style={styles.settingLeft}>
                     <Calendar size={20} color={colors.text.secondary} />
                     <Text style={styles.settingLabel}>Anniversary Date</Text>
@@ -913,7 +842,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingLabel}>Who Can See My Relationship?</Text>
                   </View>
                   <View style={styles.settingRight}>
-                    <Text style={[styles.settingValue, { color: colors.text.secondary }]}>
+                    <Text style={styles.settingValue}>
                       {getPrivacyLevelLabel()}
                     </Text>
                     <ChevronRight size={20} color={colors.text.tertiary} />
@@ -940,12 +869,12 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Lock size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Privacy & Security</Text>
+              <Text style={styles.sectionTitle}>Privacy & Security</Text>
             </View>
 
-            <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
+            <View style={styles.settingsList}>
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
+                style={styles.settingItem}
                 onPress={handleChangePassword}
               >
                 <View style={styles.settingLeft}>
@@ -955,34 +884,29 @@ export default function SettingsScreen() {
                 <ChevronRight size={20} color={colors.text.tertiary} />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
-                onPress={() => router.push('/settings/2fa' as any)}
-              >
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Shield size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Two-Factor Authentication</Text>
+                  <Text style={styles.settingLabel}>Two-Factor Authentication</Text>
                 </View>
-                <View style={styles.settingRight}>
-                  <Switch
-                    value={twoFactorEnabled}
-                    onValueChange={() => router.push('/settings/2fa' as any)}
-                    trackColor={{
-                      false: colors.border.light,
-                      true: colors.primary + '50',
-                    }}
-                    thumbColor={twoFactorEnabled ? colors.primary : colors.text.tertiary}
-                  />
-                </View>
-              </TouchableOpacity>
+                <Switch
+                  value={twoFactorEnabled}
+                  onValueChange={setTwoFactorEnabled}
+                  trackColor={{
+                    false: colors.border.light,
+                    true: colors.primary + '50',
+                  }}
+                  thumbColor={twoFactorEnabled ? colors.primary : colors.text.tertiary}
+                />
+              </View>
 
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
-                onPress={() => router.push('/settings/sessions' as any)}
+                style={styles.settingItem}
+                onPress={() => Alert.alert('Sessions', 'Session management coming soon')}
               >
                 <View style={styles.settingLeft}>
                   <Smartphone size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Active Sessions</Text>
+                  <Text style={styles.settingLabel}>Active Sessions</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>{sessions.length} device(s)</Text>
@@ -991,12 +915,12 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
-                onPress={() => router.push('/settings/blocked-users' as any)}
+                style={styles.settingItem}
+                onPress={() => Alert.alert('Blocked Users', 'Blocked users management coming soon')}
               >
                 <View style={styles.settingLeft}>
                   <Users size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Blocked Users</Text>
+                  <Text style={styles.settingLabel}>Blocked Users</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>{blockedUsers.length} blocked</Text>
@@ -1005,12 +929,12 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
+                style={styles.settingItem}
                 onPress={handleChangePrivacyLevel}
               >
                 <View style={styles.settingLeft}>
                   <Eye size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Profile Visibility</Text>
+                  <Text style={styles.settingLabel}>Profile Visibility</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>
@@ -1020,10 +944,10 @@ export default function SettingsScreen() {
                 </View>
               </TouchableOpacity>
 
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Eye size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Search Visibility</Text>
+                  <Text style={styles.settingLabel}>Search Visibility</Text>
                 </View>
                 <Switch
                   value={privacy.searchVisibility}
@@ -1042,14 +966,14 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Bell size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Notifications</Text>
+              <Text style={styles.sectionTitle}>Notifications</Text>
             </View>
 
-            <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+            <View style={styles.settingsList}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Heart size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Relationship Updates</Text>
+                  <Text style={styles.settingLabel}>Relationship Updates</Text>
                 </View>
                 <Switch
                   value={notifications.relationshipUpdates}
@@ -1062,10 +986,10 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <AlertTriangle size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Cheating Alerts</Text>
+                  <Text style={styles.settingLabel}>Cheating Alerts</Text>
                 </View>
                 <Switch
                   value={notifications.cheatingAlerts}
@@ -1078,10 +1002,10 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Shield size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Verification Attempts</Text>
+                  <Text style={styles.settingLabel}>Verification Attempts</Text>
                 </View>
                 <Switch
                   value={notifications.verificationAttempts}
@@ -1094,10 +1018,10 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Calendar size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Anniversary Reminders</Text>
+                  <Text style={styles.settingLabel}>Anniversary Reminders</Text>
                 </View>
                 <Switch
                   value={notifications.anniversaryReminders}
@@ -1110,10 +1034,10 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Bell size={20} color={colors.text.secondary} />
-                    <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Marketing & Promotions</Text>
+                  <Text style={styles.settingLabel}>Marketing & Promotions</Text>
                 </View>
                 <Switch
                   value={notifications.marketingPromotions}
@@ -1132,30 +1056,31 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Settings size={20} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>App Preferences</Text>
+              <Text style={styles.sectionTitle}>App Preferences</Text>
             </View>
 
-            <View style={[styles.settingsList, { backgroundColor: colors.background.primary }]}>
-              <View style={[styles.settingItem, { borderBottomColor: colors.border.light }]}>
+            <View style={styles.settingsList}>
+              <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Moon size={20} color={colors.text.secondary} />
-                  <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Dark Mode</Text>
+                  <Text style={styles.settingLabel}>Dark Mode</Text>
                 </View>
                 <Switch
-                  value={isDark}
+                  value={darkMode}
                   onValueChange={(value) => {
-                    setThemeMode(value ? 'dark' : 'light');
+                    setDarkMode(value);
+                    saveAppPreferences();
                   }}
                   trackColor={{
                     false: colors.border.light,
                     true: colors.primary + '50',
                   }}
-                  thumbColor={isDark ? colors.primary : colors.text.tertiary}
+                  thumbColor={darkMode ? colors.primary : colors.text.tertiary}
                 />
               </View>
 
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
+                style={styles.settingItem}
                 onPress={() => {
                   Alert.alert(
                     'Language',
@@ -1180,7 +1105,7 @@ export default function SettingsScreen() {
               >
                 <View style={styles.settingLeft}>
                   <Globe size={20} color={colors.text.secondary} />
-                  <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Language</Text>
+                  <Text style={styles.settingLabel}>Language</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>
@@ -1191,22 +1116,22 @@ export default function SettingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.settingItem, { borderBottomColor: colors.border.light }]}
+                style={styles.settingItem}
                 onPress={() => {
                   Alert.alert(
                     'Theme',
                     'Select theme',
                     [
                       { text: 'Default', onPress: () => {
-                        setAppTheme('default');
+                        setTheme('default');
                         saveAppPreferences();
                       }},
                       { text: 'Colorful', onPress: () => {
-                        setAppTheme('colorful');
+                        setTheme('colorful');
                         saveAppPreferences();
                       }},
                       { text: 'Minimal', onPress: () => {
-                        setAppTheme('minimal');
+                        setTheme('minimal');
                         saveAppPreferences();
                       }},
                       { text: 'Cancel', style: 'cancel' },
@@ -1216,7 +1141,7 @@ export default function SettingsScreen() {
               >
                 <View style={styles.settingLeft}>
                   <Settings size={20} color={colors.text.secondary} />
-                  <Text style={[styles.settingLabel, { color: colors.text.primary }]}>Theme</Text>
+                  <Text style={styles.settingLabel}>Theme</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>{theme}</Text>
@@ -1234,8 +1159,8 @@ export default function SettingsScreen() {
             >
               <Trash2 size={24} color={colors.danger} />
               <View style={styles.dangerContent}>
-                  <Text style={[styles.dangerTitle, { color: colors.danger }]}>Delete Account</Text>
-                  <Text style={[styles.dangerText, { color: colors.text.secondary }]}>
+                <Text style={styles.dangerTitle}>Delete Account</Text>
+                <Text style={styles.dangerText}>
                   Permanently delete your account and all associated data. This action cannot be undone.
                 </Text>
               </View>
@@ -1244,15 +1169,11 @@ export default function SettingsScreen() {
 
           {relationship && relationship.status === 'verified' && (
             <View style={styles.section}>
-              <View style={[styles.dangerCard, { 
-              backgroundColor: colors.background.primary,
-              borderColor: colors.danger + '30',
-              shadowColor: colors.danger 
-            }]}>
+              <View style={styles.dangerCard}>
                 <AlertTriangle size={24} color={colors.danger} />
                 <View style={styles.dangerContent}>
-                  <Text style={[styles.dangerTitle, { color: colors.danger }]}>End Relationship</Text>
-                  <Text style={[styles.dangerText, { color: colors.text.secondary }]}>
+                  <Text style={styles.dangerTitle}>End Relationship</Text>
+                  <Text style={styles.dangerText}>
                     This will send a request to your partner. The relationship
                     will end once they confirm or after 7 days.
                   </Text>
@@ -1280,16 +1201,16 @@ export default function SettingsScreen() {
                       );
                     }}
                   >
-                    <Text style={[styles.dangerButtonText, { color: colors.text.white }]}>End Relationship</Text>
+                    <Text style={styles.dangerButtonText}>End Relationship</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </View>
           )}
 
-          <View style={[styles.infoCard, { backgroundColor: colors.background.primary, borderColor: colors.primary + '30' }]}>
+          <View style={styles.infoCard}>
             <Shield size={18} color={colors.primary} />
-            <Text style={[styles.infoText, { color: colors.text.secondary }]}>
+            <Text style={styles.infoText}>
               Your privacy settings control who can see your profile and
               relationship status. Keep your account secure by enabling two-factor authentication.
             </Text>
@@ -1300,13 +1221,10 @@ export default function SettingsScreen() {
   );
 }
 
-// Import default colors for StyleSheet (will be overridden with theme colors via inline styles)
-import defaultColors from '@/constants/colors';
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: '#F8F9FA',
   },
   scrollContent: {
     paddingTop: 20,
@@ -1326,10 +1244,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   settingsList: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -1345,7 +1263,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -1355,7 +1273,7 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     fontWeight: '500' as const,
   },
   settingRight: {
@@ -1365,44 +1283,44 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 15,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500' as const,
   },
   profilePhotoSection: {
     alignItems: 'center',
     paddingVertical: 24,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   profilePhoto: {
     width: 100,
     height: 100,
     borderRadius: 50,
     borderWidth: 3,
-    borderColor: defaultColors.primary,
+    borderColor: colors.primary,
   },
   profilePhotoPlaceholder: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: defaultColors.primary,
+    borderColor: colors.primary,
   },
   profilePhotoEditBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 15,
     width: 30,
     height: 30,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: defaultColors.background.primary,
+    borderColor: colors.background.primary,
   },
   profileEditSection: {
     padding: 16,
@@ -1414,29 +1332,29 @@ const styles = StyleSheet.create({
   editLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   editInput: {
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   editInputDisabled: {
-    backgroundColor: defaultColors.background.primary,
-    color: defaultColors.text.secondary,
+    backgroundColor: colors.background.primary,
+    color: colors.text.secondary,
   },
   editHint: {
     fontSize: 12,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     marginTop: 4,
   },
   editButton: {
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -1445,7 +1363,7 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   editButtons: {
     flexDirection: 'row',
@@ -1454,21 +1372,21 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   cancelButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   saveButton: {
     flex: 1,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -1476,7 +1394,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   verificationItem: {
     flexDirection: 'row',
@@ -1485,7 +1403,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   verificationLeft: {
     flexDirection: 'row',
@@ -1498,12 +1416,12 @@ const styles = StyleSheet.create({
   },
   verificationLabel: {
     fontSize: 16,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     fontWeight: '500' as const,
   },
   verificationStatus: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     marginTop: 2,
   },
   reverifyButton: {
@@ -1514,16 +1432,16 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: defaultColors.border.light,
-    backgroundColor: defaultColors.primary + '10',
+    borderTopColor: colors.border.light,
+    backgroundColor: colors.primary + '10',
   },
   reverifyButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.primary,
+    color: colors.primary,
   },
   statusBadge: {
-    backgroundColor: defaultColors.badge.pending,
+    backgroundColor: colors.badge.pending,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -1531,21 +1449,21 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: defaultColors.badge.pendingText,
+    color: colors.badge.pendingText,
   },
   statusBadgeTextVerified: {
-    backgroundColor: defaultColors.badge.verified,
-    color: defaultColors.badge.verifiedText,
+    backgroundColor: colors.badge.verified,
+    color: colors.badge.verifiedText,
   },
   dangerCard: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 20,
     padding: 24,
     flexDirection: 'row',
     gap: 16,
     borderWidth: 2,
-    borderColor: defaultColors.danger + '30',
-    shadowColor: defaultColors.danger,
+    borderColor: colors.danger + '30',
+    shadowColor: colors.danger,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -1562,17 +1480,17 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
     marginBottom: 16,
   },
   dangerButton: {
-    backgroundColor: defaultColors.danger,
+    backgroundColor: colors.danger,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
     alignSelf: 'flex-start',
-    shadowColor: defaultColors.danger,
+    shadowColor: colors.danger,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1581,13 +1499,13 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: defaultColors.primary + '10',
+    backgroundColor: colors.primary + '10',
     padding: 18,
     borderRadius: 16,
     borderWidth: 1,
@@ -1596,9 +1514,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 18,
   },
 });
-
-// Styles are now using default colors, but we override with theme colors via inline styles in the component
