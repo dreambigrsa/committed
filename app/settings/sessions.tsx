@@ -8,13 +8,13 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, Smartphone, Trash2, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import * as Device from 'expo-device';
 
 interface Session {
   id: string;
@@ -59,7 +59,7 @@ export default function SessionsScreen() {
       
       // Add current session
       if (session) {
-        const deviceInfo = Device.modelName || Device.deviceName || 'Unknown Device';
+        const deviceInfo = `${Platform.OS} Device`;
         sessionList.push({
           id: session.id,
           device_info: `${deviceInfo} (Current)`,
