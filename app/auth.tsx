@@ -13,11 +13,12 @@ import {
 import { useRouter } from 'expo-router';
 import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useColors } from '@/constants/colors';
 
 export default function AuthScreen() {
   const router = useRouter();
   const { currentUser, signup, login, resetPassword } = useApp();
+  const colors = useColors();
   const [isSignUp, setIsSignUp] = useState<boolean>(true);
   const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
