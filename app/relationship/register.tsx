@@ -66,6 +66,7 @@ export default function RegisterRelationshipScreen() {
     partnerUserId: '',
     type: 'serious' as RelationshipType,
     partnerFacePhoto: '',
+    partnerDateOfBirthDay: '',
     partnerDateOfBirthMonth: '',
     partnerDateOfBirthYear: '',
     partnerCity: '',
@@ -484,6 +485,26 @@ export default function RegisterRelationshipScreen() {
                     <Text style={styles.label}>Date of Birth (Optional)</Text>
                     <View style={styles.dateOfBirthRow}>
                       <View style={styles.dateInputGroup}>
+                        <Text style={styles.dateInputLabel}>Day</Text>
+                        <View style={styles.dateInputContainer}>
+                          <TextInput
+                            style={styles.dateInput}
+                            placeholder="DD"
+                            placeholderTextColor={colors.text.tertiary}
+                            value={formData.partnerDateOfBirthDay}
+                            onChangeText={(text) => {
+                              const num = text.replace(/[^0-9]/g, '');
+                              if (num === '' || (parseInt(num, 10) >= 1 && parseInt(num, 10) <= 31)) {
+                                setFormData({ ...formData, partnerDateOfBirthDay: num });
+                              }
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            editable={true}
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.dateInputGroup}>
                         <Text style={styles.dateInputLabel}>Month</Text>
                         <View style={styles.dateInputContainer}>
                           <TextInput
@@ -530,10 +551,14 @@ export default function RegisterRelationshipScreen() {
                       onPress={() => {
                         // Initialize date picker with existing values if available
                         const existingDate = new Date();
-                        if (formData.partnerDateOfBirthMonth && formData.partnerDateOfBirthYear) {
+                        if (formData.partnerDateOfBirthDay && formData.partnerDateOfBirthMonth && formData.partnerDateOfBirthYear) {
+                          existingDate.setDate(parseInt(formData.partnerDateOfBirthDay, 10));
                           existingDate.setMonth(parseInt(formData.partnerDateOfBirthMonth, 10) - 1);
                           existingDate.setFullYear(parseInt(formData.partnerDateOfBirthYear, 10));
-                          existingDate.setDate(1); // Set to first of month
+                        } else if (formData.partnerDateOfBirthMonth && formData.partnerDateOfBirthYear) {
+                          existingDate.setMonth(parseInt(formData.partnerDateOfBirthMonth, 10) - 1);
+                          existingDate.setFullYear(parseInt(formData.partnerDateOfBirthYear, 10));
+                          existingDate.setDate(1);
                         } else {
                           existingDate.setFullYear(2000);
                           existingDate.setMonth(0);
@@ -547,7 +572,7 @@ export default function RegisterRelationshipScreen() {
                       <Text style={styles.calendarButtonText}>Use Calendar</Text>
                     </TouchableOpacity>
                     <Text style={styles.dateHelperText}>
-                      Type the month and year, or use the calendar to select a date
+                      Type the day, month, and year, or use the calendar to select a date
                     </Text>
                   </View>
 
@@ -652,10 +677,12 @@ export default function RegisterRelationshipScreen() {
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={(event, date) => {
                     if (date && event.type !== 'dismissed') {
+                      const day = date.getDate().toString().padStart(2, '0');
                       const month = (date.getMonth() + 1).toString().padStart(2, '0');
                       const year = date.getFullYear().toString();
                       setFormData({ 
                         ...formData, 
+                        partnerDateOfBirthDay: day,
                         partnerDateOfBirthMonth: month,
                         partnerDateOfBirthYear: year
                       });
