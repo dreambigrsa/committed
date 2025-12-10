@@ -86,7 +86,8 @@ const darkColors = {
 
 // Create colors object with proper nested structure - initialized immediately
 // This ensures colors is always defined, even before ThemeContext initializes
-const colors = {
+// Using Object.assign to create a new object with all properties
+const colors: typeof lightColors = {
   primary: lightColors.primary,
   primaryDark: lightColors.primaryDark,
   secondary: lightColors.secondary,
@@ -159,4 +160,8 @@ export function updateGlobalColors(isDark: boolean) {
 }
 
 // Ensure colors is always exported and available
+// This default export makes colors available to all files that import it
 export default colors;
+
+// Also export as named export for flexibility
+export { colors };
