@@ -12,6 +12,7 @@ import {
   Animated,
   Image,
   Platform,
+  Modal,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -39,7 +40,9 @@ import {
   Trash2,
   Camera,
   Settings,
+  X,
 } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -61,6 +64,8 @@ export default function SettingsScreen() {
   const [email, setEmail] = useState(currentUser?.email || '');
   const [gender, setGender] = useState<string>('');
   const [dateOfBirth, setDateOfBirth] = useState<string>('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // Notifications
   const [notifications, setNotifications] = useState({
@@ -677,14 +682,42 @@ export default function SettingsScreen() {
                 </View>
                 <View style={styles.editRow}>
                   <Text style={styles.editLabel}>Date of Birth (Optional)</Text>
-                  <TextInput
-                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
-                    value={dateOfBirth}
-                    onChangeText={setDateOfBirth}
-                    editable={editMode}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.text.tertiary}
-                  />
+                  <View style={styles.dateInputContainer}>
+                    <TextInput
+                      style={[styles.editInput, styles.dateInput, !editMode && styles.editInputDisabled]}
+                      value={dateOfBirth}
+                      onChangeText={setDateOfBirth}
+                      editable={editMode}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.text.tertiary}
+                    />
+                    {editMode && (
+                      <TouchableOpacity
+                        style={styles.calendarButton}
+                        onPress={() => {
+                          // Initialize date picker with existing value if available
+                          let initialDate = new Date();
+                          if (dateOfBirth) {
+                            const parsedDate = new Date(dateOfBirth);
+                            if (!isNaN(parsedDate.getTime())) {
+                              initialDate = parsedDate;
+                            }
+                          } else {
+                            initialDate = new Date(2000, 0, 1);
+                          }
+                          setSelectedDate(initialDate);
+                          setShowDatePicker(true);
+                        }}
+                      >
+                        <Calendar size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {editMode && (
+                    <Text style={styles.dateHelperText}>
+                      Type the date (YYYY-MM-DD) or use the calendar icon
+                    </Text>
+                  )}
                 </View>
                 {editMode ? (
                   <View style={styles.editButtons}>
@@ -1254,6 +1287,63 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </ScrollView>
+
+        {/* Date Picker Modal */}
+        <Modal
+          visible={showDatePicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerModal}>
+            <View style={styles.datePickerCard}>
+              <View style={styles.datePickerHeader}>
+                <Text style={styles.datePickerTitle}>Select Date of Birth</Text>
+                <TouchableOpacity
+                  onPress={() => setShowDatePicker(false)}
+                  style={styles.datePickerCloseButton}
+                >
+                  <X size={24} color={colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={selectedDate || new Date(2000, 0, 1)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event, date) => {
+                  if (date && event.type !== 'dismissed') {
+                    const formattedDate = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                    setDateOfBirth(formattedDate);
+                    setSelectedDate(date);
+                    if (Platform.OS === 'android') {
+                      setShowDatePicker(false);
+                    }
+                  }
+                  if (Platform.OS === 'ios' && event.type === 'dismissed') {
+                    setShowDatePicker(false);
+                  }
+                }}
+                maximumDate={new Date()}
+              />
+              {Platform.OS === 'ios' && (
+                <View style={styles.datePickerActions}>
+                  <TouchableOpacity
+                    style={styles.datePickerCancelButton}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.datePickerCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.datePickerConfirmButton}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.datePickerConfirmText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -1553,5 +1643,87 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
     lineHeight: 18,
+  },
+  dateInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateInput: {
+    flex: 1,
+  },
+  calendarButton: {
+    padding: 8,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  dateHelperText: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  datePickerModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  datePickerCloseButton: {
+    padding: 4,
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  datePickerCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  datePickerCancelText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    fontWeight: '600' as const,
+  },
+  datePickerConfirmButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  datePickerConfirmText: {
+    fontSize: 16,
+    color: colors.text.white,
+    fontWeight: '600' as const,
   },
 });
