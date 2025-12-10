@@ -23,12 +23,13 @@ import {
   ArrowRight,
   Sparkles,
 } from 'lucide-react-native';
-import colors from '@/constants/colors';
+import { useColors } from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 
 export default function LandingScreen() {
   const router = useRouter();
   const { currentUser } = useApp();
+  const colors = useColors();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
