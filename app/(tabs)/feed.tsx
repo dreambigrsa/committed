@@ -30,10 +30,12 @@ const { width } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { currentUser, posts, toggleLike, getComments, getActiveAds, recordAdImpression, recordAdClick, addComment, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
+  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [viewedAds, setViewedAds] = useState<Set<string>>(new Set());
+  const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
+  const [personalizedPosts, setPersonalizedPosts] = useState<Post[]>([]);
   const [showPostMenu, setShowPostMenu] = useState<string | null>(null);
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>('');
@@ -52,6 +54,33 @@ export default function FeedScreen() {
       useNativeDriver: true,
     }).start();
   }, [fadeAnim]);
+
+  // Load personalized feed and smart ads
+  useEffect(() => {
+    if (posts.length > 0) {
+      const personalized = getPersonalizedFeed(posts, 50);
+      setPersonalizedPosts(personalized);
+    } else {
+      setPersonalizedPosts([]);
+    }
+  }, [posts, getPersonalizedFeed]);
+
+  useEffect(() => {
+    const loadSmartAds = async () => {
+      try {
+        const ads = await getSmartAds('feed', Array.from(viewedAds), 20);
+        setSmartAds(ads);
+      } catch (error) {
+        console.error('Error loading smart ads:', error);
+        // Fallback to regular ads
+        const fallbackAds = getActiveAds('feed');
+        setSmartAds(fallbackAds.slice(0, 20));
+      }
+    };
+    if (currentUser) {
+      loadSmartAds();
+    }
+  }, [getSmartAds, getActiveAds, viewedAds, currentUser]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -1173,17 +1202,17 @@ export default function FeedScreen() {
             </Text>
           </Animated.View>
         ) : (
-          posts.map((post, index) => {
-            const ads = getActiveAds('feed');
-            // Improved ad distribution: show ad every 3 posts, rotating through available ads
-            // This ensures fair distribution across all active ads
-            const shouldShowAd = (index + 1) % 3 === 0 && ads.length > 0;
-            const adIndex = Math.floor(index / 3) % ads.length;
+          personalizedPosts.map((post, index) => {
+            // Smart ad distribution: show ad every 3 posts using smart algorithm
+            // Algorithm ensures rotation and avoids showing same ad repeatedly
+            const shouldShowAd = (index + 1) % 3 === 0 && smartAds.length > 0;
+            const adIndex = Math.floor(index / 3) % smartAds.length;
+            const ad = shouldShowAd ? smartAds[adIndex] : null;
             
             return (
               <React.Fragment key={post.id}>
                 {renderPost(post)}
-                {shouldShowAd && renderAd(ads[adIndex])}
+                {ad && renderAd(ad)}
               </React.Fragment>
             );
           })
