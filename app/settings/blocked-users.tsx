@@ -63,8 +63,8 @@ export default function BlockedUsersScreen() {
       }
 
       if (data) {
-        const formatted = data.map((item: any) => ({
-          id: item.blocked_id,
+        const formatted = data.map((item: any, index: number) => ({
+          id: item.blocked_id || `blocked-${index}`,
           blockedAt: item.created_at,
           ...(item.users || {}),
         }));
@@ -260,7 +260,7 @@ export default function BlockedUsersScreen() {
         ) : (
           <FlatList
             data={blockedUsers}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => item.id || `blocked-${index}`}
             renderItem={({ item }) => (
               <View style={[styles.userCard, { backgroundColor: colors.background.primary }]}>
                 <View style={styles.userLeft}>
