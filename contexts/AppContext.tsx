@@ -217,6 +217,10 @@ export const [AppContext, useApp] = createContextHook(() => {
           verifiedDate: r.verified_date,
           endDate: r.end_date,
           privacyLevel: r.privacy_level,
+          partnerFacePhoto: r.partner_face_photo,
+          partnerDateOfBirthMonth: r.partner_date_of_birth_month,
+          partnerDateOfBirthYear: r.partner_date_of_birth_year,
+          partnerCity: r.partner_city,
         }));
         setRelationships(formattedRelationships);
       }
@@ -671,7 +675,11 @@ export const [AppContext, useApp] = createContextHook(() => {
     partnerName: string,
     partnerPhone: string,
     type: Relationship['type'],
-    partnerUserId?: string
+    partnerUserId?: string,
+    partnerFacePhoto?: string,
+    partnerDateOfBirthMonth?: number,
+    partnerDateOfBirthYear?: number,
+    partnerCity?: string
   ) => {
     if (!currentUser) return null;
     
@@ -761,6 +769,10 @@ export const [AppContext, useApp] = createContextHook(() => {
           type,
           status: 'pending',
           privacy_level: 'public',
+          partner_face_photo: partnerFacePhoto,
+          partner_date_of_birth_month: partnerDateOfBirthMonth,
+          partner_date_of_birth_year: partnerDateOfBirthYear,
+          partner_city: partnerCity,
         })
         .select()
         .single();
@@ -790,6 +802,10 @@ export const [AppContext, useApp] = createContextHook(() => {
         status: 'pending',
         startDate: relationshipData.start_date,
         privacyLevel: 'public',
+        partnerFacePhoto: relationshipData.partner_face_photo,
+        partnerDateOfBirthMonth: relationshipData.partner_date_of_birth_month,
+        partnerDateOfBirthYear: relationshipData.partner_date_of_birth_year,
+        partnerCity: relationshipData.partner_city,
       };
 
       setRelationships([...relationships, newRelationship]);
