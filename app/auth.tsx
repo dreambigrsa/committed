@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useColors } from '@/constants/colors';
+import defaultColors from '@/constants/colors';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -265,7 +266,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -302,12 +303,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     borderRadius: 12,
     padding: 4,
     marginBottom: 32,
@@ -328,15 +329,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
   },
   tabText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
   },
   activeTabText: {
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   inputGroup: {
     marginBottom: 20,
@@ -344,21 +345,21 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: defaultColors.border.light,
   },
   authButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -370,11 +371,11 @@ const styles = StyleSheet.create({
   authButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   disclaimer: {
     fontSize: 12,
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
     textAlign: 'center',
     lineHeight: 18,
     marginTop: 20,
@@ -386,17 +387,17 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   resetTitle: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   resetSubtitle: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
