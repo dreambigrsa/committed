@@ -25,6 +25,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useApp } from '@/contexts/AppContext';
+import colors from '@/constants/colors';
 
 export default function LandingScreen() {
   const router = useRouter();
