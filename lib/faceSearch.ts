@@ -332,25 +332,79 @@ export async function searchByFace(
     }
 
     // Step 2: Get all relationships with face photos
-    const { data: relationships, error } = await supabase.rpc(
+    // Try to get from stored procedure first (includes embeddings), 
+    // but if that fails or returns empty, query relationships directly
+    let relationships: any[] = [];
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
       'get_relationships_for_face_search'
     );
 
-    if (error) throw error;
+    if (rpcError || !rpcData || rpcData.length === 0) {
+      // If RPC fails or returns empty (e.g., no embeddings stored), 
+      // query relationships directly
+      console.warn('No embeddings found or RPC failed, querying relationships directly');
+      const { data: relData, error: relError } = await supabase
+        .from('relationships')
+        .select(`
+          id as relationship_id,
+          partner_name,
+          partner_phone,
+          partner_user_id,
+          type as relationship_type,
+          status as relationship_status,
+          user_id,
+          partner_face_photo as face_photo_url,
+          users!relationships_user_id_fkey(full_name as user_name, phone_number as user_phone)
+        `)
+        .not('partner_face_photo', 'is', null)
+        .neq('partner_face_photo', '');
+
+      if (relError) {
+        console.error('Error querying relationships:', relError);
+        // Continue with empty array rather than throwing
+      } else if (relData) {
+        relationships = relData.map((rel: any) => ({
+          ...rel,
+          face_service_id: null, // Will be re-detected
+          user_name: rel.users?.user_name || '',
+          user_phone: rel.users?.user_phone || '',
+        }));
+      }
+    } else {
+      relationships = rpcData;
+    }
 
     // Step 3: Compare with stored faces using face recognition service
     const matches: FaceMatch[] = [];
     
     for (const rel of relationships || []) {
-      if (!rel.face_service_id || !rel.face_photo_url) continue;
+      if (!rel.face_photo_url) continue;
 
-      // Compare faces using the active provider
-      const similarity = await compareFaces(
-        inputFaceId,
-        rel.face_service_id,
-        rel.face_photo_url,
-        provider
-      );
+      // For Azure Face API, face IDs expire after 24 hours
+      // If we have a stored face_service_id, try using it, but if it fails, re-detect from image
+      let similarity = 0;
+      
+      if (rel.face_service_id && provider.provider_type !== 'azure_face') {
+        // For non-Azure providers, use stored face ID
+        similarity = await compareFaces(
+          inputFaceId,
+          rel.face_service_id,
+          rel.face_photo_url,
+          provider
+        );
+      } else {
+        // For Azure or when no stored ID, re-detect face from image and compare
+        // This handles both missing embeddings and expired Azure face IDs
+        const targetFaceId = await extractFaceFeatures(rel.face_photo_url);
+        if (targetFaceId) {
+          similarity = await compareFaces(
+            inputFaceId,
+            targetFaceId,
+            rel.face_photo_url,
+            provider
+          );
+        }
+      }
       
       if (similarity >= similarityThreshold) {
         matches.push({
@@ -392,7 +446,7 @@ async function compareFaces(
       case 'aws_rekognition':
         return await compareFacesAWS(faceId1, faceId2, targetImageUrl, provider);
       case 'azure_face':
-        return await compareFacesAzure(faceId1, faceId2, provider);
+        return await compareFacesAzure(faceId1, faceId2, targetImageUrl, provider);
       case 'google_vision':
         return await compareFacesGoogle(faceId1, faceId2, targetImageUrl, provider);
       case 'custom':
@@ -456,10 +510,12 @@ async function compareFacesAWS(
 
 /**
  * Compare faces using Azure Face API
+ * Note: Azure Face IDs expire after 24 hours, so we need to re-detect faces from images
  */
 async function compareFacesAzure(
   faceId1: string,
   faceId2: string,
+  targetImageUrl: string,
   provider: FaceMatchingProvider
 ): Promise<number> {
   try {
@@ -468,6 +524,47 @@ async function compareFacesAzure(
     }
 
     const endpoint = provider.azure_endpoint.replace(/\/$/, '');
+    
+    // Azure Face IDs expire after 24 hours, so we need to re-detect the target face
+    // First, detect face in target image
+    const detectUrl = `${endpoint}/face/v1.0/detect?returnFaceId=true&returnFaceAttributes=`;
+    
+    // Fetch and convert target image
+    const targetResponse = await fetch(targetImageUrl);
+    const targetBlob = await targetResponse.blob();
+    const reader = new FileReader();
+    const targetBase64 = await new Promise<string>((resolve, reject) => {
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(targetBlob);
+    });
+    
+    const base64Data = targetBase64.includes(',') ? targetBase64.split(',')[1] : targetBase64;
+    const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+    const detectResponse = await fetch(detectUrl, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': provider.azure_subscription_key,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: imageBytes,
+    });
+
+    if (!detectResponse.ok) {
+      const errorText = await detectResponse.text();
+      throw new Error(`Azure Face API detect error: ${detectResponse.status} - ${errorText}`);
+    }
+
+    const detectedFaces = await detectResponse.json();
+    if (!detectedFaces || detectedFaces.length === 0 || !detectedFaces[0].faceId) {
+      console.warn('No face detected in target image');
+      return 0;
+    }
+
+    const targetFaceId = detectedFaces[0].faceId;
+
+    // Now compare using findsimilars
     const url = `${endpoint}/face/v1.0/findsimilars`;
 
     const response = await fetch(url, {
@@ -478,7 +575,7 @@ async function compareFacesAzure(
       },
       body: JSON.stringify({
         faceId: faceId1,
-        faceIds: [faceId2],
+        faceIds: [targetFaceId],
         maxNumOfCandidatesReturned: 1,
         mode: 'matchPerson',
       }),
@@ -486,6 +583,12 @@ async function compareFacesAzure(
 
     if (!response.ok) {
       const errorText = await response.text();
+      // If faceId1 is expired, try to re-detect from source as well
+      if (response.status === 400 || response.status === 404) {
+        console.warn('Source face ID may be expired, attempting to re-detect');
+        // For now, return 0 - the caller should handle this by re-extracting
+        return 0;
+      }
       throw new Error(`Azure Face API error: ${response.status} - ${errorText}`);
     }
 
@@ -632,6 +735,90 @@ export async function storeFaceEmbedding(
   } catch (error) {
     console.error('Error storing face embedding:', error);
     return false;
+  }
+}
+
+/**
+ * Regenerate face embeddings for all existing relationships that have face photos
+ * This is useful when:
+ * - A face matching provider is activated after relationships already exist
+ * - Face embeddings need to be updated after changing providers
+ * - Face embeddings are missing or corrupted
+ */
+export async function regenerateAllFaceEmbeddings(): Promise<{
+  success: number;
+  failed: number;
+  errors: string[];
+}> {
+  const results = {
+    success: 0,
+    failed: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    const provider = await getActiveProvider();
+    
+    if (!provider) {
+      throw new Error('No active face matching provider configured');
+    }
+
+    // Get all relationships with face photos but no embeddings, or all relationships with face photos
+    const { data: relationships, error } = await supabase
+      .from('relationships')
+      .select('id, partner_face_photo, partner_name, partner_phone')
+      .not('partner_face_photo', 'is', null)
+      .neq('partner_face_photo', '');
+
+    if (error) throw error;
+
+    if (!relationships || relationships.length === 0) {
+      return results;
+    }
+
+    console.log(`Regenerating face embeddings for ${relationships.length} relationships...`);
+
+    // Process relationships in batches to avoid overwhelming the API
+    const batchSize = 5;
+    for (let i = 0; i < relationships.length; i += batchSize) {
+      const batch = relationships.slice(i, i + batchSize);
+      
+      await Promise.all(
+        batch.map(async (rel) => {
+          try {
+            if (!rel.partner_face_photo) {
+              results.failed++;
+              return;
+            }
+
+            const success = await storeFaceEmbedding(rel.id, rel.partner_face_photo);
+            if (success) {
+              results.success++;
+            } else {
+              results.failed++;
+              results.errors.push(`Failed to store embedding for relationship ${rel.id}`);
+            }
+          } catch (error: any) {
+            results.failed++;
+            results.errors.push(
+              `Error processing relationship ${rel.id}: ${error?.message || 'Unknown error'}`
+            );
+            console.error(`Error processing relationship ${rel.id}:`, error);
+          }
+        })
+      );
+
+      // Small delay between batches to avoid rate limiting
+      if (i + batchSize < relationships.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    console.log(`Regeneration complete: ${results.success} succeeded, ${results.failed} failed`);
+    return results;
+  } catch (error: any) {
+    console.error('Error regenerating face embeddings:', error);
+    throw error;
   }
 }
 
