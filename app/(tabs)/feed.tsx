@@ -12,15 +12,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2 } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2, Image as ImageIcon } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +37,8 @@ export default function FeedScreen() {
   const [showPostMenu, setShowPostMenu] = useState<string | null>(null);
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>('');
+  const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
+  const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -467,6 +473,52 @@ export default function FeedScreen() {
     saveButtonText: {
       color: colors.text.white,
     },
+    saveButtonDisabled: {
+      opacity: 0.6,
+    },
+    editMediaContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    editMediaWrapper: {
+      position: 'relative',
+      width: 80,
+      height: 80,
+    },
+    editMediaImage: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 8,
+    },
+    editRemoveButton: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      borderRadius: 12,
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addMediaButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      backgroundColor: colors.background.secondary,
+      borderRadius: 8,
+      alignSelf: 'flex-start',
+      marginBottom: 12,
+    },
+    addMediaText: {
+      fontSize: 14,
+      fontWeight: '600' as const,
+      color: colors.primary,
+    },
   }), [colors]);
 
   if (!currentUser) {
@@ -591,23 +643,116 @@ export default function FeedScreen() {
     setShowPostMenu(null);
   };
 
+  const uploadMedia = async (uris: string[]): Promise<string[]> => {
+    const uploadedUrls: string[] = [];
+    
+    for (const uri of uris) {
+      try {
+        // Check if it's already a URL (existing media) or a local URI (new media)
+        if (uri.startsWith('http://') || uri.startsWith('https://')) {
+          uploadedUrls.push(uri);
+          continue;
+        }
+
+        // Determine file type
+        const isVideo = uri.includes('video') || uri.includes('.mp4') || uri.includes('.mov');
+        const fileName = isVideo 
+          ? `post_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`
+          : `post_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        const { error } = await supabase.storage
+          .from('media')
+          .upload(fileName, uint8Array, {
+            contentType: isVideo ? 'video/mp4' : 'image/jpeg',
+            upsert: false,
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('media')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrl);
+      } catch (error) {
+        console.error('Failed to upload media:', error);
+        throw error;
+      }
+    }
+    
+    return uploadedUrls;
+  };
+
   const handleEditPost = (post: Post) => {
     setEditingPost(post.id);
     setEditContent(post.content);
+    setEditMediaUrls([...post.mediaUrls]);
     setShowPostMenu(null);
+  };
+
+  const handlePickMedia = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'You need to allow access to your photos and videos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      videoMaxDuration: 60,
+    });
+
+    if (!result.canceled && result.assets) {
+      const urls = result.assets.map(asset => asset.uri);
+      setEditMediaUrls([...editMediaUrls, ...urls]);
+    }
+  };
+
+  const handleRemoveMedia = (index: number) => {
+    setEditMediaUrls(editMediaUrls.filter((_, i) => i !== index));
   };
 
   const handleSaveEdit = async (postId: string) => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
     
-    const success = await editPost(postId, editContent, post.mediaUrls, post.mediaType);
-    if (success) {
-      setEditingPost(null);
-      setEditContent('');
-      Alert.alert('Success', 'Post updated successfully');
-    } else {
-      Alert.alert('Error', 'Failed to update post');
+    setIsUploadingMedia(true);
+    try {
+      // Upload new media (local URIs) and keep existing media (URLs)
+      const uploadedMediaUrls = await uploadMedia(editMediaUrls);
+      
+      // Determine media type
+      const hasVideo = uploadedMediaUrls.some(url => url.includes('video') || url.includes('.mp4') || url.includes('.mov'));
+      const hasImage = uploadedMediaUrls.some(url => !url.includes('video') && !url.includes('.mp4') && !url.includes('.mov'));
+      let mediaType: 'image' | 'video' | 'mixed' = 'image';
+      if (hasVideo && hasImage) {
+        mediaType = 'mixed';
+      } else if (hasVideo) {
+        mediaType = 'video';
+      }
+      
+      const success = await editPost(postId, editContent, uploadedMediaUrls, mediaType);
+      if (success) {
+        setEditingPost(null);
+        setEditContent('');
+        setEditMediaUrls([]);
+        Alert.alert('Success', 'Post updated successfully');
+      } else {
+        Alert.alert('Error', 'Failed to update post');
+      }
+    } catch (error) {
+      console.error('Failed to save edit:', error);
+      Alert.alert('Error', 'Failed to upload media. Please try again.');
+    } finally {
+      setIsUploadingMedia(false);
     }
   };
 
@@ -748,21 +893,58 @@ export default function FeedScreen() {
               placeholder="Edit your post..."
               placeholderTextColor={colors.text.tertiary}
             />
+            
+            {editMediaUrls.length > 0 && (
+              <View style={styles.editMediaContainer}>
+                {editMediaUrls.map((url, index) => (
+                  <View key={index} style={styles.editMediaWrapper}>
+                    <Image
+                      source={{ uri: url }}
+                      style={styles.editMediaImage}
+                      contentFit="cover"
+                    />
+                    <TouchableOpacity
+                      style={styles.editRemoveButton}
+                      onPress={() => handleRemoveMedia(index)}
+                    >
+                      <X size={16} color={colors.text.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={styles.addMediaButton}
+              onPress={handlePickMedia}
+              disabled={isUploadingMedia}
+            >
+              <ImageIcon size={20} color={colors.primary} />
+              <Text style={styles.addMediaText}>Add/Change Media</Text>
+            </TouchableOpacity>
+
             <View style={styles.editActions}>
               <TouchableOpacity
                 style={[styles.editButton, styles.cancelButton]}
                 onPress={() => {
                   setEditingPost(null);
                   setEditContent('');
+                  setEditMediaUrls([]);
                 }}
+                disabled={isUploadingMedia}
               >
                 <Text style={styles.editButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.editButton, styles.saveButton]}
+                style={[styles.editButton, styles.saveButton, isUploadingMedia && styles.saveButtonDisabled]}
                 onPress={() => handleSaveEdit(post.id)}
+                disabled={isUploadingMedia}
               >
-                <Text style={[styles.editButtonText, styles.saveButtonText]}>Save</Text>
+                {isUploadingMedia ? (
+                  <ActivityIndicator size="small" color={colors.text.white} />
+                ) : (
+                  <Text style={[styles.editButtonText, styles.saveButtonText]}>Save</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -774,12 +956,6 @@ export default function FeedScreen() {
             {renderPostMedia(post)}
           </>
         )}
-
-        {post.content.length > 0 && (
-          <Text style={styles.postContent}>{post.content}</Text>
-        )}
-
-        {renderPostMedia(post)}
 
         <View style={styles.postActions}>
           <TouchableOpacity
