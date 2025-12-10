@@ -13,13 +13,11 @@ import {
 import { useRouter } from 'expo-router';
 import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
+import colors from '@/constants/colors';
 
 export default function AuthScreen() {
   const router = useRouter();
   const { currentUser, signup, login, resetPassword } = useApp();
-  const colors = useColors();
   const [isSignUp, setIsSignUp] = useState<boolean>(true);
   const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -266,7 +264,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -278,7 +276,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -303,12 +301,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -317,7 +315,7 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
     padding: 4,
     marginBottom: 32,
@@ -329,15 +327,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
   },
   tabText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   activeTabText: {
-    color: defaultColors.primary,
+    color: colors.primary,
   },
   inputGroup: {
     marginBottom: 20,
@@ -345,21 +343,21 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   authButton: {
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -371,11 +369,11 @@ const styles = StyleSheet.create({
   authButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   disclaimer: {
     fontSize: 12,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     textAlign: 'center',
     lineHeight: 18,
     marginTop: 20,
@@ -387,17 +385,17 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: defaultColors.primary,
+    color: colors.primary,
   },
   resetTitle: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 8,
   },
   resetSubtitle: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,

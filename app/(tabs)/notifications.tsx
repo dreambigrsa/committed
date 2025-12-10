@@ -11,8 +11,7 @@ import {
 
 import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
+import colors from '@/constants/colors';
 import { Notification, NotificationType } from '@/types';
 
 export default function NotificationsScreen() {
@@ -24,7 +23,6 @@ export default function NotificationsScreen() {
     cheatingAlerts,
     markNotificationAsRead,
   } = useApp();
-  const colors = useColors();
   const pendingRequests = getPendingRequests();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -249,7 +247,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
   },
   header: {
     paddingHorizontal: 20,
@@ -265,28 +263,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 24,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
   },
   activeTab: {
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
   },
   tabText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   activeTabText: {
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   title: {
     fontSize: 32,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   emptyContainer: {
     flex: 1,
@@ -297,13 +295,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 24,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -312,7 +310,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   requestCard: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 20,
     padding: 20,
     marginBottom: 12,
@@ -336,7 +334,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: defaultColors.badge.pending,
+    backgroundColor: colors.badge.pending,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -344,7 +342,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -355,20 +353,20 @@ const styles = StyleSheet.create({
   requestTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   requestText: {
     fontSize: 15,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 22,
   },
   requestName: {
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   requestDate: {
     fontSize: 13,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     marginTop: 4,
   },
   requestActions: {
@@ -385,23 +383,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   rejectButton: {
-    backgroundColor: defaultColors.text.tertiary,
+    backgroundColor: colors.text.tertiary,
   },
   rejectButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   acceptButton: {
-    backgroundColor: defaultColors.secondary,
+    backgroundColor: colors.secondary,
   },
   acceptButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   notificationCard: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
@@ -409,7 +407,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 14,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -417,12 +415,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   unreadNotification: {
-    backgroundColor: defaultColors.badge.pending,
-    borderColor: defaultColors.primary + '40',
+    backgroundColor: colors.badge.pending,
+    borderColor: colors.primary + '40',
     borderWidth: 2,
   },
   unreadIconContainer: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
   },
   notificationContent: {
     flex: 1,
@@ -431,27 +429,27 @@ const styles = StyleSheet.create({
   notificationTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   notificationText: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   unreadText: {
     fontWeight: '600' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   notificationTime: {
     fontSize: 12,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     marginTop: 2,
   },
   unreadDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     marginTop: 6,
   },
 });

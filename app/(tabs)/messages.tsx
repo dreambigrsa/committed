@@ -12,13 +12,11 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
+import colors from '@/constants/colors';
 
 export default function MessagesScreen() {
   const router = useRouter();
   const { currentUser, conversations } = useApp();
-  const colors = useColors();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -138,7 +136,7 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
   },
   header: {
     flexDirection: 'row',
@@ -146,14 +144,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   scrollContent: {
     paddingBottom: 100,
@@ -168,13 +166,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 24,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 24,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -184,9 +182,9 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   conversationLeft: {
     position: 'relative',
@@ -200,20 +198,20 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   unreadBadge: {
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: defaultColors.danger,
+    backgroundColor: colors.danger,
     borderRadius: 12,
     minWidth: 24,
     height: 24,
@@ -221,12 +219,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
     borderWidth: 2,
-    borderColor: defaultColors.background.primary,
+    borderColor: colors.background.primary,
   },
   unreadBadgeText: {
     fontSize: 12,
     fontWeight: '800' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   conversationContent: {
     flex: 1,
@@ -240,20 +238,20 @@ const styles = StyleSheet.create({
   participantName: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   timestamp: {
     fontSize: 13,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     fontWeight: '500' as const,
   },
   lastMessage: {
     fontSize: 15,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   lastMessageUnread: {
     fontWeight: '600' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
 });

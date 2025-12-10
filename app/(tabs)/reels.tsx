@@ -13,8 +13,7 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
+import colors from '@/constants/colors';
 import { Reel } from '@/types';
 
 const { width, height } = Dimensions.get('window');
@@ -22,7 +21,6 @@ const { width, height } = Dimensions.get('window');
 export default function ReelsScreen() {
   const router = useRouter();
   const { currentUser, reels, toggleReelLike } = useApp();
-  const colors = useColors();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
@@ -219,7 +217,7 @@ export default function ReelsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.text.primary,
+    backgroundColor: colors.text.primary,
   },
   scrollView: {
     flex: 1,
@@ -258,34 +256,34 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 2,
-    borderColor: defaultColors.text.white,
+    borderColor: colors.text.white,
   },
   avatarPlaceholder: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: defaultColors.text.white,
+    borderColor: colors.text.white,
   },
   avatarPlaceholderText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   userName: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   caption: {
     fontSize: 14,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     lineHeight: 20,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
@@ -310,13 +308,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   actionIconContainerActive: {
-    backgroundColor: defaultColors.danger,
-    borderColor: defaultColors.text.white,
+    backgroundColor: colors.danger,
+    borderColor: colors.text.white,
   },
   actionCount: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
@@ -336,7 +334,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
@@ -349,10 +347,10 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: defaultColors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
@@ -363,19 +361,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
   },
   emptyTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 24,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyText: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
@@ -384,12 +382,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 28,
     paddingVertical: 16,
     borderRadius: 14,
     marginBottom: 24,
-    shadowColor: defaultColors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -398,11 +396,11 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   emptyNote: {
     fontSize: 13,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     textAlign: 'center',
     lineHeight: 18,
     fontStyle: 'italic' as const,
@@ -415,12 +413,12 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: defaultColors.border.light,
+    borderBottomColor: colors.border.light,
   },
   emptyHeaderTitle: {
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     textShadowColor: 'transparent',
   },
   emptyCreateButton: {
@@ -430,10 +428,10 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: defaultColors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

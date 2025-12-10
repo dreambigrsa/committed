@@ -13,13 +13,11 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Shield, Heart, CheckCircle2, Clock, Plus, AlertCircle, Award, Calendar, Settings } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
+import colors from '@/constants/colors';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { currentUser, isLoading, getCurrentUserRelationship, getPendingRequests } = useApp();
-  const colors = useColors();
   const relationship = getCurrentUserRelationship();
   const pendingRequests = getPendingRequests();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -416,7 +414,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
   },
   loadingContainer: {
     flex: 1,
@@ -426,7 +424,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500' as const,
   },
   scrollContent: {
@@ -442,12 +440,12 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   name: {
     fontSize: 32,
     fontWeight: '800' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 4,
   },
   avatarContainer: {
@@ -469,14 +467,14 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlaceholderText: {
     fontSize: 22,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   notificationBanner: {
     marginHorizontal: 20,
@@ -485,11 +483,11 @@ const styles = StyleSheet.create({
   notificationBannerInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: defaultColors.badge.pending,
+    backgroundColor: colors.badge.pending,
     padding: 16,
     borderRadius: 16,
     gap: 12,
-    shadowColor: defaultColors.accent,
+    shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -498,11 +496,11 @@ const styles = StyleSheet.create({
   notificationText: {
     flex: 1,
     fontSize: 14,
-    color: defaultColors.badge.pendingText,
+    color: colors.badge.pendingText,
     fontWeight: '600' as const,
   },
   card: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 20,
@@ -527,21 +525,21 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '600' as const,
   },
   cardLink: {
     fontSize: 14,
-    color: defaultColors.primary,
+    color: colors.primary,
     fontWeight: '600' as const,
   },
   verificationProgress: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     marginBottom: 20,
   },
   relationshipStatus: {
@@ -555,7 +553,7 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '600' as const,
   },
   statusBadge: {
@@ -567,24 +565,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   statusBadgeVerified: {
-    backgroundColor: defaultColors.badge.verified,
+    backgroundColor: colors.badge.verified,
   },
   statusBadgePending: {
-    backgroundColor: defaultColors.badge.pending,
+    backgroundColor: colors.badge.pending,
   },
   statusBadgeText: {
     fontSize: 13,
     fontWeight: '600' as const,
   },
   statusBadgeTextVerified: {
-    color: defaultColors.badge.verifiedText,
+    color: colors.badge.verifiedText,
   },
   statusBadgeTextPending: {
-    color: defaultColors.badge.pendingText,
+    color: colors.badge.pendingText,
   },
   divider: {
     height: 1,
-    backgroundColor: defaultColors.border.light,
+    backgroundColor: colors.border.light,
     marginBottom: 24,
   },
   relationshipDetails: {
@@ -596,27 +594,27 @@ const styles = StyleSheet.create({
   partnerName: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   relationshipType: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     marginBottom: 8,
   },
   relationshipDate: {
     fontSize: 14,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
   },
   pendingNote: {
     marginTop: 20,
     padding: 12,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 8,
   },
   pendingNoteText: {
     fontSize: 13,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -627,13 +625,13 @@ const styles = StyleSheet.create({
   noRelationshipTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   noRelationshipText: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -643,11 +641,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 14,
-    shadowColor: defaultColors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -656,7 +654,7 @@ const styles = StyleSheet.create({
   registerButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   verificationList: {
     gap: 16,
@@ -675,43 +673,43 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   verificationIconVerified: {
-    backgroundColor: defaultColors.badge.verified,
+    backgroundColor: colors.badge.verified,
   },
   verificationLabel: {
     fontSize: 15,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     fontWeight: '500' as const,
   },
   verifiedText: {
     fontSize: 13,
-    color: defaultColors.secondary,
+    color: colors.secondary,
     fontWeight: '600' as const,
   },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 18,
   },
   actionsCard: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 20,
@@ -725,7 +723,7 @@ const styles = StyleSheet.create({
   actionsTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 16,
   },
   actionsGrid: {
@@ -734,34 +732,34 @@ const styles = StyleSheet.create({
   },
   actionItem: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   actionIconContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   adminCard: {
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 20,
     padding: 24,
-    shadowColor: defaultColors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -776,7 +774,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: defaultColors.text.white,
+    backgroundColor: colors.text.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -786,12 +784,12 @@ const styles = StyleSheet.create({
   adminCardTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     marginBottom: 4,
   },
   adminCardSubtitle: {
     fontSize: 14,
-    color: defaultColors.text.white,
+    color: colors.text.white,
     opacity: 0.9,
   },
 });

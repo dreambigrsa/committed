@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import { Search as SearchIcon, CheckCircle2, X, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useColors } from '@/constants/colors';
-import defaultColors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SearchScreen() {
@@ -394,7 +393,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: defaultColors.background.secondary,
+    backgroundColor: colors.background.secondary,
   },
   header: {
     paddingHorizontal: 20,
@@ -404,12 +403,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   searchContainer: {
     paddingHorizontal: 20,
@@ -418,7 +417,7 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -427,7 +426,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   clearButton: {
     padding: 4,
@@ -441,13 +440,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
     marginTop: 20,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 15,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -459,7 +458,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
@@ -479,14 +478,14 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   userAvatarText: {
     fontSize: 24,
     fontWeight: '600' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   userInfo: {
     flex: 1,
@@ -501,16 +500,16 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: defaultColors.text.primary,
+    color: colors.text.primary,
   },
   username: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     fontStyle: 'italic',
   },
   phoneNumber: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     marginTop: 2,
     marginBottom: 4,
   },
@@ -518,7 +517,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   nonRegisteredBadge: {
-    backgroundColor: defaultColors.accent + '30',
+    backgroundColor: colors.accent + '30',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -527,21 +526,21 @@ const styles = StyleSheet.create({
   nonRegisteredText: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: defaultColors.accent,
+    color: colors.accent,
   },
   relationshipInfo: {
     fontSize: 14,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   noRelationship: {
     fontSize: 14,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     fontStyle: 'italic' as const,
   },
   verifiedBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: defaultColors.badge.verified,
+    backgroundColor: colors.badge.verified,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -550,7 +549,7 @@ const styles = StyleSheet.create({
   verifiedBadgeText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: defaultColors.badge.verifiedText,
+    color: colors.badge.verifiedText,
   },
   searchModeContainer: {
     flexDirection: 'row',
@@ -566,45 +565,45 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderWidth: 1,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
   },
   searchModeButtonActive: {
-    backgroundColor: defaultColors.primary,
-    borderColor: defaultColors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   searchModeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: defaultColors.text.secondary,
+    color: colors.text.secondary,
   },
   searchModeTextActive: {
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   faceSearchContainer: {
     marginBottom: 0,
   },
   faceSearchButton: {
-    backgroundColor: defaultColors.background.primary,
+    backgroundColor: colors.background.primary,
     borderRadius: 12,
     paddingVertical: 32,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: defaultColors.border.light,
+    borderColor: colors.border.light,
     borderStyle: 'dashed',
   },
   faceSearchButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: defaultColors.primary,
+    color: colors.primary,
     marginTop: 12,
   },
   faceSearchHint: {
     fontSize: 13,
-    color: defaultColors.text.tertiary,
+    color: colors.text.tertiary,
     marginTop: 4,
   },
   faceSearchPreview: {
@@ -612,7 +611,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: defaultColors.primary,
+    borderColor: colors.primary,
   },
   faceSearchImage: {
     width: '100%',
@@ -622,7 +621,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: defaultColors.danger,
+    backgroundColor: colors.danger,
     borderRadius: 20,
     width: 36,
     height: 36,
@@ -634,7 +633,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: defaultColors.primary,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -644,11 +643,11 @@ const styles = StyleSheet.create({
   searchPhotoButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: defaultColors.text.white,
+    color: colors.text.white,
   },
   similarityScore: {
     fontSize: 12,
-    color: defaultColors.secondary,
+    color: colors.secondary,
     fontWeight: '600' as const,
     marginTop: 4,
   },
