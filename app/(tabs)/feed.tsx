@@ -39,6 +39,8 @@ export default function FeedScreen() {
   const [editContent, setEditContent] = useState<string>('');
   const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
+  const [viewingImages, setViewingImages] = useState<{ urls: string[]; index: number } | null>(null);
+  const imageViewerScrollRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -519,6 +521,51 @@ export default function FeedScreen() {
       fontWeight: '600' as const,
       color: colors.primary,
     },
+    imageViewerContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.95)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerCloseButton: {
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      zIndex: 10,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerScroll: {
+      flex: 1,
+    },
+    imageViewerItem: {
+      width: Dimensions.get('window').width,
+      height: Dimensions.get('window').height,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerImage: {
+      width: Dimensions.get('window').width,
+      height: Dimensions.get('window').height,
+    },
+    imageViewerIndicator: {
+      position: 'absolute',
+      bottom: 50,
+      alignSelf: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+    },
+    imageViewerIndicatorText: {
+      color: colors.text.white,
+      fontSize: 14,
+      fontWeight: '600' as const,
+    },
   }), [colors]);
 
   if (!currentUser) {
@@ -540,12 +587,22 @@ export default function FeedScreen() {
     return date.toLocaleDateString();
   };
 
+  const isVideo = (url: string) => {
+    return url.includes('.mp4') || url.includes('.mov') || url.includes('video');
+  };
+
+  const handleImagePress = (post: Post, index: number) => {
+    // Filter out videos, only show images in viewer
+    const imageUrls = post.mediaUrls.filter(url => !isVideo(url));
+    if (imageUrls.length > 0) {
+      // Find the index in the filtered array
+      const imageIndex = post.mediaUrls.slice(0, index + 1).filter(url => !isVideo(url)).length - 1;
+      setViewingImages({ urls: imageUrls, index: Math.max(0, imageIndex) });
+    }
+  };
+
   const renderPostMedia = (post: Post) => {
     if (post.mediaUrls.length === 0) return null;
-
-    const isVideo = (url: string) => {
-      return url.includes('.mp4') || url.includes('.mov') || url.includes('video');
-    };
 
     return (
       <ScrollView
@@ -568,12 +625,17 @@ export default function FeedScreen() {
             );
           }
           return (
-            <Image
+            <TouchableOpacity
               key={index}
-              source={{ uri: url }}
-              style={styles.postImage}
-              contentFit="cover"
-            />
+              activeOpacity={0.9}
+              onPress={() => handleImagePress(post, index)}
+            >
+              <Image
+                source={{ uri: url }}
+                style={styles.postImage}
+                contentFit="cover"
+              />
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
@@ -1055,6 +1117,56 @@ export default function FeedScreen() {
           })
         )}
       </ScrollView>
+
+      {/* Full-screen Image Viewer Modal */}
+      {viewingImages && (
+        <Modal
+          visible={!!viewingImages}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setViewingImages(null)}
+        >
+          <View style={styles.imageViewerContainer}>
+            <TouchableOpacity
+              style={styles.imageViewerCloseButton}
+              onPress={() => setViewingImages(null)}
+            >
+              <X size={24} color={colors.text.white} />
+            </TouchableOpacity>
+            
+            <ScrollView
+              ref={imageViewerScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(event) => {
+                const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+                setViewingImages(prev => prev ? { ...prev, index: newIndex } : null);
+              }}
+              style={styles.imageViewerScroll}
+              contentOffset={{ x: viewingImages.index * Dimensions.get('window').width, y: 0 }}
+            >
+              {viewingImages.urls.map((url, index) => (
+                <View key={index} style={styles.imageViewerItem}>
+                  <Image
+                    source={{ uri: url }}
+                    style={styles.imageViewerImage}
+                    contentFit="contain"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            
+            {viewingImages.urls.length > 1 && (
+              <View style={styles.imageViewerIndicator}>
+                <Text style={styles.imageViewerIndicatorText}>
+                  {viewingImages.index + 1} / {viewingImages.urls.length}
+                </Text>
+              </View>
+            )}
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
