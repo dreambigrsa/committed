@@ -1,8 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, Appearance } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import createContextHook from '@nkzw/create-context-hook';
 import { updateGlobalColors } from '@/constants/colors';
+
+// Initialize colors immediately based on system preference
+// This ensures colors is always available, even before the context mounts
+try {
+  const systemColorScheme = Appearance.getColorScheme();
+  updateGlobalColors(systemColorScheme === 'dark');
+} catch {
+  // If Appearance is not available, default to light
+  updateGlobalColors(false);
+}
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
