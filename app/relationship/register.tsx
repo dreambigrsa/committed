@@ -12,10 +12,12 @@ import {
   Animated,
   FlatList,
   Alert,
+  Modal,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Heart, X, Search, CheckCircle2, Camera, Upload } from 'lucide-react-native';
+import { Heart, X, Search, CheckCircle2, Camera, Upload, Calendar } from 'lucide-react-native';
 import { Image } from 'expo-image';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
@@ -69,6 +71,8 @@ export default function RegisterRelationshipScreen() {
     partnerCity: '',
   });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const handleSearch = async (text: string) => {
     setSearchQuery(text);
@@ -476,41 +480,75 @@ export default function RegisterRelationshipScreen() {
                 <View style={styles.optionalSection}>
                   <Text style={styles.optionalSectionTitle}>Optional Information</Text>
                   
-                  <View style={styles.dateOfBirthRow}>
-                    <View style={styles.dateInputGroup}>
-                      <Text style={styles.label}>Birth Month (Optional)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="MM"
-                        placeholderTextColor={colors.text.tertiary}
-                        value={formData.partnerDateOfBirthMonth}
-                        onChangeText={(text) => {
-                          const num = text.replace(/[^0-9]/g, '');
-                          if (num === '' || (parseInt(num, 10) >= 1 && parseInt(num, 10) <= 12)) {
-                            setFormData({ ...formData, partnerDateOfBirthMonth: num });
-                          }
-                        }}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                      />
+                  <View style={styles.dateOfBirthSection}>
+                    <Text style={styles.label}>Date of Birth (Optional)</Text>
+                    <View style={styles.dateOfBirthRow}>
+                      <View style={styles.dateInputGroup}>
+                        <Text style={styles.dateInputLabel}>Month</Text>
+                        <View style={styles.dateInputContainer}>
+                          <TextInput
+                            style={styles.dateInput}
+                            placeholder="MM"
+                            placeholderTextColor={colors.text.tertiary}
+                            value={formData.partnerDateOfBirthMonth}
+                            onChangeText={(text) => {
+                              const num = text.replace(/[^0-9]/g, '');
+                              if (num === '' || (parseInt(num, 10) >= 1 && parseInt(num, 10) <= 12)) {
+                                setFormData({ ...formData, partnerDateOfBirthMonth: num });
+                              }
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            editable={true}
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.dateInputGroup}>
+                        <Text style={styles.dateInputLabel}>Year</Text>
+                        <View style={styles.dateInputContainer}>
+                          <TextInput
+                            style={styles.dateInput}
+                            placeholder="YYYY"
+                            placeholderTextColor={colors.text.tertiary}
+                            value={formData.partnerDateOfBirthYear}
+                            onChangeText={(text) => {
+                              const num = text.replace(/[^0-9]/g, '');
+                              const currentYear = new Date().getFullYear();
+                              if (num === '' || (parseInt(num, 10) >= 1900 && parseInt(num, 10) <= currentYear)) {
+                                setFormData({ ...formData, partnerDateOfBirthYear: num });
+                              }
+                            }}
+                            keyboardType="number-pad"
+                            maxLength={4}
+                            editable={true}
+                          />
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.dateInputGroup}>
-                      <Text style={styles.label}>Birth Year (Optional)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="YYYY"
-                        placeholderTextColor={colors.text.tertiary}
-                        value={formData.partnerDateOfBirthYear}
-                        onChangeText={(text) => {
-                          const num = text.replace(/[^0-9]/g, '');
-                          if (num === '' || (parseInt(num, 10) >= 1900 && parseInt(num, 10) <= new Date().getFullYear() + 1)) {
-                            setFormData({ ...formData, partnerDateOfBirthYear: num });
-                          }
-                        }}
-                        keyboardType="number-pad"
-                        maxLength={4}
-                      />
-                    </View>
+                    <TouchableOpacity
+                      style={styles.calendarButtonLarge}
+                      onPress={() => {
+                        // Initialize date picker with existing values if available
+                        const existingDate = new Date();
+                        if (formData.partnerDateOfBirthMonth && formData.partnerDateOfBirthYear) {
+                          existingDate.setMonth(parseInt(formData.partnerDateOfBirthMonth, 10) - 1);
+                          existingDate.setFullYear(parseInt(formData.partnerDateOfBirthYear, 10));
+                          existingDate.setDate(1); // Set to first of month
+                        } else {
+                          existingDate.setFullYear(2000);
+                          existingDate.setMonth(0);
+                          existingDate.setDate(1);
+                        }
+                        setSelectedDate(existingDate);
+                        setShowDatePicker(true);
+                      }}
+                    >
+                      <Calendar size={20} color={colors.primary} />
+                      <Text style={styles.calendarButtonText}>Use Calendar</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.dateHelperText}>
+                      Type the month and year, or use the calendar to select a date
+                    </Text>
                   </View>
 
                   <Text style={styles.label}>City/Location (Optional)</Text>
@@ -589,6 +627,69 @@ export default function RegisterRelationshipScreen() {
               </TouchableOpacity>
             )}
           </Animated.View>
+
+          {/* Date Picker Modal */}
+          <Modal
+            visible={showDatePicker}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowDatePicker(false)}
+          >
+            <View style={styles.datePickerModal}>
+              <View style={styles.datePickerCard}>
+                <View style={styles.datePickerHeader}>
+                  <Text style={styles.datePickerTitle}>Select Date of Birth</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowDatePicker(false)}
+                    style={styles.datePickerCloseButton}
+                  >
+                    <X size={24} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={selectedDate || new Date(2000, 0, 1)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, date) => {
+                    if (date && event.type !== 'dismissed') {
+                      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                      const year = date.getFullYear().toString();
+                      setFormData({ 
+                        ...formData, 
+                        partnerDateOfBirthMonth: month,
+                        partnerDateOfBirthYear: year
+                      });
+                      setSelectedDate(date);
+                      if (Platform.OS === 'android') {
+                        setShowDatePicker(false);
+                      }
+                    }
+                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
+                      setShowDatePicker(false);
+                    }
+                  }}
+                  minimumDate={new Date(1900, 0, 1)}
+                  maximumDate={new Date()}
+                />
+                {Platform.OS === 'ios' && (
+                  <View style={styles.datePickerActions}>
+                    <TouchableOpacity
+                      style={styles.datePickerCancelButton}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.datePickerCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.datePickerConfirmButton}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.datePickerConfirmText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Modal>
         </ScrollView>
       </KeyboardAvoidingView>
     </>
@@ -977,12 +1078,126 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: 16,
   },
+  dateOfBirthSection: {
+    marginBottom: 16,
+  },
   dateOfBirthRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginTop: 10,
   },
   dateInputGroup: {
     flex: 1,
+  },
+  dateInputLabel: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.text.secondary,
+    marginBottom: 6,
+  },
+  dateInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    paddingHorizontal: 12,
+  },
+  dateInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text.primary,
+  },
+  calendarButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  calendarButtonLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
+  calendarButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  dateHelperText: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  datePickerModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  datePickerCloseButton: {
+    padding: 4,
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  datePickerCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  datePickerCancelText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    fontWeight: '600' as const,
+  },
+  datePickerConfirmButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  datePickerConfirmText: {
+    fontSize: 16,
+    color: colors.text.white,
+    fontWeight: '600' as const,
   },
 });
