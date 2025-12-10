@@ -12,6 +12,7 @@ import {
   Modal,
   SafeAreaView,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -25,7 +26,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, follows, followUser, unfollowUser } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, follows, followUser, unfollowUser, addReelComment, getReelComments } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentReelId, setCurrentReelId] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export default function ReelsScreen() {
   const [editingReel, setEditingReel] = useState<string | null>(null);
   const [editCaption, setEditCaption] = useState<string>('');
   const [lastTap, setLastTap] = useState<{ time: number; reelId: string } | null>(null);
+  const [showComments, setShowComments] = useState<string | null>(null);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -453,7 +455,10 @@ export default function ReelsScreen() {
               <Text style={styles.actionCount}>{formatCount(reel.likes.length)}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => setShowComments(reel.id)}
+            >
               <View style={styles.actionIconContainer}>
                 <MessageCircle size={32} color={colors.text.white} strokeWidth={2.5} />
               </View>
@@ -494,6 +499,18 @@ export default function ReelsScreen() {
             )}
           </View>
         </View>
+
+        {showComments === reel.id && (
+          <ReelCommentsModal
+            reelId={reel.id}
+            visible={showComments === reel.id}
+            onClose={() => setShowComments(null)}
+            comments={getReelComments(reel.id)}
+            colors={colors}
+            styles={styles}
+            addComment={addReelComment}
+          />
+        )}
       </View>
     );
   };
@@ -599,7 +616,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingLeft: 8,
   },
   userInfo: {
-    flex: 1,
+    // Removed flex: 1 to prevent vertical centering
   },
   userHeader: {
     flexDirection: 'row',
@@ -882,4 +899,256 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  commentsList: {
+    flex: 1,
+  },
+  emptyCommentsContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyCommentsText: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+    marginBottom: 8,
+  },
+  emptyCommentsSubtext: {
+    fontSize: 14,
+    color: colors.text.tertiary,
+  },
+  comment: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  commentAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentAvatarPlaceholderText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  commentContent: {
+    flex: 1,
+  },
+  commentHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  commentUserName: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  commentText: {
+    fontSize: 14,
+    color: colors.text.primary,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  commentTime: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+    backgroundColor: colors.background.primary,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    maxHeight: 100,
+    fontSize: 14,
+    color: colors.text.primary,
+  },
+  sendButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+  },
+  sendButtonDisabled: {
+    backgroundColor: colors.background.secondary,
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  sendButtonTextDisabled: {
+    color: colors.text.tertiary,
+  },
 });
+
+function ReelCommentsModal({
+  reelId,
+  visible,
+  onClose,
+  comments,
+  colors,
+  styles,
+  addComment,
+}: {
+  reelId: string;
+  visible: boolean;
+  onClose: () => void;
+  comments: any[];
+  colors: any;
+  styles: any;
+  addComment: (reelId: string, content: string) => Promise<any>;
+}) {
+  const { currentUser } = useApp();
+  const [commentText, setCommentText] = useState<string>('');
+
+  const handleSubmit = async () => {
+    if (commentText.trim()) {
+      await addComment(reelId, commentText.trim());
+      setCommentText('');
+    }
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Comments</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <X size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.commentsList}>
+          {comments.length === 0 ? (
+            <View style={styles.emptyCommentsContainer}>
+              <Text style={styles.emptyCommentsText}>No comments yet</Text>
+              <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
+            </View>
+          ) : (
+            comments.map((comment) => {
+              return (
+                <View key={comment.id} style={styles.comment}>
+                  <View style={styles.commentHeader}>
+                    {comment.userAvatar ? (
+                      <Image
+                        source={{ uri: comment.userAvatar }}
+                        style={styles.commentAvatar}
+                      />
+                    ) : (
+                      <View style={styles.commentAvatarPlaceholder}>
+                        <Text style={styles.commentAvatarPlaceholderText}>
+                          {comment.userName.charAt(0)}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.commentContent}>
+                      <View style={styles.commentHeaderRow}>
+                        <Text style={styles.commentUserName}>{comment.userName}</Text>
+                      </View>
+                      <Text style={styles.commentText}>{comment.content}</Text>
+                      <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.commentInputContainer}
+        >
+          <TextInput
+            style={styles.commentInput}
+            placeholder="Write a comment..."
+            placeholderTextColor={colors.text.tertiary}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              !commentText.trim() && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!commentText.trim()}
+          >
+            <Text
+              style={[
+                styles.sendButtonText,
+                !commentText.trim() && styles.sendButtonTextDisabled,
+              ]}
+            >
+              Send
+            </Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
