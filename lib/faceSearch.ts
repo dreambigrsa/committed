@@ -65,9 +65,15 @@ export async function extractFaceFeatures(imageUrl: string): Promise<string | nu
     // const faces = await response.json();
     // return faces[0]?.faceId;
     
-    // For now, return a placeholder
-    console.log('Face feature extraction not yet implemented. Please integrate a face recognition service.');
-    return null;
+    // For now, return a placeholder ID based on image URL
+    // This allows the demo to work without actual face recognition
+    // In production, replace this with actual face detection
+    console.log('Face feature extraction using placeholder. Please integrate a face recognition service for production.');
+    
+    // Generate a placeholder ID from the image URL
+    // This is just for demo purposes - in production, use actual face detection
+    const placeholderId = `placeholder_${imageUrl.substring(imageUrl.length - 20).replace(/[^a-zA-Z0-9]/g, '')}`;
+    return placeholderId;
   } catch (error) {
     console.error('Error extracting face features:', error);
     return null;
@@ -89,7 +95,8 @@ export async function searchByFace(
     // Step 1: Extract face features from input image
     const inputFaceId = await extractFaceFeatures(imageUrl);
     if (!inputFaceId) {
-      throw new Error('Could not detect face in image');
+      // Show a helpful error message
+      throw new Error('Could not process image. Please ensure the image contains a clear face and try again. Note: Face recognition service integration is required for production use.');
     }
 
     // Step 2: Get all relationships with face photos
@@ -97,13 +104,81 @@ export async function searchByFace(
       'get_relationships_for_face_search'
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching relationships for face search:', error);
+      // If the RPC function doesn't exist, try a direct query as fallback
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('relationships')
+        .select(`
+          id as relationship_id,
+          partner_name,
+          partner_phone,
+          partner_user_id,
+          type as relationship_type,
+          status as relationship_status,
+          user_id,
+          partner_face_photo as face_photo_url
+        `)
+        .not('partner_face_photo', 'is', null);
+      
+      if (fallbackError) {
+        throw new Error('Could not fetch relationships. Please ensure the database is properly configured.');
+      }
+      
+      // Use fallback data if RPC failed
+      const relationshipsToUse = fallbackData || [];
+      
+      // Step 3: Compare with stored faces using face recognition service
+      const matches: FaceMatch[] = [];
+      
+      for (const rel of relationshipsToUse) {
+        if (!rel.face_photo_url) continue;
+        
+        // For placeholder, generate a service ID if it doesn't exist
+        const fallbackRelFaceId = `rel_${rel.relationship_id}`;
+        
+        // For now, we'll do a simple placeholder comparison
+        // In production, replace this with actual face matching
+        const similarity = await compareFacesPlaceholder(inputFaceId, fallbackRelFaceId);
+        
+        if (similarity >= threshold) {
+          // Get user info for the relationship owner
+          const { data: userData } = await supabase
+            .from('users')
+            .select('full_name, phone_number')
+            .eq('id', rel.user_id)
+            .single();
+          
+          matches.push({
+            relationshipId: rel.relationship_id,
+            partnerName: rel.partner_name,
+            partnerPhone: rel.partner_phone,
+            partnerUserId: rel.partner_user_id,
+            relationshipType: rel.relationship_type,
+            relationshipStatus: rel.relationship_status,
+            userId: rel.user_id,
+            userName: userData?.full_name || 'Unknown',
+            userPhone: userData?.phone_number || '',
+            facePhotoUrl: rel.face_photo_url,
+            similarityScore: similarity,
+          });
+        }
+      }
+      
+      // Sort by similarity score (highest first)
+      matches.sort((a, b) => b.similarityScore - a.similarityScore);
+      
+      return matches;
+    }
 
     // Step 3: Compare with stored faces using face recognition service
     const matches: FaceMatch[] = [];
     
     for (const rel of relationships || []) {
-      if (!rel.face_service_id || !rel.face_photo_url) continue;
+      if (!rel.face_photo_url) continue;
+      
+      // For placeholder, use relationship ID as face service ID if not available
+      const relFaceId = rel.face_service_id || `rel_${rel.relationship_id}`;
 
       // TODO: Use face recognition service to compare faces
       // Example with AWS Rekognition:
@@ -129,11 +204,29 @@ export async function searchByFace(
       // const similarFaces = await response.json();
       // const similarity = similarFaces[0]?.confidence || 0;
 
+      // For placeholder, use relationship ID as face service ID if not available
+      const relFaceId = rel.face_service_id || `rel_${rel.relationship_id}`;
+      
       // For now, we'll do a simple placeholder comparison
       // In production, replace this with actual face matching
-      const similarity = await compareFacesPlaceholder(inputFaceId, rel.face_service_id);
+      const similarity = await compareFacesPlaceholder(inputFaceId, relFaceId);
       
       if (similarity >= threshold) {
+        // Get user info if not already included in the RPC result
+        let userName = rel.user_name;
+        let userPhone = rel.user_phone;
+        
+        if (!userName || !userPhone) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('full_name, phone_number')
+            .eq('id', rel.user_id)
+            .single();
+          
+          userName = userData?.full_name || userName || 'Unknown';
+          userPhone = userData?.phone_number || userPhone || '';
+        }
+        
         matches.push({
           relationshipId: rel.relationship_id,
           partnerName: rel.partner_name,
@@ -142,8 +235,8 @@ export async function searchByFace(
           relationshipType: rel.relationship_type,
           relationshipStatus: rel.relationship_status,
           userId: rel.user_id,
-          userName: rel.user_name,
-          userPhone: rel.user_phone,
+          userName: userName,
+          userPhone: userPhone,
           facePhotoUrl: rel.face_photo_url,
           similarityScore: similarity,
         });
