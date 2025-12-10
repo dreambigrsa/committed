@@ -1781,38 +1781,42 @@ export const [AppContext, useApp] = createContextHook(() => {
       ]);
 
       // Score regular ads based on personalization factors
+      // Rotation: Ads shown recently get lower scores but are NOT excluded
+      // This ensures natural rotation like Facebook - different ads each time, but ads can reappear
       const scoredRegularAds = regularAds
         .filter(ad => !excludeAdIds.includes(ad.id))
         .map(ad => {
-          let score = 0;
+          let score = 50; // Base score for regular ads
           
           // Base score from ad performance (CTR)
           const ctr = ad.impressions > 0 ? ad.clicks / ad.impressions : 0;
-          score += ctr * 100;
+          score += ctr * 50;
 
-          // Penalize ads shown too frequently to this user
+          // Penalize ads shown recently to this user (for rotation)
+          // But don't exclude them - just make them less likely to be selected
           const viewCount = impressionCounts.get(ad.id) || 0;
-          score -= viewCount * 20; // Reduce score for each view in last 24h
+          score -= viewCount * 15; // Reduce score for each view in last 24h
 
-          // Add randomness for diversity
-          score += Math.random() * 10;
+          // Add randomness for diversity and rotation
+          score += Math.random() * 20;
 
           return { ad, score };
         })
         .sort((a, b) => b.score - a.score);
 
-      // Select admin ads with rotation (avoid recently shown ones)
+      // Select admin ads with rotation (avoid recently shown ones, but don't exclude)
       const scoredAdminAds = adminAds
         .filter(ad => !excludeAdIds.includes(ad.id))
         .map(ad => {
-          let score = 100; // Base score for admin ads
+          let score = 100; // Base score for admin ads (higher priority)
           
-          // Penalize recently shown admin ads
+          // Penalize recently shown admin ads (for rotation)
+          // But they can still appear again - just less frequently
           const viewCount = impressionCounts.get(ad.id) || 0;
-          score -= viewCount * 30; // Stronger penalty for admin ads
+          score -= viewCount * 25; // Reduce score for each view in last 24h
 
-          // Add some randomness for rotation
-          score += Math.random() * 15;
+          // Add randomness for rotation and diversity
+          score += Math.random() * 20;
 
           return { ad, score };
         })
