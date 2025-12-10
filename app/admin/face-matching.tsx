@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
+import { regenerateAllFaceEmbeddings } from '@/lib/faceSearch';
 import colors from '@/constants/colors';
 
 interface FaceMatchingProvider {
@@ -59,6 +60,7 @@ export default function FaceMatchingProvidersScreen() {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [editingProvider, setEditingProvider] = useState<FaceMatchingProvider | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [regenerating, setRegenerating] = useState<boolean>(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -282,6 +284,43 @@ export default function FaceMatchingProvidersScreen() {
     setShowSecrets(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
+  const handleRegenerateEmbeddings = async () => {
+    Alert.alert(
+      'Regenerate Face Embeddings',
+      'This will regenerate face embeddings for all relationships with face photos. This may take several minutes. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Regenerate',
+          onPress: async () => {
+            try {
+              setRegenerating(true);
+              const results = await regenerateAllFaceEmbeddings();
+              
+              let message = `Regeneration complete!\n\n`;
+              message += `✅ Success: ${results.success}\n`;
+              message += `❌ Failed: ${results.failed}\n`;
+              
+              if (results.errors.length > 0) {
+                message += `\nFirst few errors:\n${results.errors.slice(0, 3).join('\n')}`;
+                if (results.errors.length > 3) {
+                  message += `\n... and ${results.errors.length - 3} more`;
+                }
+              }
+              
+              Alert.alert('Regeneration Complete', message);
+            } catch (error: any) {
+              console.error('Failed to regenerate embeddings:', error);
+              Alert.alert('Error', error?.message || 'Failed to regenerate face embeddings');
+            } finally {
+              setRegenerating(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getProviderTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       aws_rekognition: 'AWS Rekognition',
@@ -326,6 +365,26 @@ export default function FaceMatchingProvidersScreen() {
               <SettingsIcon size={24} color={colors.primary} />
               <Text style={styles.headerTitle}>Face Matching Providers</Text>
               <Text style={styles.headerSubtext}>Configure face recognition services</Text>
+              
+              {providers.some(p => p.is_active && p.enabled) && (
+                <TouchableOpacity
+                  style={[styles.regenerateButton, regenerating && styles.regenerateButtonDisabled]}
+                  onPress={handleRegenerateEmbeddings}
+                  disabled={regenerating}
+                >
+                  {regenerating ? (
+                    <>
+                      <ActivityIndicator size="small" color={colors.text.white} />
+                      <Text style={styles.regenerateButtonText}>Regenerating...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <SettingsIcon size={16} color={colors.text.white} />
+                      <Text style={styles.regenerateButtonText}>Regenerate Embeddings</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.providersList}>
@@ -741,6 +800,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     marginTop: 4,
+  },
+  regenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.secondary,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  regenerateButtonDisabled: {
+    opacity: 0.6,
+  },
+  regenerateButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
   providersList: {
     padding: 16,
