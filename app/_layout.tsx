@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppContext } from "@/contexts/AppContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
@@ -20,6 +21,9 @@ function RootLayoutNav() {
       <Stack.Screen name="relationship/register" options={{ presentation: "modal", title: "Register Relationship" }} />
       <Stack.Screen name="messages/[conversationId]" options={{ headerShown: true, title: "Chat" }} />
       <Stack.Screen name="admin/advertisements" options={{ headerShown: true, title: "Advertisements" }} />
+      <Stack.Screen name="settings/2fa" options={{ headerShown: true, title: "Two-Factor Authentication" }} />
+      <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: "Active Sessions" }} />
+      <Stack.Screen name="settings/blocked-users" options={{ headerShown: true, title: "Blocked Users" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -33,11 +37,13 @@ export default function RootLayout() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <AppContext>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </AppContext>
+        <ThemeProvider>
+          <AppContext>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </AppContext>
+        </ThemeProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );
