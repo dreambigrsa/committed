@@ -11,13 +11,16 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Heart, X, Search, CheckCircle2 } from 'lucide-react-native';
+import { Heart, X, Search, CheckCircle2, Camera, Upload } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
 
 const RELATIONSHIP_TYPES: { value: RelationshipType; label: string }[] = [
   { value: 'married', label: 'Married' },
@@ -59,7 +62,12 @@ export default function RegisterRelationshipScreen() {
     partnerPhone: '',
     partnerUserId: '',
     type: 'serious' as RelationshipType,
+    partnerFacePhoto: '',
+    partnerDateOfBirthMonth: '',
+    partnerDateOfBirthYear: '',
+    partnerCity: '',
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const handleSearch = async (text: string) => {
     setSearchQuery(text);
@@ -97,7 +105,11 @@ export default function RegisterRelationshipScreen() {
       alert('Please enter partner\'s phone number');
       return;
     }
-    if (step < 3) {
+    if (step === 3 && !formData.partnerFacePhoto) {
+      alert('Please upload a clear face photo of your partner');
+      return;
+    }
+    if (step < 4) {
       setStep(step + 1);
       fadeAnim.setValue(0);
       slideAnim.setValue(30);
@@ -138,16 +150,80 @@ export default function RegisterRelationshipScreen() {
     }
   };
 
+  const handlePickFacePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions to upload a photo');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingPhoto(true);
+        const fileExt = result.assets[0].uri.split('.').pop();
+        const fileName = `partner-face-${Date.now()}.${fileExt}`;
+        const filePath = `partner-photos/${fileName}`;
+
+        // Convert URI to blob
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+
+        const { data, error } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, blob, {
+            contentType: `image/${fileExt}`,
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        setFormData({ ...formData, partnerFacePhoto: publicUrl });
+        setUploadingPhoto(false);
+      }
+    } catch (error) {
+      console.error('Failed to upload photo:', error);
+      Alert.alert('Error', 'Failed to upload photo. Please try again.');
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleRegister = async () => {
+    if (!formData.partnerFacePhoto) {
+      alert('Please upload a clear face photo of your partner');
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Use selected user's ID if available, otherwise use form data
       const partnerUserId = selectedUser?.id || formData.partnerUserId || undefined;
+      
+      const partnerDateOfBirthMonth = formData.partnerDateOfBirthMonth 
+        ? parseInt(formData.partnerDateOfBirthMonth, 10) 
+        : undefined;
+      const partnerDateOfBirthYear = formData.partnerDateOfBirthYear 
+        ? parseInt(formData.partnerDateOfBirthYear, 10) 
+        : undefined;
+
       await createRelationship(
         formData.partnerName,
         formData.partnerPhone,
         formData.type,
-        partnerUserId
+        partnerUserId,
+        formData.partnerFacePhoto,
+        partnerDateOfBirthMonth,
+        partnerDateOfBirthYear,
+        formData.partnerCity || undefined
       );
       
       router.back();
@@ -185,9 +261,9 @@ export default function RegisterRelationshipScreen() {
           <View style={styles.header}>
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
+                <View style={[styles.progressFill, { width: `${(step / 4) * 100}%` }]} />
               </View>
-              <Text style={styles.stepText}>Step {step} of 3</Text>
+              <Text style={styles.stepText}>Step {step} of 4</Text>
             </View>
             <View style={styles.iconContainer}>
               <Heart size={40} color={colors.danger} fill={colors.danger} />
@@ -196,7 +272,8 @@ export default function RegisterRelationshipScreen() {
             <Text style={styles.subtitle}>
               {step === 1 && "Let's start with your partner's information"}
               {step === 2 && "How can we reach your partner?"}
-              {step === 3 && "What type of relationship is this?"}
+              {step === 3 && "Upload a clear face photo of your partner"}
+              {step === 4 && "What type of relationship is this?"}
             </Text>
           </View>
 
@@ -349,6 +426,100 @@ export default function RegisterRelationshipScreen() {
 
             {step === 3 && (
               <View style={styles.inputGroup}>
+                <Text style={styles.label}>Partner&apos;s Clear Face Photo *</Text>
+                <Text style={styles.helperText}>
+                  Required: Upload a clear, front-facing photo of your partner for verification
+                </Text>
+                
+                {formData.partnerFacePhoto ? (
+                  <View style={styles.photoPreview}>
+                    <Image 
+                      source={{ uri: formData.partnerFacePhoto }} 
+                      style={styles.photoPreviewImage}
+                    />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={() => setFormData({ ...formData, partnerFacePhoto: '' })}
+                    >
+                      <X size={20} color={colors.text.white} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.photoUploadButton}
+                    onPress={handlePickFacePhoto}
+                    disabled={uploadingPhoto}
+                  >
+                    {uploadingPhoto ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Camera size={32} color={colors.primary} />
+                        <Text style={styles.photoUploadText}>Upload Face Photo</Text>
+                        <Text style={styles.photoUploadHint}>Tap to select from gallery</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {/* Optional Fields */}
+                <View style={styles.optionalSection}>
+                  <Text style={styles.optionalSectionTitle}>Optional Information</Text>
+                  
+                  <View style={styles.dateOfBirthRow}>
+                    <View style={styles.dateInputGroup}>
+                      <Text style={styles.label}>Birth Month (Optional)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="MM"
+                        placeholderTextColor={colors.text.tertiary}
+                        value={formData.partnerDateOfBirthMonth}
+                        onChangeText={(text) => {
+                          const num = text.replace(/[^0-9]/g, '');
+                          if (num === '' || (parseInt(num, 10) >= 1 && parseInt(num, 10) <= 12)) {
+                            setFormData({ ...formData, partnerDateOfBirthMonth: num });
+                          }
+                        }}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                      />
+                    </View>
+                    <View style={styles.dateInputGroup}>
+                      <Text style={styles.label}>Birth Year (Optional)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="YYYY"
+                        placeholderTextColor={colors.text.tertiary}
+                        value={formData.partnerDateOfBirthYear}
+                        onChangeText={(text) => {
+                          const num = text.replace(/[^0-9]/g, '');
+                          if (num === '' || (parseInt(num, 10) >= 1900 && parseInt(num, 10) <= new Date().getFullYear() + 1)) {
+                            setFormData({ ...formData, partnerDateOfBirthYear: num });
+                          }
+                        }}
+                        keyboardType="number-pad"
+                        maxLength={4}
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={styles.label}>City/Location (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter city name"
+                    placeholderTextColor={colors.text.tertiary}
+                    value={formData.partnerCity}
+                    onChangeText={(text) =>
+                      setFormData({ ...formData, partnerCity: text })
+                    }
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+            )}
+
+            {step === 4 && (
+              <View style={styles.inputGroup}>
                 <Text style={styles.label}>Relationship Type</Text>
                 <View style={styles.typeOptions}>
                   {RELATIONSHIP_TYPES.map((type) => (
@@ -377,7 +548,7 @@ export default function RegisterRelationshipScreen() {
               </View>
             )}
 
-            {step === 3 && (
+            {step === 4 && (
               <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
                   Your partner will receive a notification to confirm this relationship.
@@ -387,7 +558,7 @@ export default function RegisterRelationshipScreen() {
               </View>
             )}
 
-            {step < 3 ? (
+            {step < 4 ? (
               <TouchableOpacity
                 style={styles.button}
                 onPress={handleNext}
@@ -724,5 +895,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.white,
+  },
+  helperText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  photoUploadButton: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.border.light,
+    borderStyle: 'dashed',
+    marginBottom: 20,
+  },
+  photoUploadText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.primary,
+    marginTop: 12,
+  },
+  photoUploadHint: {
+    fontSize: 13,
+    color: colors.text.tertiary,
+    marginTop: 4,
+  },
+  photoPreview: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.secondary,
+  },
+  photoPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removePhotoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: colors.danger,
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  optionalSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  optionalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 16,
+  },
+  dateOfBirthRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  dateInputGroup: {
+    flex: 1,
   },
 });
