@@ -167,18 +167,20 @@ export default function RegisterRelationshipScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setUploadingPhoto(true);
-        const fileExt = result.assets[0].uri.split('.').pop();
+        const fileExt = result.assets[0].uri.split('.').pop() || 'jpg';
         const fileName = `partner-face-${Date.now()}.${fileExt}`;
         const filePath = `partner-photos/${fileName}`;
 
-        // Convert URI to blob
+        // Convert URI to Uint8Array for React Native compatibility
         const response = await fetch(result.assets[0].uri);
         const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
 
         const { data, error } = await supabase.storage
           .from('avatars')
-          .upload(filePath, blob, {
-            contentType: `image/${fileExt}`,
+          .upload(filePath, uint8Array, {
+            contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
           });
 
         if (error) throw error;
