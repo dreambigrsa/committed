@@ -31,6 +31,10 @@ export interface SupabaseRelationship {
   verified_date?: string;
   end_date?: string;
   privacy_level: 'public' | 'private' | 'verified-only';
+  partner_face_photo?: string;
+  partner_date_of_birth_month?: number;
+  partner_date_of_birth_year?: number;
+  partner_city?: string;
   created_at: string;
   updated_at: string;
 }
