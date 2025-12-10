@@ -1,3 +1,5 @@
+// Legacy export for backward compatibility
+// New code should use useTheme() hook from ThemeContext
 const colors = {
   primary: '#1A73E8',
   primaryDark: '#1557B0',
