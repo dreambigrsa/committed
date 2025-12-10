@@ -30,6 +30,10 @@ export interface Relationship {
   verifiedDate?: string;
   endDate?: string;
   privacyLevel: 'public' | 'private' | 'verified-only';
+  partnerFacePhoto?: string;
+  partnerDateOfBirthMonth?: number;
+  partnerDateOfBirthYear?: number;
+  partnerCity?: string;
 }
 
 export interface RelationshipRequest {
