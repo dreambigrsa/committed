@@ -24,6 +24,7 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { useColors } from '@/constants/colors';
+import defaultColors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 
 export default function LandingScreen() {
@@ -336,7 +337,7 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -365,7 +366,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -8,
     right: -8,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     borderRadius: 20,
     padding: 8,
     borderWidth: 3,
@@ -374,7 +375,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 48,
     fontWeight: '800' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
   },
   heroTaglineText: {
     fontSize: 14,
-    color: colors.text.white,
+    color: defaultColors.text.white,
     fontWeight: '600' as const,
   },
   ctaButtons: {
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   primaryButton: {
-    backgroundColor: colors.text.white,
+    backgroundColor: defaultColors.text.white,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 14,
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   secondaryButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -432,7 +433,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 32,
     fontWeight: '800' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
     marginBottom: 4,
   },
   statLabel: {
@@ -467,13 +468,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 32,
     fontWeight: '800' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
   sectionDescription: {
     fontSize: 16,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 20,
@@ -489,14 +490,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepNumberText: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
   },
   stepContent: {
     flex: 1,
@@ -505,18 +506,18 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   stepDescription: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     lineHeight: 22,
   },
   stepConnector: {
     width: 2,
     height: 32,
-    backgroundColor: colors.border.light,
+    backgroundColor: defaultColors.border.light,
     marginLeft: 23,
     marginVertical: 8,
   },
@@ -524,17 +525,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   featureCard: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: defaultColors.border.light,
   },
   featureIconContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -542,24 +543,24 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginBottom: 8,
   },
   featureDescription: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     lineHeight: 20,
   },
   warningSection: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
     paddingVertical: 56,
   },
   warningCard: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: defaultColors.background.primary,
     borderRadius: 20,
     padding: 28,
     borderWidth: 2,
-    borderColor: colors.accent,
+    borderColor: defaultColors.accent,
   },
   warningHeader: {
     alignItems: 'center',
@@ -568,13 +569,13 @@ const styles = StyleSheet.create({
   warningTitle: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     marginTop: 12,
     textAlign: 'center',
   },
   warningDescription: {
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 24,
@@ -589,7 +590,7 @@ const styles = StyleSheet.create({
   },
   warningFeatureText: {
     fontSize: 15,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
     fontWeight: '600' as const,
   },
   benefitsContainer: {
@@ -606,18 +607,18 @@ const styles = StyleSheet.create({
   benefitText: {
     flex: 1,
     fontSize: 15,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     lineHeight: 22,
   },
   benefitBold: {
     fontWeight: '700' as const,
-    color: colors.text.primary,
+    color: defaultColors.text.primary,
   },
   finalCta: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: defaultColors.background.secondary,
   },
   finalCtaCard: {
-    backgroundColor: colors.primary,
+    backgroundColor: defaultColors.primary,
     borderRadius: 24,
     padding: 32,
     alignItems: 'center',
@@ -625,7 +626,7 @@ const styles = StyleSheet.create({
   finalCtaTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: colors.text.white,
+    color: defaultColors.text.white,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -637,7 +638,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   finalCtaButton: {
-    backgroundColor: colors.text.white,
+    backgroundColor: defaultColors.text.white,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 14,
@@ -648,22 +649,22 @@ const styles = StyleSheet.create({
   finalCtaButtonText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.primary,
+    color: defaultColors.primary,
   },
   footer: {
     paddingHorizontal: 24,
     paddingVertical: 40,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: defaultColors.border.light,
   },
   footerText: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: defaultColors.text.secondary,
     marginBottom: 4,
   },
   footerSubtext: {
     fontSize: 12,
-    color: colors.text.tertiary,
+    color: defaultColors.text.tertiary,
   },
 });
