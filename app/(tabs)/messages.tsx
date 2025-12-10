@@ -12,11 +12,12 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function MessagesScreen() {
   const router = useRouter();
   const { currentUser, conversations } = useApp();
+  const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -56,7 +57,7 @@ export default function MessagesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Messages</Text>
       </View>
