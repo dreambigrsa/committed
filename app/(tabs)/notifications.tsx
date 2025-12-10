@@ -11,7 +11,7 @@ import {
 
 import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useColors } from '@/constants/colors';
 import { Notification, NotificationType } from '@/types';
 
 export default function NotificationsScreen() {
@@ -23,6 +23,7 @@ export default function NotificationsScreen() {
     cheatingAlerts,
     markNotificationAsRead,
   } = useApp();
+  const colors = useColors();
   const pendingRequests = getPendingRequests();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
