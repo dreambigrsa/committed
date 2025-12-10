@@ -18,7 +18,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, Share2, Plus, X, ExternalLink } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -27,6 +27,7 @@ const { width } = Dimensions.get('window');
 export default function FeedScreen() {
   const router = useRouter();
   const { currentUser, posts, toggleLike, getComments, getActiveAds, recordAdImpression, recordAdClick } = useApp();
+  const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [viewedAds, setViewedAds] = useState<Set<string>>(new Set());
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -215,7 +216,7 @@ export default function FeedScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Feed</Text>
         <TouchableOpacity
