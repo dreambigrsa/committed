@@ -438,17 +438,21 @@ export async function searchByFace(
           provider
         );
       } else {
-        // For Azure or when no stored ID, re-detect face from image and compare
-        // This handles both missing embeddings and expired Azure face IDs
-        const targetFaceId = await extractFaceFeatures(rel.face_photo_url);
-        if (targetFaceId) {
-          similarity = await compareFaces(
-            inputFaceId,
-            targetFaceId,
-            rel.face_photo_url,
-            provider
-          );
-        }
+      // For Azure or when no stored ID, re-detect face from image and compare
+      // This handles both missing embeddings and expired Azure face IDs
+      const targetFaceId = await extractFaceFeatures(rel.face_photo_url);
+      if (targetFaceId && targetFaceId !== 'PENDING_APPROVAL') {
+        similarity = await compareFaces(
+          inputFaceId,
+          targetFaceId,
+          rel.face_photo_url,
+          provider
+        );
+      } else if (targetFaceId === 'PENDING_APPROVAL') {
+        // Skip relationships that need approval
+        console.warn(`Skipping relationship ${rel.relationship_id} - Azure approval required`);
+        continue;
+      }
       }
       
       if (similarity >= similarityThreshold) {
@@ -788,10 +792,44 @@ export async function storeFaceEmbedding(
     const faceServiceId = await extractFaceFeatures(facePhotoUrl);
     if (!faceServiceId) {
       console.warn('[storeFaceEmbedding] Could not extract face features from image');
-      // Check if it's an approval error
-      const errorMsg = 'Face detection failed. This might require Azure Face API approval.';
-      console.warn(`[storeFaceEmbedding] ${errorMsg}`);
-      return false;
+      console.warn('[storeFaceEmbedding] This might require Azure Face API approval');
+      console.warn('[storeFaceEmbedding] Storing placeholder for later processing...');
+      
+      // Get relationship info to store placeholder
+      const { data: relationship, error: relError } = await supabase
+        .from('relationships')
+        .select('partner_name, partner_phone, partner_face_photo')
+        .eq('id', relationshipId)
+        .single();
+
+      if (relError || !relationship) {
+        console.error('[storeFaceEmbedding] Error fetching relationship:', relError);
+        return false;
+      }
+
+      // Store with placeholder to indicate approval is needed
+      // This allows us to track which relationships need processing after approval
+      const { error: upsertError } = await supabase
+        .from('face_embeddings')
+        .upsert({
+          relationship_id: relationshipId,
+          partner_name: relationship.partner_name,
+          partner_phone: relationship.partner_phone,
+          face_photo_url: relationship.partner_face_photo || facePhotoUrl,
+          face_service_id: 'PENDING_APPROVAL', // Placeholder
+          face_service_type: provider.provider_type,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'relationship_id'
+        });
+
+      if (upsertError) {
+        console.error('[storeFaceEmbedding] Error storing placeholder:', upsertError);
+        return false;
+      }
+
+      console.log('[storeFaceEmbedding] Stored placeholder - will process after Azure approval');
+      return true; // Return true because we stored useful data
     }
 
     console.log(`[storeFaceEmbedding] Face features extracted, service ID: ${faceServiceId}`);
