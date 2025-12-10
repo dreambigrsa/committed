@@ -84,30 +84,79 @@ const darkColors = {
   },
 };
 
-// Create a mutable colors object that maintains the same reference
-// This allows StyleSheet.create to reference it, and we update the values
-const colors = { ...lightColors };
+// Create colors object with proper nested structure - initialized immediately
+// This ensures colors is always defined, even before ThemeContext initializes
+const colors = {
+  primary: lightColors.primary,
+  primaryDark: lightColors.primaryDark,
+  secondary: lightColors.secondary,
+  accent: lightColors.accent,
+  danger: lightColors.danger,
+  text: {
+    primary: lightColors.text.primary,
+    secondary: lightColors.text.secondary,
+    tertiary: lightColors.text.tertiary,
+    white: lightColors.text.white,
+  },
+  background: {
+    primary: lightColors.background.primary,
+    secondary: lightColors.background.secondary,
+    tertiary: lightColors.background.tertiary,
+    overlay: lightColors.background.overlay,
+  },
+  border: {
+    light: lightColors.border.light,
+    medium: lightColors.border.medium,
+    dark: lightColors.border.dark,
+  },
+  status: {
+    verified: lightColors.status.verified,
+    pending: lightColors.status.pending,
+    ended: lightColors.status.ended,
+  },
+  badge: {
+    verified: lightColors.badge.verified,
+    verifiedText: lightColors.badge.verifiedText,
+    pending: lightColors.badge.pending,
+    pendingText: lightColors.badge.pendingText,
+  },
+};
 
 // Function to update global colors (called by ThemeContext)
 export function updateGlobalColors(isDark: boolean) {
   const sourceColors = isDark ? darkColors : lightColors;
   
-  // Update all properties in place to maintain object reference
-  // This is critical - we mutate the same object so StyleSheet references stay valid
-  Object.assign(colors, {
-    primary: sourceColors.primary,
-    primaryDark: sourceColors.primaryDark,
-    secondary: sourceColors.secondary,
-    accent: sourceColors.accent,
-    danger: sourceColors.danger,
-  });
+  // Update all top-level properties
+  colors.primary = sourceColors.primary;
+  colors.primaryDark = sourceColors.primaryDark;
+  colors.secondary = sourceColors.secondary;
+  colors.accent = sourceColors.accent;
+  colors.danger = sourceColors.danger;
   
-  // Update nested objects
-  Object.assign(colors.text, sourceColors.text);
-  Object.assign(colors.background, sourceColors.background);
-  Object.assign(colors.border, sourceColors.border);
-  Object.assign(colors.status, sourceColors.status);
-  Object.assign(colors.badge, sourceColors.badge);
+  // Update nested objects - mutate in place to maintain references
+  colors.text.primary = sourceColors.text.primary;
+  colors.text.secondary = sourceColors.text.secondary;
+  colors.text.tertiary = sourceColors.text.tertiary;
+  colors.text.white = sourceColors.text.white;
+  
+  colors.background.primary = sourceColors.background.primary;
+  colors.background.secondary = sourceColors.background.secondary;
+  colors.background.tertiary = sourceColors.background.tertiary;
+  colors.background.overlay = sourceColors.background.overlay;
+  
+  colors.border.light = sourceColors.border.light;
+  colors.border.medium = sourceColors.border.medium;
+  colors.border.dark = sourceColors.border.dark;
+  
+  colors.status.verified = sourceColors.status.verified;
+  colors.status.pending = sourceColors.status.pending;
+  colors.status.ended = sourceColors.status.ended;
+  
+  colors.badge.verified = sourceColors.badge.verified;
+  colors.badge.verifiedText = sourceColors.badge.verifiedText;
+  colors.badge.pending = sourceColors.badge.pending;
+  colors.badge.pendingText = sourceColors.badge.pendingText;
 }
 
+// Ensure colors is always exported and available
 export default colors;
