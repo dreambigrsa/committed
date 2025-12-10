@@ -1,25 +1,11 @@
-import React, { useEffect } from 'react';
-import { ThemeContext, useTheme } from '@/contexts/ThemeContext';
-import { useApp } from '@/contexts/AppContext';
+import React from 'react';
+import { ThemeContext } from '@/contexts/ThemeContext';
 
-// Wrapper component that connects ThemeContext with AppContext
-function ThemeProviderInner({ children }: { children: React.ReactNode }) {
-  const { currentUser } = useApp();
-  const { loadThemePreference } = useTheme();
-
-  useEffect(() => {
-    if (currentUser) {
-      loadThemePreference(currentUser.id);
-    }
-  }, [currentUser, loadThemePreference]);
-
-  return <>{children}</>;
-}
-
+// Simple wrapper for ThemeContext Provider
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext>
-      <ThemeProviderInner>{children}</ThemeProviderInner>
+      {children}
     </ThemeContext>
   );
 }
