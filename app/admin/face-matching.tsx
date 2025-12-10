@@ -33,7 +33,7 @@ import colors from '@/constants/colors';
 interface FaceMatchingProvider {
   id: string;
   name: string;
-  provider_type: 'aws_rekognition' | 'azure_face' | 'google_vision' | 'custom';
+  provider_type: 'aws_rekognition' | 'azure_face' | 'google_vision' | 'custom' | 'local';
   is_active: boolean;
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
@@ -128,7 +128,7 @@ export default function FaceMatchingProvidersScreen() {
       setEditingProvider(null);
       setFormData({
         name: '',
-        provider_type: 'aws_rekognition',
+        provider_type: 'local',
         aws_access_key_id: '',
         aws_secret_access_key: '',
         aws_region: 'us-east-1',
@@ -155,7 +155,10 @@ export default function FaceMatchingProvidersScreen() {
       }
 
       // Validate provider-specific fields
-      if (formData.provider_type === 'aws_rekognition') {
+      if (formData.provider_type === 'local') {
+        // Local provider doesn't need any configuration - it's free and works immediately
+        // No validation needed
+      } else if (formData.provider_type === 'aws_rekognition') {
         if (!formData.aws_access_key_id || !formData.aws_secret_access_key) {
           Alert.alert('Error', 'Please enter AWS Access Key ID and Secret Access Key');
           return;
@@ -187,7 +190,10 @@ export default function FaceMatchingProvidersScreen() {
       };
 
       // Add provider-specific fields
-      if (formData.provider_type === 'aws_rekognition') {
+      if (formData.provider_type === 'local') {
+        // Local provider doesn't need any additional fields
+        // It's completely free and works without configuration
+      } else if (formData.provider_type === 'aws_rekognition') {
         providerData.aws_access_key_id = formData.aws_access_key_id;
         providerData.aws_secret_access_key = formData.aws_secret_access_key;
         providerData.aws_region = formData.aws_region;
@@ -340,6 +346,7 @@ export default function FaceMatchingProvidersScreen() {
 
   const getProviderTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
+      local: 'Local (Free - No API Keys)',
       aws_rekognition: 'AWS Rekognition',
       azure_face: 'Azure Face API',
       google_vision: 'Google Cloud Vision',
@@ -514,7 +521,7 @@ export default function FaceMatchingProvidersScreen() {
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Provider Type *</Text>
                 <View style={styles.radioGroup}>
-                  {(['aws_rekognition', 'azure_face', 'google_vision', 'custom'] as const).map((type) => (
+                  {(['local', 'aws_rekognition', 'azure_face', 'google_vision', 'custom'] as const).map((type) => (
                     <TouchableOpacity
                       key={type}
                       style={[
@@ -1088,6 +1095,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text.white,
+  },
+  infoBox: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: colors.text.primary,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  infoNote: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    marginTop: 8,
   },
 });
 
