@@ -40,7 +40,9 @@ export default function FeedScreen() {
   const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
   const [viewingImages, setViewingImages] = useState<{ urls: string[]; index: number } | null>(null);
+  const [postImageIndices, setPostImageIndices] = useState<Record<string, number>>({});
   const imageViewerScrollRef = useRef<ScrollView>(null);
+  const postScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -139,12 +141,42 @@ export default function FeedScreen() {
       paddingHorizontal: 16,
       marginBottom: 12,
     },
-    mediaContainer: {
+    mediaWrapper: {
+      position: 'relative',
       marginBottom: 12,
+    },
+    mediaContainer: {
+      width: '100%',
+    },
+    postImageTouchable: {
+      width,
+      height: width,
     },
     postImage: {
       width,
       height: width,
+    },
+    dotsContainer: {
+      position: 'absolute',
+      bottom: 12,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    dotActive: {
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
     postActions: {
       flexDirection: 'row',
@@ -604,41 +636,81 @@ export default function FeedScreen() {
   const renderPostMedia = (post: Post) => {
     if (post.mediaUrls.length === 0) return null;
 
+    const currentIndex = postImageIndices[post.id] || 0;
+    const imageCount = post.mediaUrls.length;
+
     return (
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        style={styles.mediaContainer}
-      >
-        {post.mediaUrls.map((url, index) => {
-          if (isVideo(url)) {
+      <View style={styles.mediaWrapper}>
+        <ScrollView
+          ref={(ref) => {
+            postScrollRefs.current[post.id] = ref;
+          }}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          style={styles.mediaContainer}
+          onMomentumScrollEnd={(event) => {
+            const newIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+            setPostImageIndices(prev => ({
+              ...prev,
+              [post.id]: newIndex,
+            }));
+          }}
+          onScrollBeginDrag={() => {
+            // Initialize index if not set
+            if (postImageIndices[post.id] === undefined) {
+              setPostImageIndices(prev => ({
+                ...prev,
+                [post.id]: 0,
+              }));
+            }
+          }}
+        >
+          {post.mediaUrls.map((url, index) => {
+            if (isVideo(url)) {
+              return (
+                <Video
+                  key={index}
+                  source={{ uri: url }}
+                  style={styles.postImage}
+                  useNativeControls
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={false}
+                />
+              );
+            }
             return (
-              <Video
+              <TouchableOpacity
                 key={index}
-                source={{ uri: url }}
-                style={styles.postImage}
-                useNativeControls
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={false}
-              />
+                activeOpacity={0.9}
+                onPress={() => handleImagePress(post, index)}
+                style={styles.postImageTouchable}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={styles.postImage}
+                  contentFit="cover"
+                />
+              </TouchableOpacity>
             );
-          }
-          return (
-            <TouchableOpacity
-              key={index}
-              activeOpacity={0.9}
-              onPress={() => handleImagePress(post, index)}
-            >
-              <Image
-                source={{ uri: url }}
-                style={styles.postImage}
-                contentFit="cover"
+          })}
+        </ScrollView>
+        
+        {/* Dot Indicators */}
+        {imageCount > 1 && (
+          <View style={styles.dotsContainer}>
+            {post.mediaUrls.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  index === currentIndex && styles.dotActive,
+                ]}
               />
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+            ))}
+          </View>
+        )}
+      </View>
     );
   };
 
