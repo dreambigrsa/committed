@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,565 +6,333 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
-  TextInput,
+  ActivityIndicator,
   Animated,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import {
-  ArrowLeft,
-  Shield,
-  Bell,
-  Eye,
-  Lock,
+  CheckCircle2,
   Heart,
-  AlertTriangle,
-  ChevronRight,
+  LogOut,
+  Settings,
+  Shield,
+  Plus,
+  BarChart3,
+  Camera,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
-import colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
-export default function SettingsScreen() {
+export default function ProfileScreen() {
   const router = useRouter();
-  const { currentUser, getCurrentUserRelationship, endRelationship } = useApp();
+  const { currentUser, logout, getCurrentUserRelationship, updateUserProfile } = useApp();
+  const { colors } = useTheme();
   const relationship = getCurrentUserRelationship();
-
-  const [editMode, setEditMode] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   React.useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
-  const [fullName, setFullName] = useState(currentUser?.fullName || '');
-  const [phoneNumber, setPhoneNumber] = useState(currentUser?.phoneNumber || '');
-  const [notifications, setNotifications] = useState({
-    relationshipRequests: true,
-    cheatingAlerts: true,
-    partnerActivity: true,
-    verificationUpdates: true,
-  });
-
-  const [privacy, setPrivacy] = useState({
-    profileVisibility: 'public' as 'public' | 'private' | 'verified-only',
-    showRelationshipHistory: false,
-    allowSearchByPhone: true,
-  });
-
-  useEffect(() => {
-    if (currentUser) {
-      loadSettings();
-    }
-  }, [currentUser]);
-
-  const loadSettings = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-
-      if (error) {
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const settings = data[0];
-        if (settings.notification_settings) {
-          setNotifications(settings.notification_settings);
-        }
-        if (settings.privacy_settings) {
-          setPrivacy(settings.privacy_settings);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-    }
-  };
 
   if (!currentUser) {
     return null;
   }
 
-  const handleSaveProfile = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          full_name: fullName,
-          phone_number: phoneNumber,
-        })
-        .eq('id', currentUser.id);
-
-      if (error) throw error;
-
-      Alert.alert('Success', 'Profile updated successfully!');
-      setEditMode(false);
-    } catch (error) {
-      console.error('Failed to update profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
-    }
-  };
-
-  const handleToggleNotification = async (key: keyof typeof notifications) => {
-    const newValue = !notifications[key];
-    setNotifications((prev) => ({
-      ...prev,
-      [key]: newValue,
-    }));
-
-    await saveNotificationSettings({ ...notifications, [key]: newValue });
-  };
-
-  const handleTogglePrivacy = async (key: keyof typeof privacy) => {
-    if (key === 'profileVisibility') return;
-
-    const newValue = !privacy[key];
-    setPrivacy((prev) => ({
-      ...prev,
-      [key]: newValue,
-    }));
-
-    await savePrivacySettings({ ...privacy, [key]: newValue });
-  };
-
-  const saveNotificationSettings = async (settings: typeof notifications) => {
-    if (!currentUser) return;
-    
-    try {
-      // First, get existing settings to preserve privacy_settings
-      const { data: existingData } = await supabase
-        .from('user_settings')
-        .select('privacy_settings')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-
-      const existingPrivacy = existingData && existingData.length > 0 
-        ? existingData[0].privacy_settings 
-        : privacy;
-
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: currentUser.id,
-          notification_settings: settings,
-          privacy_settings: existingPrivacy,
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      console.error('Failed to save notification settings:', error);
-      Alert.alert('Error', 'Failed to save notification settings');
-    }
-  };
-
-  const savePrivacySettings = async (settings: typeof privacy) => {
-    if (!currentUser) return;
-
-    try {
-      // First, get existing settings to preserve notification_settings
-      const { data: existingData } = await supabase
-        .from('user_settings')
-        .select('notification_settings')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-
-      const existingNotifications = existingData && existingData.length > 0 
-        ? existingData[0].notification_settings 
-        : notifications;
-
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: currentUser.id,
-          privacy_settings: settings,
-          notification_settings: existingNotifications,
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      console.error('Failed to save privacy settings:', error);
-      Alert.alert('Error', 'Failed to save privacy settings');
-    }
-  };
-
-  const handleChangePrivacyLevel = async () => {
-    Alert.alert(
-      'Profile Visibility',
-      'Choose who can see your relationship status',
-      [
-        {
-          text: 'Public',
-          onPress: async () => {
-            const newPrivacy = { ...privacy, profileVisibility: 'public' as const };
-            setPrivacy(newPrivacy);
-            await savePrivacySettings(newPrivacy);
-          },
-        },
-        {
-          text: 'Verified Users Only',
-          onPress: async () => {
-            const newPrivacy = { ...privacy, profileVisibility: 'verified-only' as const };
-            setPrivacy(newPrivacy);
-            await savePrivacySettings(newPrivacy);
-          },
-        },
-        {
-          text: 'Private',
-          onPress: async () => {
-            const newPrivacy = { ...privacy, profileVisibility: 'private' as const };
-            setPrivacy(newPrivacy);
-            await savePrivacySettings(newPrivacy);
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleEndRelationship = async () => {
-    if (!relationship) return;
-
-    Alert.alert(
-      'End Relationship',
-      `Are you sure you want to end your relationship with ${relationship.partnerName}? They will be notified and must confirm.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Relationship',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await endRelationship(relationship.id, 'User requested to end relationship');
-              Alert.alert(
-                'Request Sent',
-                'Your partner will receive a request to confirm ending the relationship. It will be finalized once they confirm or after 7 days.',
-                [{ text: 'OK' }]
-              );
-            } catch (error) {
-              console.error('Failed to end relationship:', error);
-              Alert.alert('Error', 'Failed to send end relationship request');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const getPrivacyLevelLabel = () => {
+  const getRelationshipTypeLabel = (type: string) => {
     const labels = {
-      public: 'Public',
-      private: 'Private',
-      'verified-only': 'Verified Users Only',
+      married: 'Married',
+      engaged: 'Engaged',
+      serious: 'Serious Relationship',
+      dating: 'Dating',
     };
-    return labels[privacy.profileVisibility];
+    return labels[type as keyof typeof labels] || type;
+  };
+
+  const uploadProfilePicture = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'You need to allow access to your photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploading(true);
+      try {
+        const fileName = `profile_${currentUser?.id}_${Date.now()}.jpg`;
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        const { error: uploadError } = await supabase.storage
+          .from('media')
+          .upload(fileName, uint8Array, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('media')
+          .getPublicUrl(fileName);
+
+        await updateUserProfile({ profilePicture: publicUrl });
+
+        Alert.alert('Success', 'Profile picture updated!');
+      } catch (error) {
+        console.error('Failed to upload profile picture:', error);
+        Alert.alert('Error', 'Failed to upload profile picture');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/');
   };
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: 'Settings',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
-              <ArrowLeft size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View 
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
         >
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Shield size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Profile Information</Text>
-            </View>
+          <Text style={styles.title}>Profile</Text>
+        </Animated.View>
 
-            <View style={styles.settingsList}>
-              <View style={styles.profileEditSection}>
-                <View style={styles.editRow}>
-                  <Text style={styles.editLabel}>Full Name</Text>
-                  <TextInput
-                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
-                    value={fullName}
-                    onChangeText={setFullName}
-                    editable={editMode}
-                    placeholder="Enter your full name"
-                    placeholderTextColor={colors.text.tertiary}
-                  />
-                </View>
-                <View style={styles.editRow}>
-                  <Text style={styles.editLabel}>Phone Number</Text>
-                  <TextInput
-                    style={[styles.editInput, !editMode && styles.editInputDisabled]}
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    editable={editMode}
-                    placeholder="Enter your phone number"
-                    placeholderTextColor={colors.text.tertiary}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-                {editMode ? (
-                  <View style={styles.editButtons}>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => {
-                        setEditMode(false);
-                        setFullName(currentUser?.fullName || '');
-                        setPhoneNumber(currentUser?.phoneNumber || '');
-                      }}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.saveButton}
-                      onPress={handleSaveProfile}
-                    >
-                      <Text style={styles.saveButtonText}>Save Changes</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => setEditMode(true)}
+        <Animated.View 
+          style={[
+            styles.profileSection,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={uploadProfilePicture}
+            disabled={isUploading}
+          >
+            {currentUser.profilePicture ? (
+              <Image
+                source={{ uri: currentUser.profilePicture }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarPlaceholderText}>
+                  {currentUser.fullName.charAt(0)}
+                </Text>
+              </View>
+            )}
+            {isUploading && (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator size="small" color={colors.text.white} />
+              </View>
+            )}
+            <View style={styles.cameraIcon}>
+              <Camera size={16} color={colors.text.white} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{currentUser.fullName}</Text>
+            <Text style={styles.profileEmail}>{currentUser.email}</Text>
+            <Text style={styles.profilePhone}>{currentUser.phoneNumber}</Text>
+          </View>
+
+          <View style={styles.verificationBadges}>
+            {currentUser.verifications.phone && (
+              <View style={styles.badge}>
+                <CheckCircle2 size={14} color={colors.secondary} />
+                <Text style={styles.badgeText}>Phone Verified</Text>
+              </View>
+            )}
+            {currentUser.verifications.email && (
+              <View style={styles.badge}>
+                <CheckCircle2 size={14} color={colors.secondary} />
+                <Text style={styles.badgeText}>Email Verified</Text>
+              </View>
+            )}
+            {currentUser.verifications.id && (
+              <View style={styles.badge}>
+                <CheckCircle2 size={14} color={colors.secondary} />
+                <Text style={styles.badgeText}>ID Verified</Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+
+        <Animated.View 
+          style={[
+            styles.card,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleContainer}>
+              <Heart size={20} color={colors.danger} />
+              <Text style={styles.cardTitle}>Relationship Status</Text>
+            </View>
+          </View>
+
+          {relationship ? (
+            <View style={styles.relationshipContent}>
+              <View style={styles.relationshipRow}>
+                <Text style={styles.relationshipLabel}>Partner</Text>
+                <Text style={styles.relationshipValue}>
+                  {relationship.partnerName}
+                </Text>
+              </View>
+              <View style={styles.relationshipRow}>
+                <Text style={styles.relationshipLabel}>Type</Text>
+                <Text style={styles.relationshipValue}>
+                  {getRelationshipTypeLabel(relationship.type)}
+                </Text>
+              </View>
+              <View style={styles.relationshipRow}>
+                <Text style={styles.relationshipLabel}>Status</Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    relationship.status === 'verified'
+                      ? styles.statusBadgeVerified
+                      : styles.statusBadgePending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      relationship.status === 'verified'
+                        ? styles.statusTextVerified
+                        : styles.statusTextPending,
+                    ]}
                   >
-                    <Text style={styles.editButtonText}>Edit Profile</Text>
-                  </TouchableOpacity>
-                )}
+                    {relationship.status === 'verified' ? 'Verified' : 'Pending'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.relationshipRow}>
+                <Text style={styles.relationshipLabel}>Since</Text>
+                <Text style={styles.relationshipValue}>
+                  {new Date(relationship.startDate).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </Text>
               </View>
             </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Bell size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Notifications</Text>
-            </View>
-
-            <View style={styles.settingsList}>
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <Heart size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Relationship Requests</Text>
-                </View>
-                <Switch
-                  value={notifications.relationshipRequests}
-                  onValueChange={() =>
-                    handleToggleNotification('relationshipRequests')
-                  }
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    notifications.relationshipRequests
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <AlertTriangle size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Cheating Alerts</Text>
-                </View>
-                <Switch
-                  value={notifications.cheatingAlerts}
-                  onValueChange={() =>
-                    handleToggleNotification('cheatingAlerts')
-                  }
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    notifications.cheatingAlerts
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <Eye size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Partner Activity</Text>
-                </View>
-                <Switch
-                  value={notifications.partnerActivity}
-                  onValueChange={() =>
-                    handleToggleNotification('partnerActivity')
-                  }
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    notifications.partnerActivity
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <Shield size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Verification Updates</Text>
-                </View>
-                <Switch
-                  value={notifications.verificationUpdates}
-                  onValueChange={() =>
-                    handleToggleNotification('verificationUpdates')
-                  }
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    notifications.verificationUpdates
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Lock size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Privacy & Security</Text>
-            </View>
-
-            <View style={styles.settingsList}>
+          ) : (
+            <View style={styles.noRelationshipContainer}>
+              <Text style={styles.noRelationshipText}>
+                No active relationship registered
+              </Text>
               <TouchableOpacity
-                style={styles.settingItem}
-                onPress={handleChangePrivacyLevel}
+                style={styles.addRelationshipButton}
+                onPress={() => router.push('/relationship/register' as any)}
               >
-                <View style={styles.settingLeft}>
-                  <Eye size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Profile Visibility</Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>
-                    {getPrivacyLevelLabel()}
-                  </Text>
-                  <ChevronRight size={20} color={colors.text.tertiary} />
-                </View>
+                <Plus size={16} color={colors.primary} />
+                <Text style={styles.addRelationshipButtonText}>
+                  Register Relationship
+                </Text>
               </TouchableOpacity>
-
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <Shield size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>
-                    Show Relationship History
-                  </Text>
-                </View>
-                <Switch
-                  value={privacy.showRelationshipHistory}
-                  onValueChange={() =>
-                    handleTogglePrivacy('showRelationshipHistory')
-                  }
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    privacy.showRelationshipHistory
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-
-              <View style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <Eye size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>
-                    Allow Search by Phone
-                  </Text>
-                </View>
-                <Switch
-                  value={privacy.allowSearchByPhone}
-                  onValueChange={() => handleTogglePrivacy('allowSearchByPhone')}
-                  trackColor={{
-                    false: colors.border.light,
-                    true: colors.primary + '50',
-                  }}
-                  thumbColor={
-                    privacy.allowSearchByPhone
-                      ? colors.primary
-                      : colors.text.tertiary
-                  }
-                />
-              </View>
-            </View>
-          </View>
-
-          {relationship && relationship.status === 'verified' && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Heart size={20} color={colors.primary} />
-                <Text style={styles.sectionTitle}>Relationship</Text>
-              </View>
-
-              <View style={styles.dangerCard}>
-                <AlertTriangle size={24} color={colors.danger} />
-                <View style={styles.dangerContent}>
-                  <Text style={styles.dangerTitle}>End Relationship</Text>
-                  <Text style={styles.dangerText}>
-                    This will send a request to your partner. The relationship
-                    will end once they confirm or after 7 days.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.dangerButton}
-                    onPress={handleEndRelationship}
-                  >
-                    <Text style={styles.dangerButtonText}>
-                      End Relationship
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
             </View>
           )}
+        </Animated.View>
 
-          <View style={styles.infoCard}>
-            <Shield size={18} color={colors.primary} />
-            <Text style={styles.infoText}>
-              Your privacy settings control who can see your profile and
-              relationship status. Cheating alerts will notify you if your
-              partner attempts to register with someone else.
-            </Text>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </>
+        <Animated.View 
+          style={[
+            styles.section,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <Text style={styles.sectionTitle}>Account</Text>
+
+          {(currentUser.role === 'admin' || currentUser.role === 'super_admin') && (
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/admin/advertisements' as any)}
+            >
+              <View style={styles.menuItemLeft}>
+                <BarChart3 size={20} color={colors.primary} />
+                <Text style={[styles.menuItemText, styles.adminText]}>Manage Advertisements</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/settings' as any)}
+          >
+            <View style={styles.menuItemLeft}>
+              <Settings size={20} color={colors.text.secondary} />
+              <Text style={styles.menuItemText}>Settings</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => router.push('/settings' as any)}
+          >
+            <View style={styles.menuItemLeft}>
+              <Shield size={20} color={colors.text.secondary} />
+              <Text style={styles.menuItemText}>Privacy</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+            <View style={styles.menuItemLeft}>
+              <LogOut size={20} color={colors.danger} />
+              <Text style={[styles.menuItemText, styles.logoutText]}>Log Out</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -575,193 +343,247 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 20,
+    paddingBottom: 100,
+  },
+  header: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    marginBottom: 24,
   },
-  section: {
-    marginBottom: 32,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  sectionTitle: {
-    fontSize: 20,
+  title: {
+    fontSize: 32,
     fontWeight: '700' as const,
     color: colors.text.primary,
   },
-  settingsList: {
+  profileSection: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 24,
     backgroundColor: colors.background.primary,
+    marginHorizontal: 20,
+    borderRadius: 24,
+    paddingVertical: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  avatarContainer: {
+    marginBottom: 16,
+    position: 'relative',
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarPlaceholderText: {
+    fontSize: 40,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    overflow: 'hidden',
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: colors.background.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  profileInfo: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    marginBottom: 2,
+  },
+  profilePhone: {
+    fontSize: 15,
+    color: colors.text.secondary,
+  },
+  verificationBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.badge.verified,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.badge.verifiedText,
+  },
+  card: {
+    backgroundColor: colors.background.primary,
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 20,
+    padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
   },
-  settingItem: {
+  cardHeader: {
+    marginBottom: 16,
+  },
+  cardTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  relationshipContent: {
+    gap: 14,
+  },
+  relationshipRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
   },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  settingLabel: {
-    fontSize: 16,
-    color: colors.text.primary,
-    fontWeight: '500' as const,
-  },
-  settingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  settingValue: {
+  relationshipLabel: {
     fontSize: 15,
     color: colors.text.secondary,
     fontWeight: '500' as const,
   },
-  dangerCard: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 20,
-    padding: 24,
-    flexDirection: 'row',
-    gap: 16,
-    borderWidth: 2,
-    borderColor: colors.danger + '30',
-    shadowColor: colors.danger,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+  relationshipValue: {
+    fontSize: 15,
+    color: colors.text.primary,
+    fontWeight: '600' as const,
   },
-  dangerContent: {
-    flex: 1,
-  },
-  dangerTitle: {
-    fontSize: 17,
-    fontWeight: '700' as const,
-    color: colors.danger,
-    marginBottom: 8,
-  },
-  dangerText: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  dangerButton: {
-    backgroundColor: colors.danger,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    alignSelf: 'flex-start',
-    shadowColor: colors.danger,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  dangerButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text.white,
+  statusBadgeVerified: {
+    backgroundColor: colors.badge.verified,
   },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: colors.primary + '10',
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
+  statusBadgePending: {
+    backgroundColor: colors.badge.pending,
   },
-  infoText: {
-    flex: 1,
+  statusBadgeText: {
     fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  statusTextVerified: {
+    color: colors.badge.verifiedText,
+  },
+  statusTextPending: {
+    color: colors.badge.pendingText,
+  },
+  noRelationshipContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  noRelationshipText: {
+    fontSize: 14,
     color: colors.text.secondary,
-    lineHeight: 18,
+    marginBottom: 12,
   },
-  profileEditSection: {
-    padding: 16,
-    gap: 16,
+  addRelationshipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  editRow: {
-    gap: 8,
-  },
-  editLabel: {
+  addRelationshipButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: colors.text.secondary,
+    color: colors.primary,
   },
-  editInput: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  section: {
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 12,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  menuItemText: {
     fontSize: 16,
     color: colors.text.primary,
-    borderWidth: 1,
-    borderColor: colors.border.light,
+    fontWeight: '500' as const,
   },
-  editInputDisabled: {
-    backgroundColor: colors.background.primary,
-    color: colors.text.secondary,
+  logoutText: {
+    color: colors.danger,
   },
-  editButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  editButtonText: {
-    fontSize: 15,
+  adminText: {
+    color: colors.primary,
     fontWeight: '600' as const,
-    color: colors.text.white,
-  },
-  editButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: colors.background.secondary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  cancelButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text.secondary,
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text.white,
   },
 });
