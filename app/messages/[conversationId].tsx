@@ -73,22 +73,89 @@ export default function ConversationDetailScreen() {
             const isReceiver = newMessage.receiver_id === currentUser.id;
             const deletedForMe = (isSender && newMessage.deleted_for_sender) || (isReceiver && newMessage.deleted_for_receiver);
             
+            // Only add if not deleted for current user
             if (!deletedForMe) {
-              setLocalMessages((prev) => [...prev, {
-                id: newMessage.id,
-                conversationId: newMessage.conversation_id,
-                senderId: newMessage.sender_id,
-                receiverId: newMessage.receiver_id,
-                content: newMessage.content,
-                mediaUrl: newMessage.media_url,
-                documentUrl: newMessage.document_url,
-                documentName: newMessage.document_name,
-                messageType: newMessage.message_type || 'text',
-                deletedForSender: newMessage.deleted_for_sender || false,
-                deletedForReceiver: newMessage.deleted_for_receiver || false,
-                read: newMessage.read,
-                createdAt: newMessage.created_at,
-              }]);
+              setLocalMessages((prev) => {
+                // Check if message already exists (from optimistic update or duplicate)
+                const exists = prev.some(m => m.id === newMessage.id);
+                if (exists) {
+                  // Update existing message (replace optimistic with real)
+                  return prev.map(m => 
+                    m.id === newMessage.id 
+                      ? {
+                          id: newMessage.id,
+                          conversationId: newMessage.conversation_id,
+                          senderId: newMessage.sender_id,
+                          receiverId: newMessage.receiver_id,
+                          content: newMessage.content,
+                          mediaUrl: newMessage.media_url,
+                          documentUrl: newMessage.document_url,
+                          documentName: newMessage.document_name,
+                          messageType: newMessage.message_type || 'text',
+                          deletedForSender: newMessage.deleted_for_sender || false,
+                          deletedForReceiver: newMessage.deleted_for_receiver || false,
+                          read: newMessage.read,
+                          createdAt: newMessage.created_at,
+                        }
+                      : m
+                  );
+                }
+                // Check if there's an optimistic message to replace
+                // Match by: temp ID, same sender, same content, and recent time
+                const optimisticMatch = prev.find(m => {
+                  const isTemp = m.id.toString().startsWith('temp_');
+                  const sameSender = m.senderId === newMessage.sender_id;
+                  const sameContent = m.content === newMessage.content || 
+                                     (m.messageType === 'image' && newMessage.message_type === 'image') ||
+                                     (m.messageType === 'document' && newMessage.message_type === 'document' && m.documentName === newMessage.document_name);
+                  const recentTime = Math.abs(new Date(m.createdAt).getTime() - new Date(newMessage.created_at).getTime()) < 10000; // 10 seconds
+                  
+                  return isTemp && sameSender && sameContent && recentTime;
+                });
+                
+                if (optimisticMatch) {
+                  // Replace optimistic message with real one
+                  return prev.map(m => 
+                    m.id === optimisticMatch.id 
+                      ? {
+                          id: newMessage.id,
+                          conversationId: newMessage.conversation_id,
+                          senderId: newMessage.sender_id,
+                          receiverId: newMessage.receiver_id,
+                          content: newMessage.content,
+                          mediaUrl: newMessage.media_url,
+                          documentUrl: newMessage.document_url,
+                          documentName: newMessage.document_name,
+                          messageType: newMessage.message_type || 'text',
+                          deletedForSender: newMessage.deleted_for_sender || false,
+                          deletedForReceiver: newMessage.deleted_for_receiver || false,
+                          read: newMessage.read,
+                          createdAt: newMessage.created_at,
+                        }
+                      : m
+                  );
+                }
+                
+                // Add new message
+                return [...prev, {
+                  id: newMessage.id,
+                  conversationId: newMessage.conversation_id,
+                  senderId: newMessage.sender_id,
+                  receiverId: newMessage.receiver_id,
+                  content: newMessage.content,
+                  mediaUrl: newMessage.media_url,
+                  documentUrl: newMessage.document_url,
+                  documentName: newMessage.document_name,
+                  messageType: newMessage.message_type || 'text',
+                  deletedForSender: newMessage.deleted_for_sender || false,
+                  deletedForReceiver: newMessage.deleted_for_receiver || false,
+                  read: newMessage.read,
+                  createdAt: newMessage.created_at,
+                }];
+              });
+            } else {
+              // If message is deleted for current user, remove it from local state
+              setLocalMessages((prev) => prev.filter(m => m.id !== newMessage.id));
             }
           }
         )
@@ -102,16 +169,28 @@ export default function ConversationDetailScreen() {
           },
           (payload) => {
             const updatedMessage = payload.new;
-            setLocalMessages((prev) => prev.map(m => 
-              m.id === updatedMessage.id 
-                ? {
-                    ...m,
-                    content: updatedMessage.content,
-                    deletedForSender: updatedMessage.deleted_for_sender || false,
-                    deletedForReceiver: updatedMessage.deleted_for_receiver || false,
-                  }
-                : m
-            ));
+            const isSender = updatedMessage.sender_id === currentUser.id;
+            const isReceiver = updatedMessage.receiver_id === currentUser.id;
+            const deletedForMe = (isSender && updatedMessage.deleted_for_sender) || (isReceiver && updatedMessage.deleted_for_receiver);
+            
+            setLocalMessages((prev) => {
+              // If deleted for current user, remove it completely
+              if (deletedForMe) {
+                return prev.filter(m => m.id !== updatedMessage.id);
+              }
+              
+              // Otherwise update the message
+              return prev.map(m => 
+                m.id === updatedMessage.id 
+                  ? {
+                      ...m,
+                      content: updatedMessage.content,
+                      deletedForSender: updatedMessage.deleted_for_sender || false,
+                      deletedForReceiver: updatedMessage.deleted_for_receiver || false,
+                    }
+                  : m
+              );
+            });
           }
         )
         .on(
@@ -451,41 +530,55 @@ export default function ConversationDetailScreen() {
       return;
     }
 
-    const tempId = Date.now().toString();
+    const tempId = `temp_${Date.now()}`;
+    const messageContent = messageText.trim() || (messageType === 'image' ? '' : (selectedDocument ? selectedDocument.name : ''));
     const optimisticMessage: any = {
       id: tempId,
       conversationId,
       senderId: currentUser.id,
       receiverId: otherParticipantId,
-      content: messageText.trim() || (messageType === 'image' ? '' : (selectedDocument ? selectedDocument.name : '')),
+      content: messageContent,
       mediaUrl,
       documentUrl,
       documentName,
       messageType,
       read: false,
+      deletedForSender: false,
+      deletedForReceiver: false,
       createdAt: new Date().toISOString(),
     };
 
-    setLocalMessages([...localMessages, optimisticMessage]);
+    // Add optimistic message immediately
+    setLocalMessages(prev => [...prev, optimisticMessage]);
     setMessageText('');
     setSelectedImage(null);
     setSelectedDocument(null);
+
+    // Scroll to bottom to show new message
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
 
     try {
       await sendMessage(
         conversationId,
         otherParticipantId,
-        optimisticMessage.content,
+        messageContent,
         mediaUrl,
         documentUrl,
         documentName,
         messageType
       );
-      // Remove optimistic message and let real-time update handle it
-      setLocalMessages(prev => prev.filter(m => m.id !== tempId));
+      
+      // Don't remove optimistic message here - let real-time subscription handle it
+      // The real-time subscription will replace the optimistic message with the real one
+      // We match by content, sender, and time to replace the optimistic message
+      
     } catch (error) {
       console.error('Failed to send message:', error);
-      setLocalMessages(localMessages.filter((m) => m.id !== tempId));
+      // Remove optimistic message on error
+      setLocalMessages(prev => prev.filter((m) => m.id !== tempId));
+      Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
 
@@ -534,11 +627,13 @@ export default function ConversationDetailScreen() {
             onPress: async () => {
               const success = await deleteMessage(messageId, conversationId, true);
               if (success) {
+                // Update message to show deleted state
                 setLocalMessages(prev => prev.map(m => 
                   m.id === messageId 
                     ? { ...m, content: 'This message was deleted', deletedForSender: true, deletedForReceiver: true }
                     : m
                 ));
+                // Real-time update will also handle this
               } else {
                 Alert.alert('Error', 'Failed to delete message');
               }
