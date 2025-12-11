@@ -91,9 +91,8 @@ export default function IdVerificationScreen() {
         .from('verification_documents')
         .insert({
           user_id: currentUser?.id,
-          id_image_url: idImageUrl,
-          document_url: idImageUrl, // Also set document_url for compatibility
-          document_type: 'other', // Default type, can be updated later
+          document_url: idImageUrl,
+          document_type: 'government_id', // verification_documents allows: 'government_id', 'phone', 'email', 'selfie'
           status: 'pending',
         });
 
