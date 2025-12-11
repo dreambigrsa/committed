@@ -13,7 +13,7 @@ import { IdCard, ArrowLeft, Upload, CheckCircle2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
+// @ts-ignore - legacy path works at runtime
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';
@@ -88,7 +88,7 @@ export default function IdVerificationScreen() {
     setIsSubmitting(true);
     try {
       await supabase
-        .from('id_verification_requests')
+        .from('verification_documents')
         .insert({
           user_id: currentUser?.id,
           id_image_url: idImageUrl,
