@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { supabase } from '@/lib/supabase';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -71,8 +72,19 @@ export default function AuthScreen() {
           return;
         }
 
-        await signup(formData.fullName, formData.email, formData.phoneNumber, formData.password);
-        router.replace('/(tabs)/home');
+        const user = await signup(formData.fullName, formData.email, formData.phoneNumber, formData.password);
+        
+        // Check if email confirmation is required
+        const { data: { session } } = await supabase.auth.getSession();
+        const emailConfirmed = !!session?.user?.email_confirmed_at;
+        
+        if (!emailConfirmed) {
+          // Redirect to email verification screen
+          router.replace('/verify-email');
+        } else {
+          // Email already confirmed, go to home
+          router.replace('/(tabs)/home');
+        }
       } else {
         if (!formData.email || !formData.password) {
           alert('Please enter email and password');
