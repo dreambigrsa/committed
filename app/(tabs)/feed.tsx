@@ -24,7 +24,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
+// @ts-ignore - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
