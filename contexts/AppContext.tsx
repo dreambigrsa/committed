@@ -1606,13 +1606,34 @@ export const [AppContext, useApp] = createContextHook(() => {
         ? `📄 ${documentName || 'Document'}`
         : content;
       
+      const lastMessageAt = new Date().toISOString();
+      
+      // Update conversation in database
       await supabase
         .from('conversations')
         .update({
           last_message: lastMessageText,
-          last_message_at: new Date().toISOString(),
+          last_message_at: lastMessageAt,
         })
         .eq('id', conversationId);
+      
+      // Optimistically update local conversations state immediately
+      setConversations(prev => {
+        const existingIndex = prev.findIndex(c => c.id === conversationId);
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            lastMessage: lastMessageText,
+            lastMessageAt: lastMessageAt,
+          };
+          // Sort by last_message_at descending (most recent first)
+          return updated.sort((a, b) => 
+            new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+          );
+        }
+        return prev;
+      });
       
       // Send notification to receiver
       await createNotification(
@@ -2335,6 +2356,44 @@ export const [AppContext, useApp] = createContextHook(() => {
       )
       .subscribe();
     subs.push(notificationsChannel);
+
+    // Subscribe to conversation updates (for last_message changes)
+    const conversationsChannel = supabase
+      .channel('conversations')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+        },
+        (payload: any) => {
+          const updatedConv = payload.new;
+          // Check if this conversation involves the current user
+          const participantIds = updatedConv.participant_ids || [];
+          if (participantIds.includes(userId)) {
+            setConversations(prev => {
+              const existingIndex = prev.findIndex(c => c.id === updatedConv.id);
+              if (existingIndex >= 0) {
+                // Update existing conversation
+                const updated = [...prev];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  lastMessage: updatedConv.last_message || '',
+                  lastMessageAt: updatedConv.last_message_at,
+                };
+                // Sort by last_message_at descending (most recent first)
+                return updated.sort((a, b) => 
+                  new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+                );
+              }
+              return prev;
+            });
+          }
+        }
+      )
+      .subscribe();
+    subs.push(conversationsChannel);
 
     const requestsChannel = supabase
       .channel('relationship_requests')
