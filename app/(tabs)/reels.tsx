@@ -357,42 +357,42 @@ export default function ReelsScreen() {
                       </Text>
                     </TouchableOpacity>
                   )}
+                  
+                  {editingReel === reel.id ? (
+                    <View style={styles.editCaptionContainer}>
+                      <TextInput
+                        style={styles.editCaptionInput}
+                        value={editCaption}
+                        onChangeText={setEditCaption}
+                        multiline
+                        placeholder="Edit caption..."
+                        placeholderTextColor={colors.text.tertiary}
+                      />
+                      <View style={styles.editCaptionActions}>
+                        <TouchableOpacity
+                          style={styles.editCaptionButton}
+                          onPress={() => {
+                            setEditingReel(null);
+                            setEditCaption('');
+                          }}
+                        >
+                          <X size={16} color={colors.text.white} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.editCaptionButton}
+                          onPress={() => handleSaveEdit(reel.id)}
+                        >
+                          <Text style={styles.editCaptionSaveText}>Save</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.caption} numberOfLines={3}>
+                      {reel.caption}
+                    </Text>
+                  )}
                 </View>
               </View>
-              
-              {editingReel === reel.id ? (
-                <View style={styles.editCaptionContainer}>
-                  <TextInput
-                    style={styles.editCaptionInput}
-                    value={editCaption}
-                    onChangeText={setEditCaption}
-                    multiline
-                    placeholder="Edit caption..."
-                    placeholderTextColor={colors.text.tertiary}
-                  />
-                  <View style={styles.editCaptionActions}>
-                    <TouchableOpacity
-                      style={styles.editCaptionButton}
-                      onPress={() => {
-                        setEditingReel(null);
-                        setEditCaption('');
-                      }}
-                    >
-                      <X size={16} color={colors.text.white} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.editCaptionButton}
-                      onPress={() => handleSaveEdit(reel.id)}
-                    >
-                      <Text style={styles.editCaptionSaveText}>Save</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <Text style={styles.caption} numberOfLines={3}>
-                  {reel.caption}
-                </Text>
-              )}
             </View>
           </View>
 
@@ -622,7 +622,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    marginBottom: 8,
   },
   userNameContainer: {
     flex: 1,
@@ -693,7 +692,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.9)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-    marginTop: 4,
+    marginTop: 8,
     paddingRight: 8,
   },
   actionButton: {
