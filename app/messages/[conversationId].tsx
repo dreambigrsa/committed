@@ -667,18 +667,9 @@ export default function ConversationDetailScreen() {
               <Text style={styles.warningIcon}>⚠️</Text>
               <View style={styles.warningTextContainer}>
                 <Text style={styles.warningTitle}>
-                  {(() => {
-                    const template = warningTemplates.find(t => t.severity === messageWarning.severity);
-                    if (template) {
-                      return template.in_chat_warning_template
-                        .split('\n')[0]
-                        .replace('{trigger_words}', messageWarning.triggerWords.join(', '))
-                        .replace('{severity}', messageWarning.severity);
-                    }
-                    return messageWarning.severity === 'high' ? 'High Risk Warning' :
-                           messageWarning.severity === 'medium' ? 'Medium Risk Warning' :
-                           'Low Risk Warning';
-                  })()}
+                  {messageWarning.severity === 'high' ? 'High Risk Warning' :
+                   messageWarning.severity === 'medium' ? 'Medium Risk Warning' :
+                   'Low Risk Warning'}
                 </Text>
                 <Text style={styles.warningMessage}>
                   {(() => {
