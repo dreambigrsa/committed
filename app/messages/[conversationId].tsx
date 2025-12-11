@@ -14,6 +14,7 @@ import {
   ScrollView,
   Image as RNImage,
   Linking,
+  ImageBackground,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn } from 'lucide-react-native';
@@ -40,6 +41,8 @@ export default function ConversationDetailScreen() {
   const [selectedDocument, setSelectedDocument] = useState<{ uri: string; name: string } | null>(null);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<string | null>(null);
+  const [backgroundOpacity, setBackgroundOpacity] = useState<number>(0);
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -157,6 +160,10 @@ export default function ConversationDetailScreen() {
     if (!conversationId || !currentUser) return;
     const background = await getChatBackground(conversationId);
     setChatBackgroundState(background);
+    if (background && background.background_type === 'image') {
+      setSelectedBackgroundImage(background.background_value);
+      setBackgroundOpacity(background.opacity || 0);
+    }
   };
 
   const downloadImage = async (imageUrl: string) => {
@@ -448,15 +455,48 @@ export default function ConversationDetailScreen() {
       case 'color':
         return { backgroundColor: chatBackground.background_value };
       case 'image':
-        return { 
-          backgroundColor: colors.background.secondary,
-          // Note: For image backgrounds, you'd need to use ImageBackground component
-        };
+        return { backgroundColor: colors.background.secondary };
       case 'gradient':
-        // For gradients, you'd need a gradient library like react-native-linear-gradient
         return { backgroundColor: colors.background.secondary };
       default:
         return { backgroundColor: colors.background.secondary };
+    }
+  };
+
+  const renderBackgroundImage = () => {
+    if (!chatBackground || chatBackground.background_type !== 'image' || !chatBackground.background_value) {
+      return null;
+    }
+
+    const opacity = chatBackground.opacity || 0;
+    const overlayOpacity = opacity / 10; // Convert 0-10 to 0-1
+
+    return (
+      <ImageBackground
+        source={{ uri: chatBackground.background_value }}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      >
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${overlayOpacity})` }]} />
+      </ImageBackground>
+    );
+  };
+
+  const handlePickBackgroundImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedBackgroundImage(result.assets[0].uri);
     }
   };
 
@@ -617,6 +657,95 @@ export default function ConversationDetailScreen() {
                   />
                 ))}
               </View>
+
+              <Text style={[styles.backgroundSectionTitle, { marginTop: 24 }]}>Custom Image</Text>
+              <TouchableOpacity
+                style={styles.imageBackgroundButton}
+                onPress={handlePickBackgroundImage}
+              >
+                <ImageIcon size={20} color={colors.primary} />
+                <Text style={styles.imageBackgroundButtonText}>
+                  {selectedBackgroundImage ? 'Change Image' : 'Select from Gallery'}
+                </Text>
+              </TouchableOpacity>
+
+              {selectedBackgroundImage && (
+                <>
+                  <View style={styles.imagePreviewContainer}>
+                    <ImageBackground
+                      source={{ uri: selectedBackgroundImage }}
+                      style={styles.backgroundPreview}
+                      resizeMode="cover"
+                    >
+                      <View style={[styles.backgroundPreview, { backgroundColor: `rgba(0, 0, 0, ${backgroundOpacity / 10})` }]} />
+                    </ImageBackground>
+                  </View>
+
+                  <View style={styles.opacityContainer}>
+                    <Text style={styles.opacityLabel}>Darkness: {backgroundOpacity}/10</Text>
+                    <View style={styles.sliderContainer}>
+                      <Text style={styles.sliderLabel}>0</Text>
+                      <View style={styles.sliderWrapper}>
+                        <View style={styles.sliderTrack}>
+                          <View 
+                            style={[
+                              styles.sliderFill, 
+                              { width: `${(backgroundOpacity / 10) * 100}%` }
+                            ]} 
+                          />
+                          <View 
+                            style={[
+                              styles.sliderThumb,
+                              { left: `${(backgroundOpacity / 10) * 100}%` }
+                            ]}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          style={StyleSheet.absoluteFill}
+                          onPress={(e) => {
+                            const { locationX, target } = e.nativeEvent;
+                            const width = (target as any)?.layout?.width || 300;
+                            const newValue = Math.round((locationX / width) * 10);
+                            setBackgroundOpacity(Math.max(0, Math.min(10, newValue)));
+                          }}
+                          activeOpacity={1}
+                        />
+                      </View>
+                      <Text style={styles.sliderLabel}>10</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.applyButton}
+                    onPress={async () => {
+                      // Upload image to Supabase if it's a local URI
+                      let imageUrl = selectedBackgroundImage;
+                      if (selectedBackgroundImage.startsWith('file://') || selectedBackgroundImage.startsWith('ph://')) {
+                        // Upload to Supabase
+                        const uploadedUrl = await uploadImage(selectedBackgroundImage);
+                        if (uploadedUrl) {
+                          imageUrl = uploadedUrl;
+                        } else {
+                          Alert.alert('Error', 'Failed to upload background image');
+                          return;
+                        }
+                      }
+
+                      const success = await setChatBackground(conversationId, 'image', imageUrl, backgroundOpacity);
+                      if (success) {
+                        setChatBackgroundState({ 
+                          background_type: 'image', 
+                          background_value: imageUrl,
+                          opacity: backgroundOpacity 
+                        });
+                        setShowBackgroundModal(false);
+                      }
+                    }}
+                  >
+                    <Text style={styles.applyButtonText}>Apply Background</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -662,6 +791,7 @@ export default function ConversationDetailScreen() {
         }}
       />
       <SafeAreaView style={[styles.container, getBackgroundStyle()]}>
+        {renderBackgroundImage()}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
@@ -1032,6 +1162,94 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   downloadButtonText: {
+    color: colors.text.white,
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  imageBackgroundButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    marginTop: 8,
+  },
+  imageBackgroundButtonText: {
+    fontSize: 16,
+    fontWeight: '500' as const,
+    color: colors.text.primary,
+  },
+  backgroundPreview: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 12,
+  },
+  opacityContainer: {
+    marginTop: 20,
+    paddingVertical: 12,
+  },
+  opacityLabel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 12,
+  },
+  sliderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sliderLabel: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  sliderWrapper: {
+    flex: 1,
+    height: 40,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sliderTrack: {
+    height: 4,
+    backgroundColor: colors.border.light,
+    borderRadius: 2,
+    position: 'relative',
+  },
+  sliderFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  sliderThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    position: 'absolute',
+    top: -8,
+    marginLeft: -10,
+    borderWidth: 2,
+    borderColor: colors.text.white,
+  },
+  applyButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  applyButtonText: {
     color: colors.text.white,
     fontSize: 16,
     fontWeight: '600' as const,
