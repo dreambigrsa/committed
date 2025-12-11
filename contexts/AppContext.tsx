@@ -2157,6 +2157,12 @@ export const [AppContext, useApp] = createContextHook(() => {
   const followUser = useCallback(async (followingId: string) => {
     if (!currentUser) return null;
     
+    // Check if already following
+    const alreadyFollowing = follows.some(f => f.followerId === currentUser.id && f.followingId === followingId);
+    if (alreadyFollowing) {
+      return null; // Already following, no need to do anything
+    }
+    
     try {
       const { data, error } = await supabase
         .from('follows')
@@ -2167,25 +2173,45 @@ export const [AppContext, useApp] = createContextHook(() => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate follow error gracefully
+        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+          // Already following, just return
+          return null;
+        }
+        throw error;
+      }
 
-      const newFollow: Follow = {
-        id: data.id,
-        followerId: data.follower_id,
-        followingId: data.following_id,
-        createdAt: data.created_at,
-      };
+      if (data) {
+        const newFollow: Follow = {
+          id: data.id,
+          followerId: data.follower_id,
+          followingId: data.following_id,
+          createdAt: data.created_at,
+        };
 
-      setFollows([...follows, newFollow]);
-      return newFollow;
-    } catch (error) {
-      console.error('Follow user error:', error);
+        setFollows([...follows, newFollow]);
+        return newFollow;
+      }
+      return null;
+    } catch (error: any) {
+      console.error('Follow user error:', error?.message || error?.code || JSON.stringify(error));
+      // If it's a duplicate error, that's okay - we're already following
+      if (error?.code === '23505' || error?.message?.includes('duplicate') || error?.message?.includes('unique')) {
+        return null;
+      }
       return null;
     }
   }, [currentUser, follows]);
 
   const unfollowUser = useCallback(async (followingId: string) => {
     if (!currentUser) return;
+    
+    // Check if actually following
+    const isFollowing = follows.some(f => f.followerId === currentUser.id && f.followingId === followingId);
+    if (!isFollowing) {
+      return; // Not following, no need to do anything
+    }
     
     try {
       const { error } = await supabase
@@ -2194,11 +2220,17 @@ export const [AppContext, useApp] = createContextHook(() => {
         .eq('follower_id', currentUser.id)
         .eq('following_id', followingId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Unfollow user error:', error?.message || error?.code || JSON.stringify(error));
+        throw error;
+      }
 
+      // Update local state
       setFollows(follows.filter(f => !(f.followerId === currentUser.id && f.followingId === followingId)));
-    } catch (error) {
-      console.error('Unfollow user error:', error);
+    } catch (error: any) {
+      console.error('Unfollow user error:', error?.message || error?.code || JSON.stringify(error));
+      // Even if there's an error, update local state to reflect user's intent
+      setFollows(follows.filter(f => !(f.followerId === currentUser.id && f.followingId === followingId)));
     }
   }, [currentUser, follows]);
 
