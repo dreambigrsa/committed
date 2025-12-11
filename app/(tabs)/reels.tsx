@@ -18,6 +18,7 @@ import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film, MoreVertical, Edit2, Trash2, X, UserPlus } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Reel } from '@/types';
@@ -26,6 +27,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -40,7 +42,12 @@ export default function ReelsScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  // Calculate tab bar height: base height (64) + safe area bottom inset
+  const tabBarHeight = 64 + insets.bottom;
+  // Add extra padding for the overlay to ensure content is visible above tab bar
+  const overlayBottomPadding = tabBarHeight + 16;
+
+  const styles = useMemo(() => createStyles(colors, overlayBottomPadding), [colors, overlayBottomPadding]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -583,7 +590,7 @@ export default function ReelsScreen() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
@@ -610,7 +617,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
+    paddingBottom: overlayBottomPadding,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
