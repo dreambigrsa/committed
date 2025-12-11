@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ export default function NotificationToast() {
   const previousNotificationsRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const hideToast = () => {
+  const hideToast = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -43,9 +43,9 @@ export default function NotificationToast() {
       setIsVisible(false);
       setCurrentNotification(null);
     });
-  };
+  }, [slideAnim, opacityAnim]);
 
-  const showToast = () => {
+  const showToast = useCallback(() => {
     setIsVisible(true);
     Animated.parallel([
       Animated.spring(slideAnim, {
@@ -68,11 +68,11 @@ export default function NotificationToast() {
     timeoutRef.current = setTimeout(() => {
       hideToast();
     }, 5000);
-  };
+  }, [slideAnim, opacityAnim, hideToast]);
 
   // Watch for new notifications
   useEffect(() => {
-    if (notifications.length === 0) return;
+    if (!notifications || notifications.length === 0) return;
 
     // Get the most recent unread notification
     const unreadNotifications = notifications.filter(n => !n.read);
@@ -83,12 +83,12 @@ export default function NotificationToast() {
     )[0];
 
     // Only show if it's a new notification (not already shown)
-    if (!previousNotificationsRef.current.has(latestNotification.id)) {
+    if (latestNotification && !previousNotificationsRef.current.has(latestNotification.id)) {
       previousNotificationsRef.current.add(latestNotification.id);
       setCurrentNotification(latestNotification);
       showToast();
     }
-  }, [notifications]);
+  }, [notifications, showToast]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
