@@ -6,18 +6,33 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useApp } from "@/contexts/AppContext";
 
+function NotificationIcon({ color }: { color: string }) {
+  const { getUnreadNotificationsCount, cheatingAlerts } = useApp();
+  
+  const unreadCount = getUnreadNotificationsCount ? getUnreadNotificationsCount() : 0;
+  const unreadAlerts = Array.isArray(cheatingAlerts) ? cheatingAlerts.filter(a => !a.read).length : 0;
+  const totalUnread = unreadCount + unreadAlerts;
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <Bell size={24} color={color} />
+      {totalUnread > 0 && (
+        <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
+          <Text style={styles.badgeText}>
+            {totalUnread > 99 ? '99+' : totalUnread}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function TabLayout() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { getUnreadNotificationsCount, notifications, cheatingAlerts } = useApp();
   
   // Calculate tab bar height: base height (64) + safe area bottom inset
   const tabBarHeight = 64 + insets.bottom;
-  
-  // Calculate unread notifications count
-  const unreadCount = getUnreadNotificationsCount();
-  const unreadAlerts = cheatingAlerts.filter(a => !a.read).length;
-  const totalUnread = unreadCount + unreadAlerts;
   
   return (
     <Tabs
@@ -72,18 +87,7 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: "Notifications",
-          tabBarIcon: ({ color }) => (
-            <View style={{ position: 'relative' }}>
-              <Bell size={24} color={color} />
-              {totalUnread > 0 && (
-                <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
-                  <Text style={styles.badgeText}>
-                    {totalUnread > 99 ? '99+' : totalUnread}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ),
+          tabBarIcon: ({ color }) => <NotificationIcon color={color} />,
         }}
       />
       <Tabs.Screen
