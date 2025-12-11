@@ -10,11 +10,12 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film, X } from 'lucide-react-native';
+import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film, X, UserX, MoreVertical } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { User, Post, Reel } from '@/types';
@@ -28,7 +29,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -40,6 +41,8 @@ export default function UserProfileScreen() {
   const [userReels, setUserReels] = useState<Reel[]>([]);
   const [viewingImages, setViewingImages] = useState<{ urls: string[]; index: number } | null>(null);
   const [viewingReel, setViewingReel] = useState<Reel | null>(null);
+  const [showBlockMenu, setShowBlockMenu] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
   const imageViewerScrollRef = useRef<ScrollView>(null);
   
   const relationship = user ? getUserRelationship(user.id) : null;
@@ -159,6 +162,37 @@ export default function UserProfileScreen() {
     } catch (error) {
       console.error('Failed to start conversation:', error);
     }
+  };
+
+  const handleBlock = async () => {
+    if (!currentUser || !userId || currentUser.id === userId) return;
+    
+    Alert.alert(
+      'Block User',
+      `Are you sure you want to block ${user?.fullName}? They won't be able to see your profile, send you messages, or interact with your content.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => setShowBlockMenu(false) },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsBlocking(true);
+              await blockUser(userId);
+              Alert.alert('Success', `${user?.fullName} has been blocked.`, [
+                { text: 'OK', onPress: () => router.back() }
+              ]);
+              setShowBlockMenu(false);
+            } catch (error: any) {
+              console.error('Failed to block user:', error);
+              Alert.alert('Error', error.message || 'Failed to block user. Please try again.');
+            } finally {
+              setIsBlocking(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (isLoading) {
@@ -320,30 +354,42 @@ export default function UserProfileScreen() {
             </View>
 
             {!isOwnProfile && (
-              <View style={styles.actionButtons}>
+              <>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
+                    onPress={handleFollow}
+                    activeOpacity={0.8}
+                    disabled={isBlocking}
+                  >
+                    {isFollowing ? (
+                      <UserMinus size={20} color={colors.text.primary} />
+                    ) : (
+                      <UserPlus size={20} color={colors.text.white} />
+                    )}
+                    <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
+                      {isFollowing ? 'Unfollow' : 'Follow'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButtonMessage} 
+                    onPress={handleMessage}
+                    activeOpacity={0.8}
+                    disabled={isBlocking}
+                  >
+                    <MessageCircle size={20} color={colors.primary} />
+                    <Text style={styles.actionButtonTextMessage}>Message</Text>
+                  </TouchableOpacity>
+                </View>
                 <TouchableOpacity
-                  style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
-                  onPress={handleFollow}
+                  style={styles.blockButton}
+                  onPress={() => setShowBlockMenu(true)}
                   activeOpacity={0.8}
+                  disabled={isBlocking}
                 >
-                  {isFollowing ? (
-                    <UserMinus size={20} color={colors.text.primary} />
-                  ) : (
-                    <UserPlus size={20} color={colors.text.white} />
-                  )}
-                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
-                    {isFollowing ? 'Unfollow' : 'Follow'}
-                  </Text>
+                  <MoreVertical size={20} color={colors.text.secondary} />
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.actionButtonMessage} 
-                  onPress={handleMessage}
-                  activeOpacity={0.8}
-                >
-                  <MessageCircle size={20} color={colors.primary} />
-                  <Text style={styles.actionButtonTextMessage}>Message</Text>
-                </TouchableOpacity>
-              </View>
+              </>
             )}
 
             <View style={styles.verificationBadges}>
@@ -556,6 +602,37 @@ export default function UserProfileScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Block Menu Modal */}
+      <Modal
+        visible={showBlockMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowBlockMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowBlockMenu(false)}
+        >
+          <View style={styles.blockMenuContainer}>
+            <TouchableOpacity
+              style={styles.blockMenuItem}
+              onPress={handleBlock}
+              disabled={isBlocking}
+            >
+              <UserX size={20} color={colors.danger} />
+              <Text style={styles.blockMenuText}>Block {user?.fullName}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.blockMenuCancel}
+              onPress={() => setShowBlockMenu(false)}
+            >
+              <Text style={styles.blockMenuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -921,5 +998,46 @@ const styles = StyleSheet.create({
   reelViewerVideo: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
+  },
+  blockButton: {
+    alignSelf: 'center',
+    padding: 8,
+    marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blockMenuContainer: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 16,
+    padding: 16,
+    width: '80%',
+    maxWidth: 300,
+  },
+  blockMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.background.secondary,
+  },
+  blockMenuText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.danger,
+  },
+  blockMenuCancel: {
+    marginTop: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  blockMenuCancelText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
   },
 });
