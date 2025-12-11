@@ -22,6 +22,7 @@ import {
   DollarSign,
   Video,
   ScanFace,
+  ShieldAlert,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -147,6 +148,14 @@ export default function AdminDashboardScreen() {
       route: '/admin/face-matching',
       color: '#E74C3C',
       visible: currentUser.role === 'super_admin' || currentUser.role === 'admin',
+    },
+    {
+      title: 'Trigger Words',
+      icon: ShieldAlert,
+      description: 'Manage infidelity detection words',
+      route: '/admin/trigger-words',
+      color: '#E67E22',
+      visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
     },
   ];
 
