@@ -12,10 +12,13 @@ import {
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+// @ts-ignore - legacy path works at runtime
+import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { trpcClient } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
 
 export default function CoupleSelfieVerificationScreen() {
   const router = useRouter();
@@ -47,9 +50,40 @@ export default function CoupleSelfieVerificationScreen() {
 
     setIsUploading(true);
     try {
+      // First, upload the selfie to Supabase Storage
+      const fileName = `couple_selfie_${relationshipId}_${Date.now()}.jpg`;
+      
+      // Convert URI to Uint8Array
+      const base64 = await FileSystem.readAsStringAsync(selfieUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      // Convert base64 to Uint8Array
+      const binaryString = atob(base64);
+      const uint8Array = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        uint8Array[i] = binaryString.charCodeAt(i);
+      }
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(fileName, uint8Array, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('media')
+        .getPublicUrl(fileName);
+
+      // Now create certificate with the uploaded URL
       const certificateData = await trpcClient.certificates.create.mutate({
         relationshipId,
-        verificationSelfieUrl: selfieUri,
+        verificationSelfieUrl: publicUrl,
       });
 
       Alert.alert(
@@ -57,9 +91,12 @@ export default function CoupleSelfieVerificationScreen() {
         'Your couple verification has been submitted! Certificate will be available soon.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit verification:', error);
-      Alert.alert('Error', 'Failed to submit verification. Please try again.');
+      Alert.alert(
+        'Error', 
+        error?.message || 'Failed to submit verification. Please try again.'
+      );
     } finally {
       setIsUploading(false);
     }
