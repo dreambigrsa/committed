@@ -14,6 +14,7 @@ import { Mail, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { sendEmailCode, createVerificationCode } from '@/lib/verification-services';
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
@@ -29,26 +30,47 @@ export default function EmailVerificationScreen() {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       
-      await supabase
-        .from('verification_codes')
-        .insert({
-          user_id: currentUser?.id,
-          email,
-          code,
-          type: 'email',
-          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        });
+      // Create verification code in database first
+      const codeResult = await createVerificationCode(
+        currentUser?.id || '',
+        'email',
+        email,
+        code
+      );
 
-      console.log('Verification code:', code);
-      setCodeSent(true);
-      Alert.alert('Code Sent', `Verification code sent to ${email}. Code: ${code} (Demo mode)`);
-    } catch (error) {
+      if (!codeResult.success) {
+        throw new Error(codeResult.error || 'Failed to create verification code');
+      }
+
+      // Try to send email via configured service
+      const emailResult = await sendEmailCode(email, code);
+
+      if (emailResult.success) {
+        setCodeSent(true);
+        Alert.alert('Code Sent', `Verification code sent to ${email}`);
+      } else {
+        // If email service is not configured, show code in alert (fallback for testing)
+        setCodeSent(true);
+        Alert.alert(
+          'Code Generated',
+          `Email service is not configured. Your verification code is: ${code}\n\nPlease enter this code to verify.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
       console.error('Failed to send verification code:', error);
-      Alert.alert('Error', 'Failed to send verification code');
+      Alert.alert('Error', error.message || 'Failed to send verification code');
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +90,8 @@ export default function EmailVerificationScreen() {
         .eq('user_id', currentUser?.id)
         .eq('email', email)
         .eq('code', verificationCode)
-        .eq('type', 'email')
+        .eq('verification_type', 'email')
+        .eq('used', false)
         .gte('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
@@ -85,11 +108,11 @@ export default function EmailVerificationScreen() {
         },
       });
 
+      // Mark code as used instead of deleting
       await supabase
         .from('verification_codes')
-        .delete()
-        .eq('user_id', currentUser?.id)
-        .eq('type', 'email');
+        .update({ used: true })
+        .eq('id', data.id);
 
       Alert.alert('Success', 'Email verified successfully!', [
         { text: 'OK', onPress: () => router.back() },
