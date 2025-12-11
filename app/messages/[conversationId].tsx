@@ -16,10 +16,14 @@ import {
   Linking,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings } from 'lucide-react-native';
+import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+// @ts-expect-error - legacy path works at runtime
+import * as FileSystem from 'expo-file-system/legacy';
+// @ts-expect-error - expo-media-library may not be installed yet
+import * as MediaLibrary from 'expo-media-library';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
@@ -34,6 +38,8 @@ export default function ConversationDetailScreen() {
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<{ uri: string; name: string } | null>(null);
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -151,6 +157,39 @@ export default function ConversationDetailScreen() {
     if (!conversationId || !currentUser) return;
     const background = await getChatBackground(conversationId);
     setChatBackgroundState(background);
+  };
+
+  const downloadImage = async (imageUrl: string) => {
+    try {
+      setIsDownloading(true);
+      
+      // Request media library permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant access to save photos to your gallery.');
+        setIsDownloading(false);
+        return;
+      }
+
+      // Download the image
+      const fileUri = FileSystem.documentDirectory + `image_${Date.now()}.jpg`;
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error('Failed to download image');
+      }
+
+      // Save to media library
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      await MediaLibrary.createAlbumAsync('Committed', asset, false);
+
+      Alert.alert('Success', 'Image saved to gallery!');
+    } catch (error) {
+      console.error('Download image error:', error);
+      Alert.alert('Error', 'Failed to save image to gallery');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const uploadImage = async (uri: string): Promise<string | null> => {
@@ -450,11 +489,16 @@ export default function ConversationDetailScreen() {
       >
         <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
           {item.messageType === 'image' && item.mediaUrl ? (
-            <Image
-              source={{ uri: item.mediaUrl }}
-              style={styles.messageImage}
-              contentFit="cover"
-            />
+            <TouchableOpacity
+              onPress={() => setViewingImage(item.mediaUrl)}
+              activeOpacity={0.9}
+            >
+              <Image
+                source={{ uri: item.mediaUrl }}
+                style={styles.messageImage}
+                contentFit="cover"
+              />
+            </TouchableOpacity>
           ) : null}
           
           {item.messageType === 'document' && item.documentUrl ? (
@@ -493,6 +537,45 @@ export default function ConversationDetailScreen() {
           </View>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  const renderImageViewer = () => {
+    return (
+      <Modal
+        visible={viewingImage !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingImage(null)}
+      >
+        <View style={styles.imageViewerContainer}>
+          <TouchableOpacity
+            style={styles.imageViewerClose}
+            onPress={() => setViewingImage(null)}
+          >
+            <X size={28} color={colors.text.white} />
+          </TouchableOpacity>
+          {viewingImage && (
+            <>
+              <Image
+                source={{ uri: viewingImage }}
+                style={styles.fullScreenImage}
+                contentFit="contain"
+              />
+              <TouchableOpacity
+                style={styles.downloadButton}
+                onPress={() => downloadImage(viewingImage)}
+                disabled={isDownloading}
+              >
+                <Download size={24} color={colors.text.white} />
+                <Text style={styles.downloadButtonText}>
+                  {isDownloading ? 'Saving...' : 'Save to Gallery'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Modal>
     );
   };
 
@@ -660,6 +743,7 @@ export default function ConversationDetailScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
       {renderBackgroundModal()}
+      {renderImageViewer()}
     </>
   );
 }
@@ -911,5 +995,45 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 2,
     borderColor: colors.border.light,
+  },
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '80%',
+  },
+  downloadButton: {
+    position: 'absolute',
+    bottom: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  downloadButtonText: {
+    color: colors.text.white,
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });
