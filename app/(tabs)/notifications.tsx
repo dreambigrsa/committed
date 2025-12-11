@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Animated,
   Alert,
-  Text as RNText,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2, Trash2 } from 'lucide-react-native';
@@ -301,14 +300,12 @@ export default function NotificationsScreen() {
         return (
           <Text style={[styles.notificationText, !notification.read && styles.unreadText]}>
             {parts[0]}
-            <TouchableOpacity
+            <Text
+              style={[styles.notificationText, !notification.read && styles.unreadText, styles.clickableUsername]}
               onPress={() => router.push(`/profile/${usernameInfo.userId}` as any)}
-              activeOpacity={0.7}
             >
-              <RNText style={[styles.notificationText, !notification.read && styles.unreadText, styles.clickableUsername]}>
-                {match[0]}
-              </RNText>
-            </TouchableOpacity>
+              {match[0]}
+            </Text>
             {parts.slice(1).join(match[0])}
           </Text>
         );
