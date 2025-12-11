@@ -340,23 +340,25 @@ export default function ReelsScreen() {
                   )}
                 </TouchableOpacity>
                 <View style={styles.userNameContainer}>
-                  <TouchableOpacity 
-                    onPress={() => router.push(`/profile/${reel.userId}` as any)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
-                  </TouchableOpacity>
-                  {!isOwner && currentUser && (
-                    <TouchableOpacity
-                      style={[styles.followButton, isFollowing(reel.userId) && styles.followButtonActive]}
-                      onPress={() => handleFollow(reel.userId)}
-                      activeOpacity={0.8}
+                  <View style={styles.userNameRow}>
+                    <TouchableOpacity 
+                      onPress={() => router.push(`/profile/${reel.userId}` as any)}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.followButtonText}>
-                        {isFollowing(reel.userId) ? 'Following' : 'Follow'}
-                      </Text>
+                      <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
                     </TouchableOpacity>
-                  )}
+                    {!isOwner && currentUser && (
+                      <TouchableOpacity
+                        style={[styles.followButton, isFollowing(reel.userId) && styles.followButtonActive]}
+                        onPress={() => handleFollow(reel.userId)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.followButtonText}>
+                          {isFollowing(reel.userId) ? 'Following' : 'Follow'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   
                   {editingReel === reel.id ? (
                     <View style={styles.editCaptionContainer}>
@@ -627,6 +629,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-start',
   },
+  userNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   avatar: {
     width: 48,
     height: 48,
@@ -656,16 +664,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
-    marginBottom: 4,
   },
   followButton: {
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
     backgroundColor: colors.primary,
-    alignSelf: 'flex-start',
-    minWidth: 90,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
