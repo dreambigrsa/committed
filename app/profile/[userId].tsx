@@ -322,21 +322,26 @@ export default function UserProfileScreen() {
             {!isOwnProfile && (
               <View style={styles.actionButtons}>
                 <TouchableOpacity
-                  style={[styles.actionButton, isFollowing && styles.actionButtonSecondary]}
+                  style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
                   onPress={handleFollow}
+                  activeOpacity={0.8}
                 >
                   {isFollowing ? (
-                    <UserMinus size={18} color={colors.text.primary} />
+                    <UserMinus size={20} color={colors.text.primary} />
                   ) : (
-                    <UserPlus size={18} color={colors.text.white} />
+                    <UserPlus size={20} color={colors.text.white} />
                   )}
-                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextSecondary]}>
+                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
                     {isFollowing ? 'Unfollow' : 'Follow'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButtonMessage} onPress={handleMessage}>
-                  <MessageCircle size={18} color={colors.text.primary} />
-                  <Text style={styles.actionButtonTextSecondary}>Message</Text>
+                <TouchableOpacity 
+                  style={styles.actionButtonMessage} 
+                  onPress={handleMessage}
+                  activeOpacity={0.8}
+                >
+                  <MessageCircle size={20} color={colors.primary} />
+                  <Text style={styles.actionButtonTextMessage}>Message</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -747,44 +752,62 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     width: '100%',
-    marginBottom: 16,
+    marginTop: 8,
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    borderRadius: 10,
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minHeight: 48,
   },
-  actionButtonSecondary: {
-    backgroundColor: colors.background.secondary,
-    borderWidth: 1,
+  actionButtonFollow: {
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButtonUnfollow: {
+    backgroundColor: colors.background.primary,
+    borderWidth: 1.5,
     borderColor: colors.border.light,
   },
   actionButtonMessage: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.background.secondary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
+    gap: 6,
+    backgroundColor: colors.background.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: colors.border.light,
+    minHeight: 48,
   },
   actionButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.text.white,
+    letterSpacing: 0.3,
   },
-  actionButtonTextSecondary: {
+  actionButtonTextUnfollow: {
     color: colors.text.primary,
+  },
+  actionButtonTextMessage: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    letterSpacing: 0.3,
   },
   tabsContainer: {
     flexDirection: 'row',
