@@ -21,7 +21,7 @@ import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Dow
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-// @ts-expect-error - legacy path works at runtime
+// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
 // @ts-expect-error - expo-media-library may not be installed yet
 import * as MediaLibrary from 'expo-media-library';
@@ -172,8 +172,11 @@ export default function ConversationDetailScreen() {
     try {
       setIsDownloading(true);
       
-      // Request media library permissions
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      // Request media library permissions (only photos, not audio)
+      const { status } = await MediaLibrary.requestPermissionsAsync({
+        accessPrivileges: 'readwrite',
+      });
+      
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Please grant access to save photos to your gallery.');
         setIsDownloading(false);
@@ -181,7 +184,7 @@ export default function ConversationDetailScreen() {
       }
 
       // Download the image
-      const fileUri = FileSystem.documentDirectory + `image_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}image_${Date.now()}.jpg`;
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
 
       if (downloadResult.status !== 200) {
@@ -195,7 +198,7 @@ export default function ConversationDetailScreen() {
       Alert.alert('Success', 'Image saved to gallery!');
     } catch (error) {
       console.error('Download image error:', error);
-      Alert.alert('Error', 'Failed to save image to gallery');
+      Alert.alert('Error', 'Failed to save image to gallery. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -204,12 +207,32 @@ export default function ConversationDetailScreen() {
   const uploadImage = async (uri: string): Promise<string | null> => {
     try {
       const filename = `messages/${conversationId}/${Date.now()}.jpg`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      
+      // Check if it's a local file URI
+      let fileData: Uint8Array;
+      
+      if (uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('content://')) {
+        // Read local file using FileSystem
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        // Convert base64 to Uint8Array
+        const binaryString = atob(base64);
+        fileData = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          fileData[i] = binaryString.charCodeAt(i);
+        }
+      } else {
+        // Remote URL - fetch and convert to Uint8Array
+        const response = await fetch(uri);
+        const arrayBuffer = await response.arrayBuffer();
+        fileData = new Uint8Array(arrayBuffer);
+      }
 
       const { data, error } = await supabase.storage
         .from('media')
-        .upload(filename, blob, {
+        .upload(filename, fileData, {
           contentType: 'image/jpeg',
           upsert: false,
         });
