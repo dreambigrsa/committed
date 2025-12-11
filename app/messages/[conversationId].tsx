@@ -47,6 +47,7 @@ export default function ConversationDetailScreen() {
   const [backgroundOpacity, setBackgroundOpacity] = useState<number>(0);
   const [overlayColor, setOverlayColor] = useState<string>('#000000');
   const [warnings, setWarnings] = useState<any[]>([]);
+  const [warningTemplates, setWarningTemplates] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -211,6 +212,23 @@ export default function ConversationDetailScreen() {
       console.error('Error loading warnings:', error);
     }
   };
+
+  const loadWarningTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('warning_templates')
+        .select('*')
+        .eq('active', true);
+      if (error) throw error;
+      setWarningTemplates(data || []);
+    } catch (error) {
+      console.error('Error loading warning templates:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadWarningTemplates();
+  }, []);
 
   // Subscribe to new warnings
   useEffect(() => {
@@ -649,12 +667,29 @@ export default function ConversationDetailScreen() {
               <Text style={styles.warningIcon}>⚠️</Text>
               <View style={styles.warningTextContainer}>
                 <Text style={styles.warningTitle}>
-                  {messageWarning.severity === 'high' ? 'High Risk Warning' :
-                   messageWarning.severity === 'medium' ? 'Medium Risk Warning' :
-                   'Low Risk Warning'}
+                  {(() => {
+                    const template = warningTemplates.find(t => t.severity === messageWarning.severity);
+                    if (template) {
+                      return template.in_chat_warning_template
+                        .split('\n')[0]
+                        .replace('{trigger_words}', messageWarning.triggerWords.join(', '))
+                        .replace('{severity}', messageWarning.severity);
+                    }
+                    return messageWarning.severity === 'high' ? 'High Risk Warning' :
+                           messageWarning.severity === 'medium' ? 'Medium Risk Warning' :
+                           'Low Risk Warning';
+                  })()}
                 </Text>
                 <Text style={styles.warningMessage}>
-                  This message contains potentially inappropriate content. Trigger words detected: {messageWarning.triggerWords.join(', ')}
+                  {(() => {
+                    const template = warningTemplates.find(t => t.severity === messageWarning.severity);
+                    if (template) {
+                      return template.in_chat_warning_template
+                        .replace('{trigger_words}', messageWarning.triggerWords.join(', '))
+                        .replace('{severity}', messageWarning.severity);
+                    }
+                    return `This message contains potentially inappropriate content. Trigger words detected: ${messageWarning.triggerWords.join(', ')}`;
+                  })()}
                 </Text>
               </View>
               <TouchableOpacity
