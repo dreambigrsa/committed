@@ -81,11 +81,15 @@ export default function VerifyEmailScreen() {
   };
 
   const resendVerificationEmail = async () => {
-    if (!email) return;
+    if (!email) {
+      alert('Email address not found. Please try signing up again.');
+      return;
+    }
     
     setIsResending(true);
     try {
-      const { error } = await supabase.auth.resend({
+      // Use resend method to send confirmation email
+      const { data, error } = await supabase.auth.resend({
         type: 'signup',
         email: email,
         options: {
@@ -93,12 +97,41 @@ export default function VerifyEmailScreen() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Resend email error:', error);
+        
+        // Handle specific error cases
+        if (error.message?.includes('rate limit') || error.message?.includes('too many')) {
+          alert('Too many requests. Please wait a few minutes before trying again.');
+        } else if (error.message?.includes('already confirmed')) {
+          // Email already confirmed, check again
+          await checkEmailVerification();
+          alert('Your email is already verified!');
+        } else {
+          throw error;
+        }
+        return;
+      }
 
-      alert('Verification email sent! Please check your inbox and click the link to verify your email.');
+      // Success - show confirmation
+      alert('✅ Verification email sent!\n\nPlease check your inbox (and spam folder) for the verification link. Click the link to verify your email.');
     } catch (error: any) {
       console.error('Error resending verification email:', error);
-      alert(error.message || 'Failed to resend verification email. Please try again.');
+      
+      // More detailed error messages
+      let errorMessage = 'Failed to resend verification email.';
+      
+      if (error.message) {
+        if (error.message.includes('rate limit')) {
+          errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
+        } else if (error.message.includes('not found')) {
+          errorMessage = 'User not found. Please try signing up again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      alert(errorMessage + '\n\nIf this problem persists, please contact support.');
     } finally {
       setIsResending(false);
     }
