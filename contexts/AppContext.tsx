@@ -350,8 +350,26 @@ export const [AppContext, useApp] = createContextHook(() => {
         `)
         .order('created_at', { ascending: true });
 
+      const { data: commentLikesData } = await supabase
+        .from('comment_likes')
+        .select('comment_id, user_id');
+
       if (commentsData) {
+        // Create a map of comment likes
+        const likesByComment: Record<string, string[]> = {};
+        if (commentLikesData) {
+          commentLikesData.forEach((like: any) => {
+            if (!likesByComment[like.comment_id]) {
+              likesByComment[like.comment_id] = [];
+            }
+            likesByComment[like.comment_id].push(like.user_id);
+          });
+        }
+
         const commentsByPost: Record<string, Comment[]> = {};
+        const allComments: Comment[] = [];
+        
+        // First, create all comments
         commentsData.forEach((c: any) => {
           const comment: Comment = {
             id: c.id,
@@ -360,14 +378,34 @@ export const [AppContext, useApp] = createContextHook(() => {
             userName: c.users.full_name,
             userAvatar: c.users.profile_picture,
             content: c.content,
-            likes: [],
+            likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
+            parentCommentId: c.parent_comment_id || undefined,
+            replies: [],
           };
-          if (!commentsByPost[c.post_id]) {
-            commentsByPost[c.post_id] = [];
-          }
-          commentsByPost[c.post_id].push(comment);
+          allComments.push(comment);
         });
+
+        // Organize comments into top-level and replies
+        allComments.forEach((comment) => {
+          if (!comment.parentCommentId) {
+            // Top-level comment
+            if (!commentsByPost[comment.postId]) {
+              commentsByPost[comment.postId] = [];
+            }
+            commentsByPost[comment.postId].push(comment);
+          } else {
+            // Reply - find parent and add to replies
+            const parent = allComments.find(c => c.id === comment.parentCommentId);
+            if (parent) {
+              if (!parent.replies) {
+                parent.replies = [];
+              }
+              parent.replies.push(comment);
+            }
+          }
+        });
+        
         setComments(commentsByPost);
       }
 
@@ -1362,17 +1400,23 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, reels, createNotification]);
 
-  const addComment = useCallback(async (postId: string, content: string) => {
+  const addComment = useCallback(async (postId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
     
     try {
+      const insertData: any = {
+        post_id: postId,
+        user_id: currentUser.id,
+        content,
+      };
+      
+      if (parentCommentId) {
+        insertData.parent_comment_id = parentCommentId;
+      }
+
       const { data, error } = await supabase
         .from('comments')
-        .insert({
-          post_id: postId,
-          user_id: currentUser.id,
-          content,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -1387,18 +1431,47 @@ export const [AppContext, useApp] = createContextHook(() => {
         content,
         likes: [],
         createdAt: data.created_at,
+        parentCommentId: data.parent_comment_id || undefined,
       };
       
-      const updatedComments = {
-        ...comments,
-        [postId]: [...(comments[postId] || []), newComment],
-      };
+      // If it's a reply, add it to the parent comment's replies, otherwise add to top level
+      const updatedComments = { ...comments };
+      if (parentCommentId) {
+        // Find parent comment and add reply
+        const postComments = comments[postId] || [];
+        const updatedPostComments = postComments.map(comment => {
+          if (comment.id === parentCommentId) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), newComment],
+            };
+          }
+          return comment;
+        });
+        updatedComments[postId] = updatedPostComments;
+      } else {
+        updatedComments[postId] = [...(comments[postId] || []), newComment];
+      }
       setComments(updatedComments);
       
       const updatedPosts = posts.map(post => {
         if (post.id === postId) {
-          // Send notification to post owner (if not commenting on own post)
-          if (post.userId !== currentUser.id) {
+          // Send notification
+          if (parentCommentId) {
+            // Find parent comment owner
+            const postComments = comments[postId] || [];
+            const parentComment = postComments.find(c => c.id === parentCommentId);
+            if (parentComment && parentComment.userId !== currentUser.id) {
+              createNotification(
+                parentComment.userId,
+                'post_comment',
+                'New Reply',
+                `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+                { postId, commentId: data.id, parentCommentId, userId: currentUser.id }
+              );
+            }
+          } else if (post.userId !== currentUser.id) {
+            // Send notification to post owner (if not commenting on own post)
             createNotification(
               post.userId,
               'post_comment',
@@ -2741,14 +2814,30 @@ export const [AppContext, useApp] = createContextHook(() => {
     try {
       let foundComment: Comment | null = null;
       let postId: string | null = null;
+      let parentCommentId: string | null = null;
 
+      // Search in top-level comments and replies
       for (const [pid, commentList] of Object.entries(comments)) {
-        const comment = commentList.find(c => c.id === commentId);
-        if (comment) {
-          foundComment = comment;
+        const topLevelComment = commentList.find(c => c.id === commentId);
+        if (topLevelComment) {
+          foundComment = topLevelComment;
           postId = pid;
           break;
         }
+        
+        // Search in replies
+        for (const comment of commentList) {
+          if (comment.replies) {
+            const reply = comment.replies.find(r => r.id === commentId);
+            if (reply) {
+              foundComment = reply;
+              postId = pid;
+              parentCommentId = comment.id;
+              break;
+            }
+          }
+        }
+        if (foundComment) break;
       }
 
       if (!foundComment || foundComment.userId !== currentUser.id || !postId) {
@@ -2762,10 +2851,22 @@ export const [AppContext, useApp] = createContextHook(() => {
 
       if (error) throw error;
 
-      const updatedComments = {
-        ...comments,
-        [postId]: comments[postId].filter(c => c.id !== commentId),
-      };
+      const updatedComments = { ...comments };
+      if (parentCommentId) {
+        // Remove from parent's replies
+        updatedComments[postId] = comments[postId].map(comment => {
+          if (comment.id === parentCommentId) {
+            return {
+              ...comment,
+              replies: (comment.replies || []).filter(r => r.id !== commentId),
+            };
+          }
+          return comment;
+        });
+      } else {
+        // Remove top-level comment
+        updatedComments[postId] = comments[postId].filter(c => c.id !== commentId);
+      }
       setComments(updatedComments);
 
       const updatedPosts = posts.map(p => 
@@ -2780,6 +2881,106 @@ export const [AppContext, useApp] = createContextHook(() => {
       return false;
     }
   }, [currentUser, comments, posts, logActivity]);
+
+  const toggleCommentLike = useCallback(async (commentId: string, postId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      // Check if already liked
+      const postComments = comments[postId] || [];
+      let comment: Comment | null = null;
+      let isReply = false;
+      let parentCommentId: string | null = null;
+
+      // Search in top-level comments
+      comment = postComments.find(c => c.id === commentId) || null;
+      
+      // If not found, search in replies
+      if (!comment) {
+        for (const c of postComments) {
+          if (c.replies) {
+            const reply = c.replies.find(r => r.id === commentId);
+            if (reply) {
+              comment = reply;
+              isReply = true;
+              parentCommentId = c.id;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!comment) return false;
+
+      const isLiked = comment.likes.includes(currentUser.id);
+
+      if (isLiked) {
+        // Unlike
+        await supabase
+          .from('comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', currentUser.id);
+
+        const updatedLikes = comment.likes.filter(id => id !== currentUser.id);
+        
+        const updatedComments = { ...comments };
+        if (isReply && parentCommentId) {
+          updatedComments[postId] = postComments.map(c => {
+            if (c.id === parentCommentId) {
+              return {
+                ...c,
+                replies: (c.replies || []).map(r => 
+                  r.id === commentId ? { ...r, likes: updatedLikes } : r
+                ),
+              };
+            }
+            return c;
+          });
+        } else {
+          updatedComments[postId] = postComments.map(c => 
+            c.id === commentId ? { ...c, likes: updatedLikes } : c
+          );
+        }
+        setComments(updatedComments);
+      } else {
+        // Like
+        await supabase
+          .from('comment_likes')
+          .insert({
+            comment_id: commentId,
+            user_id: currentUser.id,
+          });
+
+        const updatedLikes = [...comment.likes, currentUser.id];
+        
+        const updatedComments = { ...comments };
+        if (isReply && parentCommentId) {
+          updatedComments[postId] = postComments.map(c => {
+            if (c.id === parentCommentId) {
+              return {
+                ...c,
+                replies: (c.replies || []).map(r => 
+                  r.id === commentId ? { ...r, likes: updatedLikes } : r
+                ),
+              };
+            }
+            return c;
+          });
+        } else {
+          updatedComments[postId] = postComments.map(c => 
+            c.id === commentId ? { ...c, likes: updatedLikes } : c
+          );
+        }
+        setComments(updatedComments);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Toggle comment like error:', error);
+      return false;
+    }
+  }, [currentUser, comments]);
 
   const editReel = useCallback(async (reelId: string, caption: string) => {
     if (!currentUser) return null;
@@ -3077,6 +3278,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     deletePost,
     editComment,
     deleteComment,
+    toggleCommentLike,
     editReel,
     deleteReel,
     sharePost,
