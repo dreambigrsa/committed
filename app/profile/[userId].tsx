@@ -28,7 +28,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -50,11 +50,18 @@ export default function UserProfileScreen() {
       checkFollowStatus();
       loadFollowCounts();
     }
-  }, [userId]);
+  }, [userId, checkIsFollowing]);
 
   useEffect(() => {
     loadUserContent();
   }, [allPosts, allReels, userId]);
+
+  // Sync local isFollowing state with AppContext's isFollowing function
+  useEffect(() => {
+    if (userId && currentUser) {
+      setIsFollowing(checkIsFollowing(userId));
+    }
+  }, [userId, currentUser, checkIsFollowing]);
 
   const loadUserProfile = async () => {
     try {
@@ -100,18 +107,8 @@ export default function UserProfileScreen() {
 
   const checkFollowStatus = async () => {
     if (!currentUser || !userId) return;
-    try {
-      const { data } = await supabase
-        .from('follows')
-        .select('id')
-        .eq('follower_id', currentUser.id)
-        .eq('following_id', userId)
-        .single();
-      
-      setIsFollowing(!!data);
-    } catch (error) {
-      setIsFollowing(false);
-    }
+    // Use AppContext's isFollowing function to check follow status
+    setIsFollowing(checkIsFollowing(userId));
   };
 
   const loadFollowCounts = async () => {
@@ -138,25 +135,16 @@ export default function UserProfileScreen() {
     if (!currentUser || !userId) return;
     try {
       if (isFollowing) {
-        await supabase
-          .from('follows')
-          .delete()
-          .eq('follower_id', currentUser.id)
-          .eq('following_id', userId);
+        await unfollowUser(userId);
         setIsFollowing(false);
-        setFollowerCount(prev => prev - 1);
+        setFollowerCount(prev => Math.max(0, prev - 1));
       } else {
-        await supabase
-          .from('follows')
-          .insert({
-            follower_id: currentUser.id,
-            following_id: userId,
-          });
+        await followUser(userId);
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
       }
-    } catch (error) {
-      console.error('Failed to toggle follow:', error);
+    } catch (error: any) {
+      console.error('Failed to toggle follow:', error?.message || error);
     }
   };
 
