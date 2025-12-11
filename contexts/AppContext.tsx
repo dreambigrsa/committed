@@ -323,6 +323,13 @@ export const [AppContext, useApp] = createContextHook(() => {
         if (messagesData) {
           const messagesByConversation: Record<string, Message[]> = {};
           messagesData.forEach((m: any) => {
+            // Filter out messages deleted for current user
+            const isSender = m.sender_id === userId;
+            const isReceiver = m.receiver_id === userId;
+            const deletedForMe = (isSender && m.deleted_for_sender) || (isReceiver && m.deleted_for_receiver);
+            
+            if (deletedForMe) return; // Skip messages deleted for this user
+
             const message: Message = {
               id: m.id,
               conversationId: m.conversation_id,
@@ -330,6 +337,11 @@ export const [AppContext, useApp] = createContextHook(() => {
               receiverId: m.receiver_id,
               content: m.content,
               mediaUrl: m.media_url,
+              documentUrl: m.document_url,
+              documentName: m.document_name,
+              messageType: (m.message_type || 'text') as 'text' | 'image' | 'document',
+              deletedForSender: m.deleted_for_sender || false,
+              deletedForReceiver: m.deleted_for_receiver || false,
               read: m.read,
               createdAt: m.created_at,
             };
@@ -1531,18 +1543,37 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, comments, posts, createNotification]);
 
-  const sendMessage = useCallback(async (conversationId: string, receiverId: string, content: string) => {
+  const sendMessage = useCallback(async (
+    conversationId: string, 
+    receiverId: string, 
+    content: string,
+    mediaUrl?: string,
+    documentUrl?: string,
+    documentName?: string,
+    messageType: 'text' | 'image' | 'document' = 'text'
+  ) => {
     if (!currentUser) return null;
     
     try {
+      const insertData: any = {
+        conversation_id: conversationId,
+        sender_id: currentUser.id,
+        receiver_id: receiverId,
+        content: content || '',
+        message_type: messageType,
+      };
+
+      if (mediaUrl) {
+        insertData.media_url = mediaUrl;
+      }
+      if (documentUrl) {
+        insertData.document_url = documentUrl;
+        insertData.document_name = documentName || 'Document';
+      }
+
       const { data, error } = await supabase
         .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: currentUser.id,
-          receiver_id: receiverId,
-          content,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -1553,7 +1584,11 @@ export const [AppContext, useApp] = createContextHook(() => {
         conversationId,
         senderId: currentUser.id,
         receiverId,
-        content,
+        content: content || '',
+        mediaUrl: data.media_url,
+        documentUrl: data.document_url,
+        documentName: data.document_name,
+        messageType: data.message_type || 'text',
         read: false,
         createdAt: data.created_at,
       };
@@ -1564,10 +1599,17 @@ export const [AppContext, useApp] = createContextHook(() => {
       };
       setMessages(updatedMessages);
       
+      // Update conversation last message
+      const lastMessageText = messageType === 'image' 
+        ? '📷 Image' 
+        : messageType === 'document' 
+        ? `📄 ${documentName || 'Document'}`
+        : content;
+      
       await supabase
         .from('conversations')
         .update({
-          last_message: content,
+          last_message: lastMessageText,
           last_message_at: new Date().toISOString(),
         })
         .eq('id', conversationId);
@@ -1577,7 +1619,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         receiverId,
         'message',
         'New Message',
-        `${currentUser.fullName}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+        `${currentUser.fullName}: ${lastMessageText.substring(0, 50)}${lastMessageText.length > 50 ? '...' : ''}`,
         { conversationId, senderId: currentUser.id }
       );
       
@@ -1625,29 +1667,73 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, conversations, messages]);
 
-  const deleteMessage = useCallback(async (messageId: string, conversationId: string) => {
+  const deleteMessage = useCallback(async (messageId: string, conversationId: string, deleteForEveryone: boolean = false) => {
     if (!currentUser) return false;
     
     try {
-      // Check if user owns the message
       const conversationMessages = messages[conversationId] || [];
       const message = conversationMessages.find(m => m.id === messageId);
       
-      if (!message || message.senderId !== currentUser.id) {
-        return false; // Can only delete own messages
+      if (!message) return false;
+
+      const isSender = message.senderId === currentUser.id;
+      const isReceiver = message.receiverId === currentUser.id;
+
+      if (!isSender && !isReceiver) {
+        return false; // User is not part of this message
       }
 
-      await supabase
-        .from('messages')
-        .delete()
-        .eq('id', messageId);
+      if (deleteForEveryone && isSender) {
+        // Delete for everyone - mark as deleted for both
+        await supabase
+          .from('messages')
+          .update({
+            deleted_for_sender: true,
+            deleted_for_receiver: true,
+            content: 'This message was deleted',
+          })
+          .eq('id', messageId);
 
-      // Update local state
-      const updatedMessages = {
-        ...messages,
-        [conversationId]: conversationMessages.filter(m => m.id !== messageId),
-      };
-      setMessages(updatedMessages);
+        // Update local state
+        const updatedMessages = {
+          ...messages,
+          [conversationId]: conversationMessages.map(m => 
+            m.id === messageId 
+              ? { ...m, deletedForSender: true, deletedForReceiver: true, content: 'This message was deleted' }
+              : m
+          ),
+        };
+        setMessages(updatedMessages);
+      } else {
+        // Delete for me only
+        if (isSender) {
+          await supabase
+            .from('messages')
+            .update({ deleted_for_sender: true })
+            .eq('id', messageId);
+
+          const updatedMessages = {
+            ...messages,
+            [conversationId]: conversationMessages.map(m => 
+              m.id === messageId ? { ...m, deletedForSender: true } : m
+            ),
+          };
+          setMessages(updatedMessages);
+        } else if (isReceiver) {
+          await supabase
+            .from('messages')
+            .update({ deleted_for_receiver: true })
+            .eq('id', messageId);
+
+          const updatedMessages = {
+            ...messages,
+            [conversationId]: conversationMessages.map(m => 
+              m.id === messageId ? { ...m, deletedForReceiver: true } : m
+            ),
+          };
+          setMessages(updatedMessages);
+        }
+      }
 
       return true;
     } catch (error) {
@@ -2127,6 +2213,12 @@ export const [AppContext, useApp] = createContextHook(() => {
           filter: `receiver_id=eq.${userId}`,
         },
         (payload: any) => {
+          const isSender = payload.new.sender_id === userId;
+          const isReceiver = payload.new.receiver_id === userId;
+          const deletedForMe = (isSender && payload.new.deleted_for_sender) || (isReceiver && payload.new.deleted_for_receiver);
+          
+          if (deletedForMe) return; // Skip messages deleted for this user
+
           const newMessage: Message = {
             id: payload.new.id,
             conversationId: payload.new.conversation_id,
@@ -2134,6 +2226,11 @@ export const [AppContext, useApp] = createContextHook(() => {
             receiverId: payload.new.receiver_id,
             content: payload.new.content,
             mediaUrl: payload.new.media_url,
+            documentUrl: payload.new.document_url,
+            documentName: payload.new.document_name,
+            messageType: (payload.new.message_type || 'text') as 'text' | 'image' | 'document',
+            deletedForSender: payload.new.deleted_for_sender || false,
+            deletedForReceiver: payload.new.deleted_for_receiver || false,
             read: payload.new.read,
             createdAt: payload.new.created_at,
           };
@@ -3517,6 +3614,53 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, reels, logActivity]);
 
+  const getChatBackground = useCallback(async (conversationId: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('chat_backgrounds')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('conversation_id', conversationId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+      return data;
+    } catch (error) {
+      console.error('Get chat background error:', error);
+      return null;
+    }
+  }, [currentUser]);
+
+  const setChatBackground = useCallback(async (
+    conversationId: string,
+    backgroundType: 'color' | 'image' | 'gradient',
+    backgroundValue: string
+  ) => {
+    if (!currentUser) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('chat_backgrounds')
+        .upsert({
+          user_id: currentUser.id,
+          conversation_id: conversationId,
+          background_type: backgroundType,
+          background_value: backgroundValue,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,conversation_id'
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Set chat background error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
   return {
     currentUser,
     isLoading,
@@ -3578,6 +3722,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     clearAllNotifications,
     deleteConversation,
     deleteMessage,
+    getChatBackground,
+    setChatBackground,
     logActivity,
     endRelationship,
     confirmEndRelationship,
