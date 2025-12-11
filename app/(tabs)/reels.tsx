@@ -182,6 +182,43 @@ export default function ReelsScreen() {
     }
   };
 
+  const handleMomentumScrollEnd = (event: any) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / height);
+    
+    // Ensure we snap to the exact position
+    if (index >= 0 && index < reels.length) {
+      const targetOffset = index * height;
+      const currentOffset = event.nativeEvent.contentOffset.y;
+      
+      // If we're not perfectly aligned, snap to the correct position
+      if (Math.abs(currentOffset - targetOffset) > 1) {
+        scrollViewRef.current?.scrollTo({
+          y: targetOffset,
+          animated: true,
+        });
+      }
+      
+      const newReelId = reels[index]?.id;
+      
+      // Pause all videos
+      Object.keys(videoRefs.current).forEach((reelId) => {
+        const video = videoRefs.current[reelId];
+        if (video && reelId !== newReelId) {
+          video.pauseAsync().catch(() => {});
+        }
+      });
+      
+      // Play the current video
+      if (newReelId && videoRefs.current[newReelId]) {
+        videoRefs.current[newReelId]?.playAsync().catch(() => {});
+      }
+      
+      setCurrentIndex(index);
+      setCurrentReelId(newReelId || null);
+    }
+  };
+
   const handleDeleteReel = async (reelId: string) => {
     Alert.alert(
       'Delete Reel',
@@ -598,10 +635,15 @@ export default function ReelsScreen() {
           <ScrollView
             ref={scrollViewRef}
             pagingEnabled
+            snapToInterval={height}
+            snapToAlignment="start"
+            decelerationRate="fast"
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
+            onMomentumScrollEnd={handleMomentumScrollEnd}
             scrollEventThrottle={16}
             style={styles.scrollView}
+            contentContainerStyle={{ flexGrow: 1 }}
           >
             {reels.map((reel, index) => renderReel(reel, index))}
           </ScrollView>
