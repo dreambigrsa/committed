@@ -287,7 +287,7 @@ export default function ConversationDetailScreen() {
       conversationId,
       senderId: currentUser.id,
       receiverId: otherParticipantId,
-      content: messageText.trim() || (messageType === 'image' ? '' : selectedDocument?.name || ''),
+      content: messageText.trim() || (messageType === 'image' ? '' : (selectedDocument ? selectedDocument.name : '')),
       mediaUrl,
       documentUrl,
       documentName,
@@ -422,6 +422,8 @@ export default function ConversationDetailScreen() {
   };
 
   const renderMessage = ({ item }: { item: any }) => {
+    if (!item || !item.id) return null;
+    
     const isMe = item.senderId === currentUser.id;
     const isDeleted = (isMe && item.deletedForSender) || (!isMe && item.deletedForReceiver);
     const messageTime = new Date(item.createdAt).toLocaleTimeString('en-US', {
@@ -447,31 +449,35 @@ export default function ConversationDetailScreen() {
         activeOpacity={0.9}
       >
         <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-          {item.messageType === 'image' && item.mediaUrl && (
+          {item.messageType === 'image' && item.mediaUrl ? (
             <Image
               source={{ uri: item.mediaUrl }}
               style={styles.messageImage}
               contentFit="cover"
             />
-          )}
+          ) : null}
           
-          {item.messageType === 'document' && item.documentUrl && (
+          {item.messageType === 'document' && item.documentUrl ? (
             <TouchableOpacity
               style={styles.documentContainer}
-              onPress={() => Linking.openURL(item.documentUrl)}
+              onPress={() => {
+                if (item.documentUrl) {
+                  Linking.openURL(item.documentUrl);
+                }
+              }}
             >
               <FileText size={24} color={isMe ? colors.text.white : colors.primary} />
               <Text style={[styles.documentName, isMe ? styles.myMessageText : styles.theirMessageText]}>
                 {item.documentName || 'Document'}
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
-          {item.content && (
+          {item.content && typeof item.content === 'string' && item.content.trim() ? (
             <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
               {item.content}
             </Text>
-          )}
+          ) : null}
 
           <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
@@ -591,7 +597,7 @@ export default function ConversationDetailScreen() {
           {(selectedImage || selectedDocument) && (
             <View style={styles.attachmentPreview}>
               {selectedImage && (
-                <View style={styles.imagePreview}>
+                <View style={styles.imagePreviewContainer}>
                   <Image source={{ uri: selectedImage }} style={styles.previewImage} />
                   <TouchableOpacity
                     style={styles.removeAttachment}
@@ -608,10 +614,10 @@ export default function ConversationDetailScreen() {
                     {selectedDocument.name}
                   </Text>
                   <TouchableOpacity
-                    style={styles.removeAttachment}
+                    style={styles.removeDocumentButton}
                     onPress={() => setSelectedDocument(null)}
                   >
-                    <X size={20} color={colors.text.white} />
+                    <X size={18} color={colors.text.primary} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -788,7 +794,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
   },
-  imagePreview: {
+  imagePreviewContainer: {
     position: 'relative',
     width: 100,
     height: 100,
@@ -822,6 +828,9 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  removeDocumentButton: {
+    padding: 4,
   },
   inputContainer: {
     flexDirection: 'row',
