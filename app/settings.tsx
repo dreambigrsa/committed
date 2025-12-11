@@ -13,6 +13,7 @@ import {
   Image,
   Platform,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -86,6 +87,12 @@ export default function SettingsScreen() {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  
+  // Password change modal
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // App Preferences
   const [language, setLanguage] = useState('en');
@@ -315,44 +322,44 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = () => {
-    // Note: Alert.prompt is iOS only, for cross-platform use a modal or navigation
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Change Password',
-        'Enter your new password (min 6 characters)',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Change',
-            onPress: async (newPassword?: string) => {
-              if (!newPassword || newPassword.length < 6) {
-                Alert.alert('Error', 'Password must be at least 6 characters');
-                return;
-              }
+    setShowPasswordModal(true);
+  };
 
-              try {
-                const { error } = await supabase.auth.updateUser({
-                  password: newPassword,
-                });
+  const handleSavePassword = async () => {
+    // Validate inputs
+    if (!newPassword || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in new password fields');
+      return;
+    }
 
-                if (error) throw error;
-                Alert.alert('Success', 'Password updated successfully!');
-              } catch (error: any) {
-                console.error('Failed to change password:', error);
-                Alert.alert('Error', error.message || 'Failed to change password');
-              }
-            },
-          },
-        ],
-        'plain-text' as any
-      );
-    } else {
-      // For Android/Web, show an alert directing to password reset
-      Alert.alert(
-        'Change Password',
-        'Please use the password reset feature from the login screen to change your password.',
-        [{ text: 'OK' }]
-      );
+    if (newPassword.length < 6) {
+      Alert.alert('Error', 'New password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'New passwords do not match');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      // Update password - Supabase allows this for authenticated users
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) throw updateError;
+
+      Alert.alert('Success', 'Password updated successfully!');
+      setShowPasswordModal(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      console.error('Failed to change password:', error);
+      Alert.alert('Error', error.message || 'Failed to change password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -1384,6 +1391,87 @@ export default function SettingsScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Password Change Modal */}
+        <Modal
+          visible={showPasswordModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowPasswordModal(false);
+            setNewPassword('');
+            setConfirmPassword('');
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.passwordModalContent}>
+              <View style={styles.passwordModalHeader}>
+                <Text style={styles.passwordModalTitle}>Change Password</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowPasswordModal(false);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                  }}
+                >
+                  <X size={24} color={colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.passwordModalBody} showsVerticalScrollIndicator={false}>
+                <View style={styles.passwordInputGroup}>
+                  <Text style={styles.passwordLabel}>New Password</Text>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    placeholder="Enter new password (min 6 characters)"
+                    placeholderTextColor={colors.text.tertiary}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.passwordInputGroup}>
+                  <Text style={styles.passwordLabel}>Confirm New Password</Text>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Confirm new password"
+                    placeholderTextColor={colors.text.tertiary}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.passwordModalFooter}>
+                <TouchableOpacity
+                  style={styles.passwordCancelButton}
+                  onPress={() => {
+                    setShowPasswordModal(false);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                  }}
+                >
+                  <Text style={styles.passwordCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.passwordSaveButton, isChangingPassword && styles.passwordSaveButtonDisabled]}
+                  onPress={handleSavePassword}
+                  disabled={isChangingPassword}
+                >
+                  {isChangingPassword ? (
+                    <ActivityIndicator color={colors.text.white} size="small" />
+                  ) : (
+                    <Text style={styles.passwordSaveText}>Change Password</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -1768,5 +1856,90 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     color: colors.text.white,
     fontWeight: '600' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  passwordModalContent: {
+    backgroundColor: colors.background.primary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  passwordModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  passwordModalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  passwordModalBody: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  passwordInputGroup: {
+    marginBottom: 20,
+  },
+  passwordLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  passwordInput: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  passwordModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  passwordCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  passwordCancelText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  passwordSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  passwordSaveButtonDisabled: {
+    opacity: 0.6,
+  },
+  passwordSaveText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.white,
   },
 });
