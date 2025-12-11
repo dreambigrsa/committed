@@ -9,9 +9,10 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { ArrowLeft, Send, Trash2 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -20,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { currentUser, getConversation, sendMessage } = useApp();
+  const { currentUser, getConversation, sendMessage, deleteMessage } = useApp();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
@@ -134,6 +135,28 @@ export default function ConversationDetailScreen() {
     return null;
   }
 
+  const handleDeleteMessage = async (messageId: string) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deleteMessage(messageId, conversationId);
+            if (success) {
+              setLocalMessages(localMessages.filter(m => m.id !== messageId));
+            } else {
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.senderId === currentUser.id;
     const messageTime = new Date(item.createdAt).toLocaleTimeString('en-US', {
@@ -142,21 +165,34 @@ export default function ConversationDetailScreen() {
     });
 
     return (
-      <View
+      <TouchableOpacity
         style={[
           styles.messageContainer,
           isMe ? styles.myMessageContainer : styles.theirMessageContainer,
         ]}
+        onLongPress={() => isMe && handleDeleteMessage(item.id)}
+        activeOpacity={0.9}
       >
         <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
           <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
             {item.content}
           </Text>
-          <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
-            {messageTime}
-          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
+              {messageTime}
+            </Text>
+            {isMe && (
+              <TouchableOpacity
+                onPress={() => handleDeleteMessage(item.id)}
+                style={styles.deleteMessageButton}
+                hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+              >
+                <Trash2 size={14} color={isMe ? 'rgba(255, 255, 255, 0.7)' : colors.text.tertiary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -307,9 +343,17 @@ const styles = StyleSheet.create({
   theirMessageText: {
     color: colors.text.primary,
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
   messageTime: {
     fontSize: 11,
-    marginTop: 2,
+  },
+  deleteMessageButton: {
+    padding: 2,
   },
   myMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',
