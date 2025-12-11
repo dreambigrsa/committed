@@ -55,8 +55,9 @@ export default function VerifyEmailScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const checkEmailVerification = async () => {
+  const checkEmailVerification = async (showMessage: boolean = false) => {
     try {
+      setIsChecking(true);
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       
       if (currentSession?.user) {
@@ -66,15 +67,40 @@ export default function VerifyEmailScreen() {
         
         if (emailConfirmed) {
           // Email is verified, reload user data and redirect
+          if (showMessage) {
+            alert('✅ Email verified! Redirecting to home...');
+          }
+          
+          // Reload user data to get updated verification status
           if (currentUser) {
+            // Give a moment for the user to see the success message
             setTimeout(() => {
               router.replace('/(tabs)/home');
-            }, 1500);
+            }, showMessage ? 1500 : 500);
+          } else {
+            // If no currentUser yet, wait a bit for it to load
+            setTimeout(() => {
+              router.replace('/(tabs)/home');
+            }, 2000);
           }
+        } else {
+          // Email not verified yet
+          if (showMessage) {
+            alert('Email not verified yet.\n\nPlease check your inbox and click the verification link in the email. If you just clicked it, wait a few seconds and try again.');
+          }
+        }
+      } else {
+        // No session - user needs to log in
+        if (showMessage) {
+          alert('Session expired. Please log in again.');
+          router.replace('/auth');
         }
       }
     } catch (error) {
       console.error('Error checking email verification:', error);
+      if (showMessage) {
+        alert('Error checking verification status. Please try again.');
+      }
     } finally {
       setIsChecking(false);
     }
@@ -304,12 +330,17 @@ export default function VerifyEmailScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.checkButton}
-                  onPress={checkEmailVerification}
+                  style={[styles.checkButton, isChecking && styles.checkButtonDisabled]}
+                  onPress={() => checkEmailVerification(true)}
+                  disabled={isChecking}
                 >
-                  <Text style={styles.checkButtonText}>
-                    I've verified my email
-                  </Text>
+                  {isChecking ? (
+                    <ActivityIndicator size="small" color={themeColors.primary} />
+                  ) : (
+                    <Text style={styles.checkButtonText}>
+                      I've verified my email
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </Animated.View>
@@ -536,6 +567,11 @@ const createStyles = (colors: typeof import('@/constants/colors').default) => St
   checkButton: {
     alignItems: 'center',
     paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  checkButtonDisabled: {
+    opacity: 0.6,
   },
   checkButtonText: {
     fontSize: 15,
