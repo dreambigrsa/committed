@@ -49,29 +49,53 @@ export default function IdVerificationsScreen() {
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // First, get all ID verification requests
+      const { data: requestsData, error: requestsError } = await supabase
         .from('id_verification_requests')
-        .select(`
-          *,
-          user:users!id_verification_requests_user_id_fkey(full_name, email)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (requestsError) throw requestsError;
 
-      if (data) {
-        const formatted = data.map((r: any) => ({
+      if (requestsData) {
+        // Get unique user IDs
+        const userIds = [...new Set(requestsData.map((r: any) => r.user_id).filter(Boolean))];
+        
+        // Fetch user data for all users
+        let usersMap: Record<string, { full_name: string; email: string }> = {};
+        if (userIds.length > 0) {
+          const { data: usersData, error: usersError } = await supabase
+            .from('users')
+            .select('id, full_name, email')
+            .in('id', userIds);
+
+          if (!usersError && usersData) {
+            usersMap = usersData.reduce((acc: any, user: any) => {
+              acc[user.id] = {
+                full_name: user.full_name || 'Unknown User',
+                email: user.email || 'No email',
+              };
+              return acc;
+            }, {});
+          }
+        }
+
+        // Combine requests with user data
+        const formatted = requestsData.map((r: any) => ({
           ...r,
-          user: r.user ? {
-            full_name: r.user.full_name,
-            email: r.user.email,
-          } : undefined,
+          user: usersMap[r.user_id] || {
+            full_name: 'Unknown User',
+            email: 'No email',
+          },
         }));
+        
         setRequests(formatted as IdVerificationRequest[]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load requests:', error);
-      Alert.alert('Error', 'Failed to load ID verification requests');
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      Alert.alert('Error', `Failed to load ID verification requests: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -165,7 +189,7 @@ export default function IdVerificationsScreen() {
         {
           text: 'Reject',
           style: 'destructive',
-          onPress: (reason) => {
+          onPress: (reason: string | undefined) => {
             if (reason && reason.trim()) {
               rejectRequest(requestId, reason.trim());
             } else {
@@ -539,7 +563,7 @@ const styles = StyleSheet.create({
     color: colors.text.tertiary,
   },
   pendingBadge: {
-    backgroundColor: colors.warning + '20',
+    backgroundColor: colors.accent + '20',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -547,7 +571,7 @@ const styles = StyleSheet.create({
   pendingBadgeText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: colors.warning,
+    color: colors.accent,
   },
   requestFooter: {
     flexDirection: 'row',
