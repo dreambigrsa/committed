@@ -1683,6 +1683,42 @@ export const [AppContext, useApp] = createContextHook(() => {
         return false; // User is not part of this message
       }
 
+      // Helper function to get the last non-deleted message for conversation preview
+      const getLastNonDeletedMessage = async (convId: string, userId: string) => {
+        const { data: allMessages } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', convId)
+          .order('created_at', { ascending: false })
+          .limit(50); // Check last 50 messages
+        
+        if (!allMessages || allMessages.length === 0) {
+          return { lastMessage: '', lastMessageAt: new Date().toISOString() };
+        }
+
+        // Find the most recent message that is not deleted for this user
+        for (const msg of allMessages) {
+          const isSender = msg.sender_id === userId;
+          const isReceiver = msg.receiver_id === userId;
+          const deletedForMe = (isSender && msg.deleted_for_sender) || (isReceiver && msg.deleted_for_receiver);
+          
+          if (!deletedForMe) {
+            const lastMessageText = msg.message_type === 'image' 
+              ? '📷 Image' 
+              : msg.message_type === 'document' 
+              ? `📄 ${msg.document_name || 'Document'}`
+              : msg.content;
+            return { 
+              lastMessage: lastMessageText, 
+              lastMessageAt: msg.created_at 
+            };
+          }
+        }
+        
+        // If all messages are deleted, return empty
+        return { lastMessage: '', lastMessageAt: new Date().toISOString() };
+      };
+
       if (deleteForEveryone && isSender) {
         // Delete for everyone - mark as deleted for both
         await supabase
@@ -1693,6 +1729,16 @@ export const [AppContext, useApp] = createContextHook(() => {
             content: 'This message was deleted',
           })
           .eq('id', messageId);
+
+        // Update conversation last message
+        const { lastMessage, lastMessageAt } = await getLastNonDeletedMessage(conversationId, currentUser.id);
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: lastMessage,
+            last_message_at: lastMessageAt,
+          })
+          .eq('id', conversationId);
 
         // Update local state
         const updatedMessages = {
@@ -1712,6 +1758,16 @@ export const [AppContext, useApp] = createContextHook(() => {
             .update({ deleted_for_sender: true })
             .eq('id', messageId);
 
+          // Update conversation last message if this was the last message
+          const { lastMessage, lastMessageAt } = await getLastNonDeletedMessage(conversationId, currentUser.id);
+          await supabase
+            .from('conversations')
+            .update({
+              last_message: lastMessage,
+              last_message_at: lastMessageAt,
+            })
+            .eq('id', conversationId);
+
           const updatedMessages = {
             ...messages,
             [conversationId]: conversationMessages.map(m => 
@@ -1724,6 +1780,16 @@ export const [AppContext, useApp] = createContextHook(() => {
             .from('messages')
             .update({ deleted_for_receiver: true })
             .eq('id', messageId);
+
+          // Update conversation last message if this was the last message
+          const { lastMessage, lastMessageAt } = await getLastNonDeletedMessage(conversationId, currentUser.id);
+          await supabase
+            .from('conversations')
+            .update({
+              last_message: lastMessage,
+              last_message_at: lastMessageAt,
+            })
+            .eq('id', conversationId);
 
           const updatedMessages = {
             ...messages,
