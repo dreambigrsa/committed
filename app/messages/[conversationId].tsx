@@ -21,9 +21,9 @@ import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Dow
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
+// @ts-ignore - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
-// @ts-expect-error - expo-media-library may not be installed yet
+// @ts-ignore - expo-media-library may not be installed yet
 import * as MediaLibrary from 'expo-media-library';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
@@ -33,7 +33,7 @@ import { supabase } from '@/lib/supabase';
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground } = useApp();
+  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning } = useApp();
   const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -46,6 +46,7 @@ export default function ConversationDetailScreen() {
   const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<string | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState<number>(0);
   const [overlayColor, setOverlayColor] = useState<string>('#000000');
+  const [warnings, setWarnings] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -53,6 +54,7 @@ export default function ConversationDetailScreen() {
     if (conversationId && currentUser) {
       loadMessages();
       loadChatBackground();
+      loadWarnings();
       
       const subscription = supabase
         .channel(`conversation:${conversationId}`)
@@ -199,6 +201,53 @@ export default function ConversationDetailScreen() {
       console.error('Error loading chat background:', error);
     }
   };
+
+  const loadWarnings = async () => {
+    if (!conversationId) return;
+    try {
+      const warningList = await getMessageWarnings(conversationId);
+      setWarnings(warningList);
+    } catch (error) {
+      console.error('Error loading warnings:', error);
+    }
+  };
+
+  // Subscribe to new warnings
+  useEffect(() => {
+    if (!conversationId || !currentUser) return;
+
+    const subscription = supabase
+      .channel(`warnings:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_warnings',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        () => {
+          loadWarnings();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message_warnings',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        () => {
+          loadWarnings();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [conversationId, currentUser]);
 
   const downloadImage = async (imageUrl: string) => {
     try {
@@ -576,6 +625,9 @@ export default function ConversationDetailScreen() {
       minute: '2-digit',
     });
 
+    // Check if this message has a warning
+    const messageWarning = warnings.find(w => w.messageId === item.id && !w.acknowledged);
+
     if (isDeleted && item.content === 'This message was deleted') {
       return (
         <View style={[styles.messageContainer, isMe ? styles.myMessageContainer : styles.theirMessageContainer]}>
@@ -585,15 +637,51 @@ export default function ConversationDetailScreen() {
     }
 
     return (
-      <TouchableOpacity
-        style={[
-          styles.messageContainer,
-          isMe ? styles.myMessageContainer : styles.theirMessageContainer,
-        ]}
-        onLongPress={() => handleDeleteMessage(item.id, isMe)}
-        activeOpacity={0.9}
-      >
-        <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
+      <>
+        {messageWarning && (
+          <View style={styles.warningBanner}>
+            <View style={[
+              styles.warningContent,
+              messageWarning.severity === 'high' ? styles.warningHigh : 
+              messageWarning.severity === 'medium' ? styles.warningMedium : 
+              styles.warningLow
+            ]}>
+              <Text style={styles.warningIcon}>⚠️</Text>
+              <View style={styles.warningTextContainer}>
+                <Text style={styles.warningTitle}>
+                  {messageWarning.severity === 'high' ? 'High Risk Warning' :
+                   messageWarning.severity === 'medium' ? 'Medium Risk Warning' :
+                   'Low Risk Warning'}
+                </Text>
+                <Text style={styles.warningMessage}>
+                  This message contains potentially inappropriate content. Trigger words detected: {messageWarning.triggerWords.join(', ')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.acknowledgeButton}
+                onPress={async () => {
+                  const success = await acknowledgeWarning(messageWarning.id);
+                  if (success) {
+                    setWarnings(prev => prev.map(w => 
+                      w.id === messageWarning.id ? { ...w, acknowledged: true } : w
+                    ));
+                  }
+                }}
+              >
+                <Text style={styles.acknowledgeButtonText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        <TouchableOpacity
+          style={[
+            styles.messageContainer,
+            isMe ? styles.myMessageContainer : styles.theirMessageContainer,
+          ]}
+          onLongPress={() => handleDeleteMessage(item.id, isMe)}
+          activeOpacity={0.9}
+        >
+          <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
           {item.messageType === 'image' && item.mediaUrl ? (
             <TouchableOpacity
               onPress={() => setViewingImage(item.mediaUrl)}
@@ -643,6 +731,7 @@ export default function ConversationDetailScreen() {
           </View>
         </View>
       </TouchableOpacity>
+      </>
     );
   };
 
@@ -1369,5 +1458,59 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: colors.primary,
     transform: [{ scale: 1.1 }],
+  },
+  warningBanner: {
+    marginBottom: 8,
+    marginHorizontal: 16,
+  },
+  warningContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  warningHigh: {
+    backgroundColor: '#FFEBEE',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F44336',
+  },
+  warningMedium: {
+    backgroundColor: '#FFF3E0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  warningLow: {
+    backgroundColor: '#E3F2FD',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  warningIcon: {
+    fontSize: 24,
+  },
+  warningTextContainer: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  warningMessage: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    lineHeight: 16,
+  },
+  acknowledgeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  acknowledgeButtonText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
 });
