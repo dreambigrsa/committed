@@ -1263,6 +1263,8 @@ export const [AppContext, useApp] = createContextHook(() => {
         .eq('user_id', currentUser.id)
         .single();
 
+      const post = posts.find(p => p.id === postId);
+      
       if (existingLike) {
         await supabase
           .from('post_likes')
@@ -1276,6 +1278,17 @@ export const [AppContext, useApp] = createContextHook(() => {
             post_id: postId,
             user_id: currentUser.id,
           });
+        
+        // Send notification to post owner (if not liking own post)
+        if (post && post.userId !== currentUser.id) {
+          await createNotification(
+            post.userId,
+            'post_like',
+            'New Like',
+            `${currentUser.fullName} liked your post`,
+            { postId, userId: currentUser.id }
+          );
+        }
       }
 
       const updatedPosts = posts.map(post => {
@@ -1292,7 +1305,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Toggle like error:', error);
     }
-  }, [currentUser, posts]);
+  }, [currentUser, posts, createNotification]);
 
   const toggleReelLike = useCallback(async (reelId: string) => {
     if (!currentUser) return;
@@ -1305,6 +1318,8 @@ export const [AppContext, useApp] = createContextHook(() => {
         .eq('user_id', currentUser.id)
         .single();
 
+      const reel = reels.find(r => r.id === reelId);
+      
       if (existingLike) {
         await supabase
           .from('reel_likes')
@@ -1318,6 +1333,17 @@ export const [AppContext, useApp] = createContextHook(() => {
             reel_id: reelId,
             user_id: currentUser.id,
           });
+        
+        // Send notification to reel owner (if not liking own reel)
+        if (reel && reel.userId !== currentUser.id) {
+          await createNotification(
+            reel.userId,
+            'post_like', // Using post_like type for reel likes too
+            'New Like',
+            `${currentUser.fullName} liked your reel`,
+            { reelId, userId: currentUser.id }
+          );
+        }
       }
 
       const updatedReels = reels.map(reel => {
@@ -1334,7 +1360,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Toggle reel like error:', error);
     }
-  }, [currentUser, reels]);
+  }, [currentUser, reels, createNotification]);
 
   const addComment = useCallback(async (postId: string, content: string) => {
     if (!currentUser) return null;
@@ -1369,9 +1395,22 @@ export const [AppContext, useApp] = createContextHook(() => {
       };
       setComments(updatedComments);
       
-      const updatedPosts = posts.map(post => 
-        post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post
-      );
+      const updatedPosts = posts.map(post => {
+        if (post.id === postId) {
+          // Send notification to post owner (if not commenting on own post)
+          if (post.userId !== currentUser.id) {
+            createNotification(
+              post.userId,
+              'post_comment',
+              'New Comment',
+              `${currentUser.fullName} commented on your post: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+              { postId, commentId: data.id, userId: currentUser.id }
+            );
+          }
+          return { ...post, commentCount: post.commentCount + 1 };
+        }
+        return post;
+      });
       setPosts(updatedPosts);
       
       return newComment;
@@ -1379,7 +1418,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Add comment error:', error);
       return null;
     }
-  }, [currentUser, comments, posts]);
+  }, [currentUser, comments, posts, createNotification]);
 
   const sendMessage = useCallback(async (conversationId: string, receiverId: string, content: string) => {
     if (!currentUser) return null;
@@ -1422,12 +1461,21 @@ export const [AppContext, useApp] = createContextHook(() => {
         })
         .eq('id', conversationId);
       
+      // Send notification to receiver
+      await createNotification(
+        receiverId,
+        'message',
+        'New Message',
+        `${currentUser.fullName}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+        { conversationId, senderId: currentUser.id }
+      );
+      
       return newMessage;
     } catch (error) {
       console.error('Send message error:', error);
       return null;
     }
-  }, [currentUser, messages]);
+  }, [currentUser, messages, createNotification]);
 
   const getConversation = useCallback((conversationId: string) => {
     return conversations.find(c => c.id === conversationId);
@@ -2197,6 +2245,16 @@ export const [AppContext, useApp] = createContextHook(() => {
         };
 
         setFollows([...follows, newFollow]);
+        
+        // Send notification to the user being followed
+        await createNotification(
+          followingId,
+          'follow',
+          'New Follower',
+          `${currentUser.fullName} started following you`,
+          { followerId: currentUser.id }
+        );
+        
         return newFollow;
       }
       return null;
@@ -2278,15 +2336,30 @@ export const [AppContext, useApp] = createContextHook(() => {
         createdAt: data.created_at,
       };
       
+      const reel = reels.find(r => r.id === reelId);
+      
       const updatedComments = {
         ...reelComments,
         [reelId]: [...(reelComments[reelId] || []), newComment],
       };
       setReelComments(updatedComments);
       
-      const updatedReels = reels.map(reel => 
-        reel.id === reelId ? { ...reel, commentCount: reel.commentCount + 1 } : reel
-      );
+      const updatedReels = reels.map(reel => {
+        if (reel.id === reelId) {
+          // Send notification to reel owner (if not commenting on own reel)
+          if (reel.userId !== currentUser.id) {
+            createNotification(
+              reel.userId,
+              'post_comment', // Using post_comment type for reel comments too
+              'New Comment',
+              `${currentUser.fullName} commented on your reel: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+              { reelId, commentId: data.id, userId: currentUser.id }
+            );
+          }
+          return { ...reel, commentCount: reel.commentCount + 1 };
+        }
+        return reel;
+      });
       setReels(updatedReels);
       
       return newComment;
@@ -2294,7 +2367,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Add reel comment error:', error);
       return null;
     }
-  }, [currentUser, reelComments, reels]);
+  }, [currentUser, reelComments, reels, createNotification]);
 
   const getReelComments = useCallback((reelId: string) => {
     return reelComments[reelId] || [];
