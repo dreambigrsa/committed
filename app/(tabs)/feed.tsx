@@ -1165,7 +1165,7 @@ export default function FeedScreen() {
             onPress={() => setShowComments(post.id)}
           >
             <MessageCircle size={24} color={colors.text.secondary} />
-            <Text style={styles.actionText}>{post.commentCount}</Text>
+            <Text style={styles.actionText}>{postComments.length || post.commentCount || 0}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
