@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  TextInput,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Calendar, Heart, Plus, Bell, X } from 'lucide-react-native';
@@ -67,7 +68,7 @@ export default function AnniversaryScreen() {
         .from('anniversaries')
         .insert({
           relationship_id: relationshipId,
-          anniversary_date: selectedDate.toISOString(),
+          anniversary_date: selectedDate.toISOString().split('T')[0], // Store as DATE format
           reminder_sent: false,
         });
 
@@ -75,10 +76,14 @@ export default function AnniversaryScreen() {
 
       Alert.alert('Success', 'Anniversary reminder added!');
       setShowDatePicker(false);
-      loadAnniversaries();
-    } catch (error) {
+      setSelectedDate(new Date()); // Reset date
+      await loadAnniversaries();
+    } catch (error: any) {
       console.error('Failed to create anniversary:', error);
-      Alert.alert('Error', 'Failed to add anniversary reminder');
+      Alert.alert(
+        'Error', 
+        error?.message || 'Failed to add anniversary reminder. Please try again.'
+      );
     } finally {
       setIsCreating(false);
     }
@@ -223,41 +228,61 @@ export default function AnniversaryScreen() {
             </View>
           )}
 
-          {showDatePicker && (
+          <Modal
+            visible={showDatePicker}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowDatePicker(false)}
+          >
             <View style={styles.datePickerModal}>
-              <View style={styles.datePickerCard}>
-                <Text style={styles.datePickerTitle}>Select Anniversary Date</Text>
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display="spinner"
-                  onChange={(event, date) => {
-                    if (date) setSelectedDate(date);
-                  }}
-                  minimumDate={new Date()}
-                />
-                <View style={styles.datePickerActions}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.confirmButton}
-                    onPress={handleCreateAnniversary}
-                    disabled={isCreating}
-                  >
-                    {isCreating ? (
-                      <ActivityIndicator color={colors.text.white} size="small" />
-                    ) : (
-                      <Text style={styles.confirmButtonText}>Add Reminder</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <TouchableOpacity
+                style={styles.datePickerModalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={(e) => e.stopPropagation()}
+                  style={styles.datePickerCard}
+                >
+                  <Text style={styles.datePickerTitle}>Select Anniversary Date</Text>
+                    <View style={styles.datePickerContainer}>
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display={Platform.select({ ios: 'spinner', android: 'spinner', default: 'default' }) || 'default'}
+                      onChange={(event, date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                        }
+                      }}
+                      minimumDate={new Date()}
+                      style={Platform.OS === 'android' ? { width: '100%', height: 200 } : undefined}
+                    />
+                  </View>
+                  <View style={styles.datePickerActions}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.confirmButton}
+                      onPress={handleCreateAnniversary}
+                      disabled={isCreating}
+                    >
+                      {isCreating ? (
+                        <ActivityIndicator color={colors.text.white} size="small" />
+                      ) : (
+                        <Text style={styles.confirmButtonText}>Add Reminder</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </TouchableOpacity>
             </View>
-          )}
+          </Modal>
         </ScrollView>
       </SafeAreaView>
     </>
@@ -399,12 +424,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   datePickerModal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  datePickerModalOverlay: {
+    flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -415,6 +442,7 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 400,
+    minHeight: 300,
   },
   datePickerTitle: {
     fontSize: 18,
@@ -422,6 +450,11 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: 20,
     textAlign: 'center',
+  },
+  datePickerContainer: {
+    minHeight: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   datePickerActions: {
     flexDirection: 'row',
