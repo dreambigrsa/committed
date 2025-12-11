@@ -165,6 +165,22 @@ export default function AdminDashboardScreen() {
       color: '#FF6B6B',
       visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
     },
+    {
+      title: 'Verification Services',
+      icon: Shield,
+      description: 'Configure SMS and Email services',
+      route: '/admin/verification-services',
+      color: '#3498DB',
+      visible: currentUser.role === 'super_admin',
+    },
+    {
+      title: 'ID Verifications',
+      icon: Shield,
+      description: 'Review ID verification requests',
+      route: '/admin/id-verifications',
+      color: '#2ECC71',
+      visible: currentUser.role === 'super_admin' || currentUser.role === 'admin',
+    },
   ];
 
   return (
