@@ -26,7 +26,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, follows, followUser, unfollowUser, addReelComment, getReelComments } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentReelId, setCurrentReelId] = useState<string | null>(null);
@@ -267,17 +267,17 @@ export default function ReelsScreen() {
 
   const handleFollow = async (userId: string) => {
     if (!currentUser) return;
-    const following = isFollowing(userId);
-    if (following) {
-      await unfollowUser(userId);
-    } else {
-      await followUser(userId);
+    try {
+      const following = checkIsFollowing(userId);
+      if (following) {
+        await unfollowUser(userId);
+      } else {
+        await followUser(userId);
+      }
+    } catch (error) {
+      console.error('Follow/unfollow error:', error);
+      Alert.alert('Error', 'Failed to update follow status');
     }
-  };
-
-  const isFollowing = (userId: string) => {
-    if (!currentUser || !follows) return false;
-    return follows.some((f: any) => f.followerId === currentUser.id && f.followingId === userId);
   };
 
   const renderReel = (reel: Reel, index: number) => {
@@ -349,12 +349,12 @@ export default function ReelsScreen() {
                     </TouchableOpacity>
                     {!isOwner && currentUser && (
                       <TouchableOpacity
-                        style={[styles.followButton, isFollowing(reel.userId) && styles.followButtonActive]}
+                        style={[styles.followButton, checkIsFollowing(reel.userId) && styles.followButtonActive]}
                         onPress={() => handleFollow(reel.userId)}
                         activeOpacity={0.8}
                       >
                         <Text style={styles.followButtonText}>
-                          {isFollowing(reel.userId) ? 'Following' : 'Follow'}
+                          {checkIsFollowing(reel.userId) ? 'Unfollow' : 'Follow'}
                         </Text>
                       </TouchableOpacity>
                     )}
