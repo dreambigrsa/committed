@@ -50,9 +50,9 @@ export default function IdVerificationsScreen() {
     try {
       setLoading(true);
       
-      // First, get all ID verification requests
+      // Get all ID verification requests from verification_documents table
       const { data: requestsData, error: requestsError } = await supabase
-        .from('id_verification_requests')
+        .from('verification_documents')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -94,8 +94,28 @@ export default function IdVerificationsScreen() {
       }
     } catch (error: any) {
       console.error('Failed to load requests:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
-      Alert.alert('Error', `Failed to load ID verification requests: ${errorMessage}`);
+      
+      let errorMessage = 'Unknown error';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.code) {
+        errorMessage = `Error code: ${error.code}`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else {
+        errorMessage = JSON.stringify(error);
+      }
+      
+      // Check if table doesn't exist
+      if (error?.code === 'PGRST205' || errorMessage.includes('Could not find the table')) {
+        Alert.alert(
+          'Table Not Found',
+          'The id_verification_requests table does not exist.\n\nPlease run the database migration:\n\n1. Go to Supabase SQL Editor\n2. Run: migrations/add-verification-services.sql\n\nOr run PRODUCTION-COMPLETE.sql if you haven\'t already.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', `Failed to load ID verification requests:\n\n${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -112,15 +132,15 @@ export default function IdVerificationsScreen() {
           onPress: async () => {
             setReviewing(true);
             try {
-              // Update verification request
-              const { error: updateError } = await supabase
-                .from('id_verification_requests')
-                .update({
-                  status: 'approved',
-                  reviewed_by: currentUser?.id,
-                  reviewed_at: new Date().toISOString(),
-                })
-                .eq('id', requestId);
+               // Update verification request
+               const { error: updateError } = await supabase
+                 .from('verification_documents')
+                 .update({
+                   status: 'approved',
+                   reviewed_by: currentUser?.id,
+                   reviewed_at: new Date().toISOString(),
+                 })
+                 .eq('id', requestId);
 
               if (updateError) throw updateError;
 
@@ -157,7 +177,7 @@ export default function IdVerificationsScreen() {
     try {
       // Update verification request
       const { error: updateError } = await supabase
-        .from('id_verification_requests')
+        .from('verification_documents')
         .update({
           status: 'rejected',
           reviewed_by: currentUser?.id,
