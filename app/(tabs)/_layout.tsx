@@ -6,13 +6,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useApp } from "@/contexts/AppContext";
 
-function NotificationIconWithBadge({ color }: { color: string }) {
+export default function TabLayout() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { getUnreadNotificationsCount, notifications, cheatingAlerts } = useApp();
+  
+  // Calculate tab bar height: base height (64) + safe area bottom inset
+  const tabBarHeight = 64 + insets.bottom;
+  
+  // Calculate unread notifications count
   const unreadCount = getUnreadNotificationsCount();
   const unreadAlerts = cheatingAlerts.filter(a => !a.read).length;
   const totalUnread = unreadCount + unreadAlerts;
-
-  return (
+  
+  // Notification icon with badge component
+  const NotificationIconWithBadge = ({ color }: { color: string }) => (
     <View style={{ position: 'relative' }}>
       <Bell size={24} color={color} />
       {totalUnread > 0 && (
@@ -24,14 +32,6 @@ function NotificationIconWithBadge({ color }: { color: string }) {
       )}
     </View>
   );
-}
-
-export default function TabLayout() {
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  
-  // Calculate tab bar height: base height (64) + safe area bottom inset
-  const tabBarHeight = 64 + insets.bottom;
   
   return (
     <Tabs
