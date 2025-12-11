@@ -793,13 +793,6 @@ export const [AppContext, useApp] = createContextHook(() => {
               description: `${currentUser.fullName} attempted to register a new relationship while already in a ${existingRel.status} relationship.`,
             });
 
-          await createNotification(
-            existingRel.partner_user_id,
-            'cheating_alert',
-            'Suspicious Activity Detected',
-            `${currentUser.fullName} attempted to register another relationship. Please review.`,
-            { relationshipId: existingRel.id }
-          );
         }
       }
 
@@ -839,13 +832,6 @@ export const [AppContext, useApp] = createContextHook(() => {
                 description: `${partnerName} was registered in a new relationship by ${currentUser.fullName} while already in a ${partnerExistingRel.status} relationship.`,
               });
 
-            await createNotification(
-              partnerExistingRel.partner_user_id,
-              'cheating_alert',
-              'Suspicious Activity Detected',
-              `Someone attempted to register ${partnerName} in a new relationship. Please review.`,
-              { relationshipId: partnerExistingRel.id }
-            );
           }
         }
       }
@@ -918,7 +904,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Create relationship error:', error);
       return null;
     }
-  }, [currentUser, refreshRelationships, createNotification]);
+  }, [currentUser, refreshRelationships]);
 
   const acceptRelationshipRequest = useCallback(async (requestId: string) => {
     if (!currentUser) return;
@@ -1279,16 +1265,6 @@ export const [AppContext, useApp] = createContextHook(() => {
             user_id: currentUser.id,
           });
         
-        // Send notification to post owner (if not liking own post)
-        if (post && post.userId !== currentUser.id) {
-          await createNotification(
-            post.userId,
-            'post_like',
-            'New Like',
-            `${currentUser.fullName} liked your post`,
-            { postId, userId: currentUser.id }
-          );
-        }
       }
 
       const updatedPosts = posts.map(post => {
@@ -1305,7 +1281,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Toggle like error:', error);
     }
-  }, [currentUser, posts, createNotification]);
+  }, [currentUser, posts]);
 
   const toggleReelLike = useCallback(async (reelId: string) => {
     if (!currentUser) return;
@@ -1334,16 +1310,6 @@ export const [AppContext, useApp] = createContextHook(() => {
             user_id: currentUser.id,
           });
         
-        // Send notification to reel owner (if not liking own reel)
-        if (reel && reel.userId !== currentUser.id) {
-          await createNotification(
-            reel.userId,
-            'post_like', // Using post_like type for reel likes too
-            'New Like',
-            `${currentUser.fullName} liked your reel`,
-            { reelId, userId: currentUser.id }
-          );
-        }
       }
 
       const updatedReels = reels.map(reel => {
@@ -1360,7 +1326,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Toggle reel like error:', error);
     }
-  }, [currentUser, reels, createNotification]);
+  }, [currentUser, reels]);
 
   const addComment = useCallback(async (postId: string, content: string) => {
     if (!currentUser) return null;
@@ -1397,16 +1363,6 @@ export const [AppContext, useApp] = createContextHook(() => {
       
       const updatedPosts = posts.map(post => {
         if (post.id === postId) {
-          // Send notification to post owner (if not commenting on own post)
-          if (post.userId !== currentUser.id) {
-            createNotification(
-              post.userId,
-              'post_comment',
-              'New Comment',
-              `${currentUser.fullName} commented on your post: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-              { postId, commentId: data.id, userId: currentUser.id }
-            );
-          }
           return { ...post, commentCount: post.commentCount + 1 };
         }
         return post;
@@ -1418,7 +1374,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Add comment error:', error);
       return null;
     }
-  }, [currentUser, comments, posts, createNotification]);
+  }, [currentUser, comments, posts]);
 
   const sendMessage = useCallback(async (conversationId: string, receiverId: string, content: string) => {
     if (!currentUser) return null;
@@ -1461,21 +1417,12 @@ export const [AppContext, useApp] = createContextHook(() => {
         })
         .eq('id', conversationId);
       
-      // Send notification to receiver
-      await createNotification(
-        receiverId,
-        'message',
-        'New Message',
-        `${currentUser.fullName}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
-        { conversationId, senderId: currentUser.id }
-      );
-      
       return newMessage;
     } catch (error) {
       console.error('Send message error:', error);
       return null;
     }
-  }, [currentUser, messages, createNotification]);
+  }, [currentUser, messages]);
 
   const getConversation = useCallback((conversationId: string) => {
     return conversations.find(c => c.id === conversationId);
@@ -2246,15 +2193,6 @@ export const [AppContext, useApp] = createContextHook(() => {
 
         setFollows([...follows, newFollow]);
         
-        // Send notification to the user being followed
-        await createNotification(
-          followingId,
-          'follow',
-          'New Follower',
-          `${currentUser.fullName} started following you`,
-          { followerId: currentUser.id }
-        );
-        
         return newFollow;
       }
       return null;
@@ -2346,16 +2284,6 @@ export const [AppContext, useApp] = createContextHook(() => {
       
       const updatedReels = reels.map(reel => {
         if (reel.id === reelId) {
-          // Send notification to reel owner (if not commenting on own reel)
-          if (reel.userId !== currentUser.id) {
-            createNotification(
-              reel.userId,
-              'post_comment', // Using post_comment type for reel comments too
-              'New Comment',
-              `${currentUser.fullName} commented on your reel: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-              { reelId, commentId: data.id, userId: currentUser.id }
-            );
-          }
           return { ...reel, commentCount: reel.commentCount + 1 };
         }
         return reel;
@@ -2367,7 +2295,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Add reel comment error:', error);
       return null;
     }
-  }, [currentUser, reelComments, reels, createNotification]);
+  }, [currentUser, reelComments, reels]);
 
   const getReelComments = useCallback((reelId: string) => {
     return reelComments[reelId] || [];
@@ -2472,15 +2400,6 @@ export const [AppContext, useApp] = createContextHook(() => {
 
       const partnerId = relationship.userId === currentUser.id ? relationship.partnerUserId : relationship.userId;
       
-      if (partnerId) {
-        await createNotification(
-          partnerId,
-          'relationship_end_request',
-          'End Relationship Request',
-          `${currentUser.fullName} has requested to end your relationship. Please confirm or it will auto-resolve in 7 days.`,
-          { relationshipId, disputeId: dispute.id }
-        );
-      }
 
       await logActivity('end_relationship_request', 'relationship', relationshipId);
 
@@ -2489,7 +2408,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('End relationship error:', error);
       return null;
     }
-  }, [currentUser, relationships, createNotification, logActivity]);
+  }, [currentUser, relationships, logActivity]);
 
   const confirmEndRelationship = useCallback(async (disputeId: string) => {
     if (!currentUser) return;
