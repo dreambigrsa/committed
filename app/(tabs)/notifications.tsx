@@ -15,6 +15,7 @@ import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCir
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Notification, NotificationType } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function NotificationsScreen() {
   const pendingRequests = getPendingRequests();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [userCache, setUserCache] = useState<Record<string, string>>({});
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -129,8 +131,10 @@ export default function NotificationsScreen() {
     
     switch (notification.type) {
       case 'post_like':
-        if (data.postId) {
-          // Navigate to feed - the post should be visible there
+        // Check if it's a reel like (has reelId) or post like
+        if (data.reelId) {
+          router.push('/(tabs)/reels' as any);
+        } else if (data.postId) {
           router.push('/(tabs)/feed' as any);
         }
         break;
@@ -195,22 +199,56 @@ export default function NotificationsScreen() {
     );
   };
 
-  const extractUsername = (message: string, notification: Notification & { source: 'notification' | 'alert' }): { username: string; userId: string | null } | null => {
+  const fetchUserName = async (userId: string): Promise<string | null> => {
+    // Check cache first
+    if (userCache[userId]) {
+      return userCache[userId];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) return null;
+
+      const fullName = data.full_name;
+      setUserCache(prev => ({ ...prev, [userId]: fullName }));
+      return fullName;
+    } catch (error) {
+      console.error('Error fetching user name:', error);
+      return null;
+    }
+  };
+
+  const extractUsername = async (message: string, notification: Notification & { source: 'notification' | 'alert' }): Promise<{ username: string; userId: string } | null> => {
     const data = notification.data || {};
     
     // First, try to get userId from notification data (most reliable)
     const userId = data.userId || data.followerId || data.senderId;
     
-    if (userId) {
-      // Try to find username from posts/reels
-      const post = posts.find(p => p.userId === userId);
-      const reel = reels.find(r => r.userId === userId);
-      const username = post?.userName || reel?.userName;
-      
-      if (username) {
-        return { username, userId };
+      if (userId) {
+        // Try cache first
+        let username: string | null = userCache[userId] || null;
+        
+        if (!username) {
+          // Try to find username from posts/reels
+          const post = posts.find(p => p.userId === userId);
+          const reel = reels.find(r => r.userId === userId);
+          username = post?.userName || reel?.userName || null;
+          
+          // If still not found, fetch from database
+          if (!username) {
+            username = await fetchUserName(userId);
+          }
+        }
+        
+        if (username) {
+          return { username, userId };
+        }
       }
-    }
     
     // Fallback: Try to extract from message text
     const match = message.match(/([A-Z][a-z]+ [A-Z][a-z]+)/);
@@ -225,17 +263,41 @@ export default function NotificationsScreen() {
         if (r.userName === fullName) allUsers.add(r.userId);
       });
       const foundUserId = allUsers.size === 1 ? Array.from(allUsers)[0] : null;
-      return { username: fullName, userId: foundUserId };
+      if (foundUserId) {
+        return { username: fullName, userId: foundUserId };
+      }
     }
     return null;
   };
 
-  const renderMessageWithClickableUsername = (message: string, notification: Notification & { source: 'notification' | 'alert' }) => {
-    const usernameInfo = extractUsername(message, notification);
-    
+  const NotificationMessage = ({ message, notification }: { message: string; notification: Notification & { source: 'notification' | 'alert' } }) => {
+    const [usernameInfo, setUsernameInfo] = useState<{ username: string; userId: string } | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+      const loadUsername = async () => {
+        const info = await extractUsername(message, notification);
+        setUsernameInfo(info);
+        setIsLoading(false);
+      };
+      loadUsername();
+    }, [message, notification]);
+
+    if (isLoading) {
+      return (
+        <Text style={[styles.notificationText, !notification.read && styles.unreadText]}>
+          {message}
+        </Text>
+      );
+    }
+
     if (usernameInfo && usernameInfo.userId && usernameInfo.username) {
-      const parts = message.split(usernameInfo.username);
-      if (parts.length === 2) {
+      // Split message by username, handling case-insensitive matching
+      const usernameRegex = new RegExp(usernameInfo.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const parts = message.split(usernameRegex);
+      const match = message.match(usernameRegex);
+      
+      if (match && parts.length >= 2) {
         return (
           <Text style={[styles.notificationText, !notification.read && styles.unreadText]}>
             {parts[0]}
@@ -244,10 +306,10 @@ export default function NotificationsScreen() {
               activeOpacity={0.7}
             >
               <RNText style={[styles.notificationText, !notification.read && styles.unreadText, styles.clickableUsername]}>
-                {usernameInfo.username}
+                {match[0]}
               </RNText>
             </TouchableOpacity>
-            {parts[1]}
+            {parts.slice(1).join(match[0])}
           </Text>
         );
       }
@@ -272,7 +334,7 @@ export default function NotificationsScreen() {
         </View>
         <View style={styles.notificationContent}>
           <Text style={styles.notificationTitle}>{item.title}</Text>
-          {renderMessageWithClickableUsername(item.message, item)}
+          <NotificationMessage message={item.message} notification={item} />
           <Text style={styles.notificationTime}>{formatTimeAgo(item.createdAt)}</Text>
         </View>
         {!item.read && <View style={styles.unreadDot} />}
