@@ -157,6 +157,14 @@ export default function AdminDashboardScreen() {
       color: '#E67E22',
       visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
     },
+    {
+      title: 'Warning Templates',
+      icon: FileText,
+      description: 'Customize infidelity warning messages',
+      route: '/admin/warning-templates',
+      color: '#FF6B6B',
+      visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
+    },
   ];
 
   return (
