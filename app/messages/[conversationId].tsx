@@ -25,6 +25,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 // @ts-expect-error - expo-media-library may not be installed yet
 import * as MediaLibrary from 'expo-media-library';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
@@ -33,6 +34,7 @@ export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground } = useApp();
+  const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
   const [chatBackground, setChatBackgroundState] = useState<any>(null);
@@ -902,7 +904,7 @@ export default function ConversationDetailScreen() {
       <SafeAreaView style={[styles.container, getBackgroundStyle()]}>
         {renderBackgroundImage()}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardAvoid}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
@@ -946,7 +948,7 @@ export default function ConversationDetailScreen() {
             </View>
           )}
 
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             <TouchableOpacity
               style={styles.attachmentButton}
               onPress={handlePickImage}
