@@ -142,15 +142,45 @@ export const [AppContext, useApp] = createContextHook(() => {
         setPosts(formattedPosts);
       }
 
-      const { data: reelsData } = await supabase
+      // Load reels: show approved reels or user's own reels (regardless of status)
+      // Try 'status' column first (from migration), then try 'moderation_status', then show all
+      let { data: reelsData, error: reelsError } = await supabase
         .from('reels')
         .select(`
           *,
           users!reels_user_id_fkey(full_name, profile_picture)
         `)
-        .or(`moderation_status.eq.approved,user_id.eq.${userId}`)
+        .or(`status.eq.approved,user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(50);
+      
+      // If status column doesn't exist, try moderation_status
+      if (reelsError) {
+        const { data: reelsDataModStatus } = await supabase
+          .from('reels')
+          .select(`
+            *,
+            users!reels_user_id_fkey(full_name, profile_picture)
+          `)
+          .or(`moderation_status.eq.approved,user_id.eq.${userId}`)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        
+        if (reelsDataModStatus) {
+          reelsData = reelsDataModStatus;
+        } else {
+          // If neither column exists, show all reels
+          const { data: allReels } = await supabase
+            .from('reels')
+            .select(`
+              *,
+              users!reels_user_id_fkey(full_name, profile_picture)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(50);
+          reelsData = allReels;
+        }
+      }
 
       const { data: reelLikesData } = await supabase
         .from('reel_likes')
