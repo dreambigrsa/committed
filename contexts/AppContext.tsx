@@ -803,7 +803,7 @@ export const [AppContext, useApp] = createContextHook(() => {
   const resetPassword = useCallback(async (email: string) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'committed-app://reset-password',
+        redirectTo: 'committed-app://auth-callback',
       });
 
       if (error) throw error;
