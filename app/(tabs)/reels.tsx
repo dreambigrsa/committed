@@ -643,7 +643,6 @@ export default function ReelsScreen() {
             onMomentumScrollEnd={handleMomentumScrollEnd}
             scrollEventThrottle={16}
             style={styles.scrollView}
-            contentContainerStyle={{ flexGrow: 1 }}
           >
             {reels.map((reel, index) => renderReel(reel, index))}
           </ScrollView>
