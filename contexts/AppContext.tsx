@@ -1,6 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType } from '@/types';
+import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
 
@@ -3693,6 +3693,213 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  const getMessageWarnings = useCallback(async (conversationId: string) => {
+    if (!currentUser) return [];
+    
+    try {
+      const { data, error } = await supabase
+        .from('message_warnings')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .or(`user_id.eq.${currentUser.id},partner_user_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      return (data || []).map((w: any) => ({
+        id: w.id,
+        messageId: w.message_id,
+        conversationId: w.conversation_id,
+        userId: w.user_id,
+        partnerUserId: w.partner_user_id,
+        warningType: w.warning_type,
+        triggerWords: w.trigger_words || [],
+        messageContent: w.message_content,
+        severity: w.severity,
+        acknowledged: w.acknowledged,
+        acknowledgedAt: w.acknowledged_at,
+        createdAt: w.created_at,
+      }));
+    } catch (error) {
+      console.error('Get message warnings error:', error);
+      return [];
+    }
+  }, [currentUser]);
+
+  const acknowledgeWarning = useCallback(async (warningId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('message_warnings')
+        .update({
+          acknowledged: true,
+          acknowledged_at: new Date().toISOString(),
+        })
+        .eq('id', warningId)
+        .or(`user_id.eq.${currentUser.id},partner_user_id.eq.${currentUser.id}`);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Acknowledge warning error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
+  const getInfidelityReports = useCallback(async () => {
+    if (!currentUser) return [];
+    
+    try {
+      const { data, error } = await supabase
+        .from('infidelity_reports')
+        .select('*')
+        .or(`user_id.eq.${currentUser.id},partner_user_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        relationshipId: r.relationship_id,
+        userId: r.user_id,
+        partnerUserId: r.partner_user_id,
+        reportType: r.report_type,
+        warningCount: r.warning_count,
+        firstWarningAt: r.first_warning_at,
+        lastWarningAt: r.last_warning_at,
+        summary: r.summary,
+        evidence: r.evidence,
+        status: r.status,
+        reviewedBy: r.reviewed_by,
+        reviewedAt: r.reviewed_at,
+        createdAt: r.created_at,
+      }));
+    } catch (error) {
+      console.error('Get infidelity reports error:', error);
+      return [];
+    }
+  }, [currentUser]);
+
+  // Admin functions for managing trigger words
+  const getTriggerWords = useCallback(async () => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) {
+      return [];
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('trigger_words')
+        .select('*')
+        .order('severity', { ascending: true })
+        .order('word_phrase', { ascending: true });
+
+      if (error) throw error;
+      
+      return (data || []).map((tw: any) => ({
+        id: tw.id,
+        wordPhrase: tw.word_phrase,
+        severity: tw.severity,
+        category: tw.category,
+        active: tw.active,
+        createdBy: tw.created_by,
+        createdAt: tw.created_at,
+        updatedAt: tw.updated_at,
+      }));
+    } catch (error) {
+      console.error('Get trigger words error:', error);
+      return [];
+    }
+  }, [currentUser]);
+
+  const addTriggerWord = useCallback(async (
+    wordPhrase: string,
+    severity: 'low' | 'medium' | 'high',
+    category: 'romantic' | 'intimate' | 'suspicious' | 'meetup' | 'secret' | 'general' = 'general'
+  ) => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('trigger_words')
+        .insert({
+          word_phrase: wordPhrase.toLowerCase().trim(),
+          severity,
+          category,
+          active: true,
+          created_by: currentUser.id,
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Add trigger word error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
+  const updateTriggerWord = useCallback(async (
+    id: string,
+    updates: {
+      wordPhrase?: string;
+      severity?: 'low' | 'medium' | 'high';
+      category?: 'romantic' | 'intimate' | 'suspicious' | 'meetup' | 'secret' | 'general';
+      active?: boolean;
+    }
+  ) => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) {
+      return false;
+    }
+    
+    try {
+      const updateData: any = {};
+      if (updates.wordPhrase !== undefined) {
+        updateData.word_phrase = updates.wordPhrase.toLowerCase().trim();
+      }
+      if (updates.severity !== undefined) {
+        updateData.severity = updates.severity;
+      }
+      if (updates.category !== undefined) {
+        updateData.category = updates.category;
+      }
+      if (updates.active !== undefined) {
+        updateData.active = updates.active;
+      }
+
+      const { error } = await supabase
+        .from('trigger_words')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Update trigger word error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
+  const deleteTriggerWord = useCallback(async (id: string) => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) {
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('trigger_words')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Delete trigger word error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
   return {
     currentUser,
     isLoading,
@@ -3756,6 +3963,9 @@ export const [AppContext, useApp] = createContextHook(() => {
     deleteMessage,
     getChatBackground,
     setChatBackground,
+    getMessageWarnings,
+    acknowledgeWarning,
+    getInfidelityReports,
     logActivity,
     endRelationship,
     confirmEndRelationship,
@@ -3788,6 +3998,10 @@ export const [AppContext, useApp] = createContextHook(() => {
     adminRejectPost,
     adminDeleteReel,
     adminRejectReel,
+    getTriggerWords,
+    addTriggerWord,
+    updateTriggerWord,
+    deleteTriggerWord,
   };
 });
 
