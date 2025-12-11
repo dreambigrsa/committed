@@ -3636,20 +3636,27 @@ export const [AppContext, useApp] = createContextHook(() => {
   const setChatBackground = useCallback(async (
     conversationId: string,
     backgroundType: 'color' | 'image' | 'gradient',
-    backgroundValue: string
+    backgroundValue: string,
+    opacity?: number
   ) => {
     if (!currentUser) return false;
     
     try {
+      const updateData: any = {
+        user_id: currentUser.id,
+        conversation_id: conversationId,
+        background_type: backgroundType,
+        background_value: backgroundValue,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (opacity !== undefined) {
+        updateData.opacity = opacity;
+      }
+
       const { error } = await supabase
         .from('chat_backgrounds')
-        .upsert({
-          user_id: currentUser.id,
-          conversation_id: conversationId,
-          background_type: backgroundType,
-          background_value: backgroundValue,
-          updated_at: new Date().toISOString(),
-        }, {
+        .upsert(updateData, {
           onConflict: 'user_id,conversation_id'
         });
 
