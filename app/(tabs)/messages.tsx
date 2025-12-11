@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,20 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Animated,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { MessageCircle } from 'lucide-react-native';
+import { MessageCircle, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const { currentUser, conversations } = useApp();
+  const { currentUser, conversations, deleteConversation } = useApp();
   const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -58,6 +60,28 @@ export default function MessagesScreen() {
     };
   };
 
+  const handleDeleteConversation = async (conversationId: string) => {
+    Alert.alert(
+      'Delete Conversation',
+      'Are you sure you want to delete this conversation? All messages will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingId(conversationId);
+            const success = await deleteConversation(conversationId);
+            setDeletingId(null);
+            if (!success) {
+              Alert.alert('Error', 'Failed to delete conversation');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
       <View style={styles.header}>
@@ -79,55 +103,65 @@ export default function MessagesScreen() {
         ) : (
           conversations.map((conversation) => {
             const otherParticipant = getOtherParticipant(conversation);
+            const isDeleting = deletingId === conversation.id;
             
             return (
-              <TouchableOpacity
-                key={conversation.id}
-                style={styles.conversationItem}
-                onPress={() => router.push(`/messages/${conversation.id}` as any)}
-              >
-                <View style={styles.conversationLeft}>
-                  {otherParticipant.avatar ? (
-                    <Image
-                      source={{ uri: otherParticipant.avatar }}
-                      style={styles.avatar}
-                    />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarPlaceholderText}>
-                        {otherParticipant.name.charAt(0)}
-                      </Text>
-                    </View>
-                  )}
-                  {conversation.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>
-                        {conversation.unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+              <View key={conversation.id} style={styles.conversationItemWrapper}>
+                <TouchableOpacity
+                  style={[styles.conversationItem, isDeleting && styles.conversationItemDeleting]}
+                  onPress={() => router.push(`/messages/${conversation.id}` as any)}
+                  disabled={isDeleting}
+                >
+                  <View style={styles.conversationLeft}>
+                    {otherParticipant.avatar ? (
+                      <Image
+                        source={{ uri: otherParticipant.avatar }}
+                        style={styles.avatar}
+                      />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarPlaceholderText}>
+                          {otherParticipant.name.charAt(0)}
+                        </Text>
+                      </View>
+                    )}
+                    {conversation.unreadCount > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          {conversation.unreadCount}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
 
-                <View style={styles.conversationContent}>
-                  <View style={styles.conversationHeader}>
-                    <Text style={styles.participantName}>
-                      {otherParticipant.name}
-                    </Text>
-                    <Text style={styles.timestamp}>
-                      {formatTimeAgo(conversation.lastMessageAt)}
+                  <View style={styles.conversationContent}>
+                    <View style={styles.conversationHeader}>
+                      <Text style={styles.participantName}>
+                        {otherParticipant.name}
+                      </Text>
+                      <Text style={styles.timestamp}>
+                        {formatTimeAgo(conversation.lastMessageAt)}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.lastMessage,
+                        conversation.unreadCount > 0 && styles.lastMessageUnread,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {conversation.lastMessage}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.lastMessage,
-                      conversation.unreadCount > 0 && styles.lastMessageUnread,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {conversation.lastMessage}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteConversationButton}
+                  onPress={() => handleDeleteConversation(conversation.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Trash2 size={20} color={colors.danger} />
+                </TouchableOpacity>
+              </View>
             );
           })
         )}
@@ -179,15 +213,29 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  conversationItemWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
   conversationItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.background.primary,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+  },
+  conversationItemDeleting: {
+    opacity: 0.5,
+  },
+  deleteConversationButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   conversationLeft: {
     position: 'relative',
