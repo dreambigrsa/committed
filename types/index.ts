@@ -200,6 +200,18 @@ export interface InfidelityReport {
   createdAt: string;
 }
 
+export interface WarningTemplate {
+  id: string;
+  severity: 'low' | 'medium' | 'high';
+  titleTemplate: string;
+  messageTemplate: string;
+  inChatWarningTemplate: string;
+  description?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TriggerWord {
   id: string;
   wordPhrase: string;
