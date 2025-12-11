@@ -354,42 +354,40 @@ export default function UserProfileScreen() {
             </View>
 
             {!isOwnProfile && (
-              <>
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
-                    onPress={handleFollow}
-                    activeOpacity={0.8}
-                    disabled={isBlocking}
-                  >
-                    {isFollowing ? (
-                      <UserMinus size={20} color={colors.text.primary} />
-                    ) : (
-                      <UserPlus size={20} color={colors.text.white} />
-                    )}
-                    <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
-                      {isFollowing ? 'Unfollow' : 'Follow'}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.actionButtonMessage} 
-                    onPress={handleMessage}
-                    activeOpacity={0.8}
-                    disabled={isBlocking}
-                  >
-                    <MessageCircle size={20} color={colors.primary} />
-                    <Text style={styles.actionButtonTextMessage}>Message</Text>
-                  </TouchableOpacity>
-                </View>
+              <View style={styles.actionButtons}>
                 <TouchableOpacity
-                  style={styles.blockButton}
+                  style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
+                  onPress={handleFollow}
+                  activeOpacity={0.8}
+                  disabled={isBlocking}
+                >
+                  {isFollowing ? (
+                    <UserMinus size={18} color={colors.text.primary} />
+                  ) : (
+                    <UserPlus size={18} color={colors.text.white} />
+                  )}
+                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
+                    {isFollowing ? 'Unfollow' : 'Follow'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.actionButtonMessage} 
+                  onPress={handleMessage}
+                  activeOpacity={0.8}
+                  disabled={isBlocking}
+                >
+                  <MessageCircle size={18} color={colors.primary} />
+                  <Text style={styles.actionButtonTextMessage}>Message</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButtonMore}
                   onPress={() => setShowBlockMenu(true)}
                   activeOpacity={0.8}
                   disabled={isBlocking}
                 >
-                  <MoreVertical size={20} color={colors.text.secondary} />
+                  <MoreVertical size={20} color={colors.text.primary} />
                 </TouchableOpacity>
-              </>
+              </View>
             )}
 
             <View style={styles.verificationBadges}>
@@ -831,9 +829,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     width: '100%',
-    marginTop: 8,
+    marginTop: 12,
     marginBottom: 20,
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   actionButton: {
     flex: 1,
@@ -843,7 +842,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     borderRadius: 12,
-    minHeight: 48,
+    minHeight: 44,
   },
   actionButtonFollow: {
     backgroundColor: colors.primary,
@@ -869,22 +868,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.border.light,
-    minHeight: 48,
+    minHeight: 44,
+  },
+  actionButtonMore: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border.light,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700' as const,
     color: colors.text.white,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   actionButtonTextUnfollow: {
     color: colors.text.primary,
   },
   actionButtonTextMessage: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700' as const,
     color: colors.primary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -998,11 +1007,6 @@ const styles = StyleSheet.create({
   reelViewerVideo: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
-  },
-  blockButton: {
-    alignSelf: 'center',
-    padding: 8,
-    marginTop: 8,
   },
   modalOverlay: {
     flex: 1,
