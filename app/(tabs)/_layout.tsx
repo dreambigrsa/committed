@@ -1,8 +1,30 @@
 import { Tabs } from "expo-router";
-import { Home, Search, User, MessageSquare, Film, Heart } from "lucide-react-native";
+import { Home, Search, User, MessageSquare, Film, Heart, Bell } from "lucide-react-native";
 import React from "react";
+import { View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useApp } from "@/contexts/AppContext";
+
+function NotificationIconWithBadge({ color }: { color: string }) {
+  const { getUnreadNotificationsCount, notifications, cheatingAlerts } = useApp();
+  const unreadCount = getUnreadNotificationsCount();
+  const unreadAlerts = cheatingAlerts.filter(a => !a.read).length;
+  const totalUnread = unreadCount + unreadAlerts;
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <Bell size={24} color={color} />
+      {totalUnread > 0 && (
+        <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
+          <Text style={styles.badgeText}>
+            {totalUnread > 99 ? '99+' : totalUnread}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -61,6 +83,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notifications"
+        options={{
+          title: "Notifications",
+          tabBarIcon: ({ color }) => <NotificationIconWithBadge color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="messages"
         options={{
           title: "Messages",
@@ -74,12 +103,27 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});
