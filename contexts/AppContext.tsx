@@ -1485,6 +1485,66 @@ export const [AppContext, useApp] = createContextHook(() => {
     return messages[conversationId] || [];
   }, [messages]);
 
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      // Delete all messages in the conversation
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('conversation_id', conversationId);
+
+      // Delete the conversation
+      await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId);
+
+      // Update local state
+      setConversations(conversations.filter(c => c.id !== conversationId));
+      const updatedMessages = { ...messages };
+      delete updatedMessages[conversationId];
+      setMessages(updatedMessages);
+
+      return true;
+    } catch (error) {
+      console.error('Delete conversation error:', error);
+      return false;
+    }
+  }, [currentUser, conversations, messages]);
+
+  const deleteMessage = useCallback(async (messageId: string, conversationId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      // Check if user owns the message
+      const conversationMessages = messages[conversationId] || [];
+      const message = conversationMessages.find(m => m.id === messageId);
+      
+      if (!message || message.senderId !== currentUser.id) {
+        return false; // Can only delete own messages
+      }
+
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId);
+
+      // Update local state
+      const updatedMessages = {
+        ...messages,
+        [conversationId]: conversationMessages.filter(m => m.id !== messageId),
+      };
+      setMessages(updatedMessages);
+
+      return true;
+    } catch (error) {
+      console.error('Delete message error:', error);
+      return false;
+    }
+  }, [currentUser, messages]);
+
   const createOrGetConversation = useCallback(async (otherUserId: string) => {
     if (!currentUser) return null;
     
@@ -2425,6 +2485,38 @@ export const [AppContext, useApp] = createContextHook(() => {
     return notifications.filter(n => !n.read).length;
   }, [notifications]);
 
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    try {
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', notificationId);
+
+      setNotifications(notifications.filter(n => n.id !== notificationId));
+      return true;
+    } catch (error) {
+      console.error('Delete notification error:', error);
+      return false;
+    }
+  }, [notifications]);
+
+  const clearAllNotifications = useCallback(async () => {
+    if (!currentUser) return false;
+    
+    try {
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', currentUser.id);
+
+      setNotifications([]);
+      return true;
+    } catch (error) {
+      console.error('Clear all notifications error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
   const logActivity = useCallback(async (
     action: string,
     resourceType?: string,
@@ -2958,6 +3050,10 @@ export const [AppContext, useApp] = createContextHook(() => {
     createNotification,
     markNotificationAsRead,
     getUnreadNotificationsCount,
+    deleteNotification,
+    clearAllNotifications,
+    deleteConversation,
+    deleteMessage,
     logActivity,
     endRelationship,
     confirmEndRelationship,
