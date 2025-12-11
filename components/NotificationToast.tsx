@@ -13,8 +13,6 @@ import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Notification, NotificationType } from '@/types';
 
-const { width } = Dimensions.get('window');
-
 export default function NotificationToast() {
   const router = useRouter();
   const { notifications, getUnreadNotificationsCount, markNotificationAsRead } = useApp();
