@@ -737,10 +737,68 @@ export const [AppContext, useApp] = createContextHook(() => {
       await supabase.auth.signOut();
       setCurrentUser(null);
       setSession(null);
+      setRelationships([]);
+      setRelationshipRequests([]);
+      setPosts([]);
+      setReels([]);
+      setComments({});
+      setConversations([]);
+      setMessages({});
+      setNotifications([]);
+      setCheatingAlerts([]);
+      setFollows([]);
+      setDisputes([]);
+      setCertificates([]);
+      setAnniversaries([]);
+      setReelComments({});
     } catch (error) {
       console.error('Logout error:', error);
     }
   }, []);
+
+  const deleteAccount = useCallback(async () => {
+    if (!currentUser) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      // Call the database function to delete the account
+      // This will delete the auth user, which cascades to delete all related data
+      // due to ON DELETE CASCADE constraints in the schema
+      const { error } = await supabase.rpc('delete_user_account');
+
+      if (error) {
+        console.error('Delete account error:', error);
+        throw error;
+      }
+
+      // Clear local state
+      setCurrentUser(null);
+      setSession(null);
+      setRelationships([]);
+      setRelationshipRequests([]);
+      setPosts([]);
+      setReels([]);
+      setComments({});
+      setConversations([]);
+      setMessages({});
+      setNotifications([]);
+      setCheatingAlerts([]);
+      setFollows([]);
+      setDisputes([]);
+      setCertificates([]);
+      setAnniversaries([]);
+      setReelComments({});
+
+      // Sign out to clear auth session
+      await supabase.auth.signOut();
+
+      return true;
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      throw error;
+    }
+  }, [currentUser]);
 
   const resetPassword = useCallback(async (email: string) => {
     try {
@@ -4099,6 +4157,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     login,
     signup,
     logout,
+    deleteAccount,
     resetPassword,
     updateUserProfile,
     refreshRelationships,
