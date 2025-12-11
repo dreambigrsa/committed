@@ -7,7 +7,6 @@ import { AppContext } from "@/contexts/AppContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { trpc, trpcClient } from "@/lib/trpc";
-import NotificationToast from "@/components/NotificationToast";
 
 SplashScreen.preventAutoHideAsync();
 
