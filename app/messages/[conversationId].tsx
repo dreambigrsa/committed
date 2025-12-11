@@ -109,6 +109,20 @@ export default function ConversationDetailScreen() {
             ));
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'chat_backgrounds',
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          (payload) => {
+            console.log('Chat background changed:', payload);
+            // Reload background when it changes
+            loadChatBackground();
+          }
+        )
         .subscribe();
 
       return () => {
@@ -158,13 +172,29 @@ export default function ConversationDetailScreen() {
   };
 
   const loadChatBackground = async () => {
-    if (!conversationId || !currentUser) return;
-    const background = await getChatBackground(conversationId);
-    setChatBackgroundState(background);
-    if (background && background.background_type === 'image') {
-      setSelectedBackgroundImage(background.background_value);
-      setBackgroundOpacity(background.opacity || 0);
-      setOverlayColor(background.overlay_color || '#000000');
+    if (!conversationId || !currentUser) {
+      console.log('Cannot load chat background - missing conversationId or currentUser');
+      return;
+    }
+    
+    try {
+      console.log('Loading chat background for conversation:', conversationId, 'user:', currentUser.id);
+      const background = await getChatBackground(conversationId);
+      console.log('Loaded chat background:', background);
+      
+      if (background) {
+        setChatBackgroundState(background);
+        if (background.background_type === 'image') {
+          setSelectedBackgroundImage(background.background_value);
+          setBackgroundOpacity(background.opacity || 0);
+          setOverlayColor(background.overlay_color || '#000000');
+        }
+      } else {
+        console.log('No background found for this conversation');
+        setChatBackgroundState(null);
+      }
+    } catch (error) {
+      console.error('Error loading chat background:', error);
     }
   };
 
@@ -785,28 +815,39 @@ export default function ConversationDetailScreen() {
                   <TouchableOpacity
                     style={styles.applyButton}
                     onPress={async () => {
-                      // Upload image to Supabase if it's a local URI
-                      let imageUrl = selectedBackgroundImage;
-                      if (selectedBackgroundImage.startsWith('file://') || selectedBackgroundImage.startsWith('ph://')) {
-                        // Upload to Supabase
-                        const uploadedUrl = await uploadImage(selectedBackgroundImage);
-                        if (uploadedUrl) {
-                          imageUrl = uploadedUrl;
-                        } else {
-                          Alert.alert('Error', 'Failed to upload background image');
-                          return;
+                      try {
+                        // Upload image to Supabase if it's a local URI
+                        let imageUrl = selectedBackgroundImage;
+                        if (selectedBackgroundImage && (selectedBackgroundImage.startsWith('file://') || selectedBackgroundImage.startsWith('ph://') || selectedBackgroundImage.startsWith('content://'))) {
+                          // Upload to Supabase
+                          const uploadedUrl = await uploadImage(selectedBackgroundImage);
+                          if (uploadedUrl) {
+                            imageUrl = uploadedUrl;
+                          } else {
+                            Alert.alert('Error', 'Failed to upload background image. Please try again.');
+                            return;
+                          }
                         }
-                      }
 
-                      const success = await setChatBackground(conversationId, 'image', imageUrl, backgroundOpacity, overlayColor);
-                      if (success) {
-                        setChatBackgroundState({ 
-                          background_type: 'image', 
-                          background_value: imageUrl,
-                          opacity: backgroundOpacity,
-                          overlay_color: overlayColor
-                        });
-                        setShowBackgroundModal(false);
+                        console.log('Applying background with:', { imageUrl, backgroundOpacity, overlayColor });
+                        const success = await setChatBackground(conversationId, 'image', imageUrl, backgroundOpacity, overlayColor);
+                        
+                        if (success) {
+                          const newBackground = { 
+                            background_type: 'image' as const, 
+                            background_value: imageUrl,
+                            opacity: backgroundOpacity,
+                            overlay_color: overlayColor
+                          };
+                          setChatBackgroundState(newBackground);
+                          setShowBackgroundModal(false);
+                          Alert.alert('Success', 'Background saved! It will be available on all your devices.');
+                        } else {
+                          Alert.alert('Error', 'Failed to save background. Please try again.');
+                        }
+                      } catch (error) {
+                        console.error('Error applying background:', error);
+                        Alert.alert('Error', 'Failed to save background. Please try again.');
                       }
                     }}
                   >
