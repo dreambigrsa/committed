@@ -267,6 +267,7 @@ export default function ReelsScreen() {
 
   const handleFollow = async (userId: string) => {
     if (!currentUser) return;
+    
     try {
       const following = checkIsFollowing(userId);
       if (following) {
@@ -274,9 +275,13 @@ export default function ReelsScreen() {
       } else {
         await followUser(userId);
       }
-    } catch (error) {
-      console.error('Follow/unfollow error:', error);
-      Alert.alert('Error', 'Failed to update follow status');
+      // AppContext handles state updates and errors gracefully
+    } catch (error: any) {
+      console.error('Follow/unfollow error:', error?.message || error?.code || JSON.stringify(error));
+      // Only show alert for unexpected errors (not duplicate/unique constraint errors)
+      if (error?.code !== '23505' && !error?.message?.includes('duplicate') && !error?.message?.includes('unique')) {
+        Alert.alert('Error', error?.message || 'Failed to update follow status');
+      }
     }
   };
 
