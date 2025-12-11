@@ -32,7 +32,7 @@ const { width } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
+  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editComment, deleteComment, toggleCommentLike, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
@@ -349,6 +349,91 @@ export default function FeedScreen() {
     commentTime: {
       fontSize: 12,
       color: colors.text.tertiary,
+    },
+    commentActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      marginTop: 6,
+    },
+    commentActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    commentActionCount: {
+      fontSize: 13,
+      color: colors.text.secondary,
+      fontWeight: '600' as const,
+    },
+    commentActionCountActive: {
+      color: colors.danger,
+    },
+    viewRepliesButton: {
+      marginTop: 8,
+      marginLeft: 44,
+    },
+    viewRepliesText: {
+      fontSize: 13,
+      color: colors.primary,
+      fontWeight: '600' as const,
+    },
+    reply: {
+      marginTop: 12,
+      marginLeft: 44,
+      paddingLeft: 12,
+      borderLeftWidth: 2,
+      borderLeftColor: colors.border.light,
+    },
+    replyHeader: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    replyAvatar: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+    },
+    replyAvatarPlaceholder: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    replyAvatarPlaceholderText: {
+      fontSize: 12,
+      fontWeight: '600' as const,
+      color: colors.text.white,
+    },
+    replyContent: {
+      flex: 1,
+    },
+    replyInputContainer: {
+      marginTop: 12,
+      marginLeft: 44,
+      padding: 12,
+      backgroundColor: colors.background.secondary,
+      borderRadius: 12,
+      gap: 8,
+    },
+    replyInput: {
+      backgroundColor: colors.background.primary,
+      borderRadius: 8,
+      padding: 10,
+      fontSize: 14,
+      color: colors.text.primary,
+      minHeight: 50,
+      textAlignVertical: 'top',
+    },
+    replyInputActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 16,
+    },
+    commentActionTextDisabled: {
+      opacity: 0.5,
     },
     commentInputContainer: {
       flexDirection: 'row',
@@ -1185,6 +1270,9 @@ export default function FeedScreen() {
             colors={colors}
             styles={styles}
             addComment={addComment}
+            editComment={editComment}
+            deleteComment={deleteComment}
+            toggleCommentLike={toggleCommentLike}
           />
         )}
       </View>
@@ -1307,6 +1395,9 @@ function CommentsModal({
   colors,
   styles,
   addComment,
+  editComment,
+  deleteComment,
+  toggleCommentLike,
 }: {
   postId: string;
   visible: boolean;
@@ -1314,15 +1405,26 @@ function CommentsModal({
   comments: any[];
   colors: any;
   styles: any;
-  addComment: (postId: string, content: string) => Promise<any>;
+  addComment: (postId: string, content: string, parentCommentId?: string) => Promise<any>;
+  editComment: (commentId: string, content: string) => Promise<any>;
+  deleteComment: (commentId: string) => Promise<boolean>;
+  toggleCommentLike: (commentId: string, postId: string) => Promise<boolean>;
 }) {
-  const { currentUser, editComment, deleteComment } = useApp();
+  const { currentUser } = useApp();
   const [commentText, setCommentText] = useState<string>('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState<string>('');
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState<string>('');
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   const handleSubmit = async () => {
-    if (commentText.trim()) {
+    if (replyingTo && replyText.trim()) {
+      await addComment(postId, replyText.trim(), replyingTo);
+      setReplyText('');
+      setReplyingTo(null);
+      setExpandedReplies(prev => new Set([...prev, replyingTo]));
+    } else if (commentText.trim()) {
       await addComment(postId, commentText.trim());
       setCommentText('');
     }
@@ -1389,6 +1491,10 @@ function CommentsModal({
         <ScrollView style={styles.commentsList}>
           {comments.map((comment) => {
             const isOwner = comment.userId === currentUser?.id;
+            const isLiked = comment.likes?.includes(currentUser?.id || '') || false;
+            const hasReplies = comment.replies && comment.replies.length > 0;
+            const showReplies = expandedReplies.has(comment.id);
+            
             return (
               <View key={comment.id} style={styles.comment}>
                 <View style={styles.commentHeader}>
@@ -1453,7 +1559,156 @@ function CommentsModal({
                     ) : (
                       <Text style={styles.commentText}>{comment.content}</Text>
                     )}
-                    <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
+                    <View style={styles.commentActionsRow}>
+                      <TouchableOpacity
+                        style={styles.commentActionButton}
+                        onPress={() => toggleCommentLike(comment.id, postId)}
+                      >
+                        <Heart
+                          size={16}
+                          color={isLiked ? colors.danger : colors.text.secondary}
+                          fill={isLiked ? colors.danger : 'transparent'}
+                        />
+                        <Text style={[styles.commentActionCount, isLiked && styles.commentActionCountActive]}>
+                          {comment.likes?.length || 0}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.commentActionButton}
+                        onPress={() => {
+                          setReplyingTo(replyingTo === comment.id ? null : comment.id);
+                          setReplyText('');
+                        }}
+                      >
+                        <MessageCircle size={16} color={colors.text.secondary} />
+                        <Text style={styles.commentActionText}>Reply</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
+                    </View>
+                    
+                    {/* Replies */}
+                    {hasReplies && (
+                      <TouchableOpacity
+                        style={styles.viewRepliesButton}
+                        onPress={() => {
+                          const newExpanded = new Set(expandedReplies);
+                          if (showReplies) {
+                            newExpanded.delete(comment.id);
+                          } else {
+                            newExpanded.add(comment.id);
+                          }
+                          setExpandedReplies(newExpanded);
+                        }}
+                      >
+                        <Text style={styles.viewRepliesText}>
+                          {showReplies ? 'Hide' : 'View'} {comment.replies.length} {comment.replies.length === 1 ? 'reply' : 'replies'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    
+                    {showReplies && comment.replies && comment.replies.map((reply: any) => {
+                      const isReplyOwner = reply.userId === currentUser?.id;
+                      const isReplyLiked = reply.likes?.includes(currentUser?.id || '') || false;
+                      return (
+                        <View key={reply.id} style={styles.reply}>
+                          <View style={styles.replyHeader}>
+                            {reply.userAvatar ? (
+                              <Image
+                                source={{ uri: reply.userAvatar }}
+                                style={styles.replyAvatar}
+                              />
+                            ) : (
+                              <View style={styles.replyAvatarPlaceholder}>
+                                <Text style={styles.replyAvatarPlaceholderText}>
+                                  {reply.userName.charAt(0)}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.replyContent}>
+                              <View style={styles.commentHeaderRow}>
+                                <Text style={styles.commentUserName}>{reply.userName}</Text>
+                                {isReplyOwner && (
+                                  <View style={styles.commentActions}>
+                                    <TouchableOpacity
+                                      onPress={() => {
+                                        setEditingComment(reply.id);
+                                        setEditCommentText(reply.content);
+                                      }}
+                                    >
+                                      <Edit2 size={12} color={colors.text.secondary} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      onPress={() => handleDeleteComment(reply.id)}
+                                    >
+                                      <Trash2 size={12} color={colors.danger} />
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </View>
+                              {editingComment === reply.id ? (
+                                <TextInput
+                                  style={styles.commentEditInput}
+                                  value={editCommentText}
+                                  onChangeText={setEditCommentText}
+                                  multiline
+                                  placeholderTextColor={colors.text.tertiary}
+                                />
+                              ) : (
+                                <Text style={styles.commentText}>{reply.content}</Text>
+                              )}
+                              <View style={styles.commentActionsRow}>
+                                <TouchableOpacity
+                                  style={styles.commentActionButton}
+                                  onPress={() => toggleCommentLike(reply.id, postId)}
+                                >
+                                  <Heart
+                                    size={14}
+                                    color={isReplyLiked ? colors.danger : colors.text.secondary}
+                                    fill={isReplyLiked ? colors.danger : 'transparent'}
+                                  />
+                                  <Text style={[styles.commentActionCount, isReplyLiked && styles.commentActionCountActive]}>
+                                    {reply.likes?.length || 0}
+                                  </Text>
+                                </TouchableOpacity>
+                                <Text style={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                    
+                    {/* Reply Input */}
+                    {replyingTo === comment.id && (
+                      <View style={styles.replyInputContainer}>
+                        <TextInput
+                          style={styles.replyInput}
+                          placeholder={`Reply to ${comment.userName}...`}
+                          placeholderTextColor={colors.text.tertiary}
+                          value={replyText}
+                          onChangeText={setReplyText}
+                          multiline
+                        />
+                        <View style={styles.replyInputActions}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setReplyingTo(null);
+                              setReplyText('');
+                            }}
+                          >
+                            <Text style={styles.commentActionText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={handleSubmit}
+                            disabled={!replyText.trim()}
+                          >
+                            <Text style={[styles.commentActionText, !replyText.trim() && styles.commentActionTextDisabled]}>
+                              Reply
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -1461,36 +1716,38 @@ function CommentsModal({
           })}
         </ScrollView>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.commentInputContainer}
-        >
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Write a comment..."
-            placeholderTextColor={colors.text.tertiary}
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              !commentText.trim() && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={!commentText.trim()}
+        {!replyingTo && (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.commentInputContainer}
           >
-            <Text
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Write a comment..."
+              placeholderTextColor={colors.text.tertiary}
+              value={commentText}
+              onChangeText={setCommentText}
+              multiline
+            />
+            <TouchableOpacity
               style={[
-                styles.sendButtonText,
-                !commentText.trim() && styles.sendButtonTextDisabled,
+                styles.sendButton,
+                !commentText.trim() && styles.sendButtonDisabled,
               ]}
+              onPress={handleSubmit}
+              disabled={!commentText.trim()}
             >
-              Send
-            </Text>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
+              <Text
+                style={[
+                  styles.sendButtonText,
+                  !commentText.trim() && styles.sendButtonTextDisabled,
+                ]}
+              >
+                Send
+              </Text>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        )}
       </SafeAreaView>
     </Modal>
   );
