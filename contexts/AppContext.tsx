@@ -3637,7 +3637,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     conversationId: string,
     backgroundType: 'color' | 'image' | 'gradient',
     backgroundValue: string,
-    opacity?: number
+    opacity?: number,
+    overlayColor?: string
   ) => {
     if (!currentUser) return false;
     
@@ -3652,6 +3653,10 @@ export const [AppContext, useApp] = createContextHook(() => {
 
       if (opacity !== undefined) {
         updateData.opacity = opacity;
+      }
+
+      if (overlayColor !== undefined) {
+        updateData.overlay_color = overlayColor;
       }
 
       const { error } = await supabase
