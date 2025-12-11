@@ -50,12 +50,13 @@ import * as ImagePicker from 'expo-image-picker';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { currentUser, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
+  const { currentUser, deleteAccount, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
   const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference } = useTheme();
   const relationship = getCurrentUserRelationship();
   const styles = createStyles(colors);
 
   const [editMode, setEditMode] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Basic Information
@@ -551,20 +552,59 @@ export default function SettingsScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data.',
+      'Are you sure you want to permanently delete your account?\n\nThis will delete:\n• Your profile and all personal information\n• All your posts, reels, and comments\n• All your messages and conversations\n• Your relationships and verification status\n• All other account data\n\nThis action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Delete My Account',
           style: 'destructive',
           onPress: async () => {
-            try {
-              // In production, you'd want to soft delete or handle this properly
-              Alert.alert('Info', 'Account deletion feature requires backend implementation');
-            } catch (error) {
-              console.error('Failed to delete account:', error);
-              Alert.alert('Error', 'Failed to delete account');
-            }
+            // Double confirmation
+            Alert.alert(
+              'Final Confirmation',
+              'This is your last chance to cancel. Your account will be permanently deleted and all data will be lost forever.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, Delete Forever',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setIsDeleting(true);
+                      const success = await deleteAccount();
+                      
+                      if (success) {
+                        Alert.alert(
+                          'Account Deleted',
+                          'Your account has been permanently deleted. You will be redirected to the login page.',
+                          [
+                            {
+                              text: 'OK',
+                              onPress: () => {
+                                router.replace('/auth');
+                              },
+                            },
+                          ]
+                        );
+                      }
+                    } catch (error: any) {
+                      console.error('Failed to delete account:', error);
+                      
+                      let errorMessage = 'Failed to delete account. Please try again.';
+                      if (error.message?.includes('permission') || error.message?.includes('policy')) {
+                        errorMessage = 'Permission denied. Please contact support if you need to delete your account.';
+                      } else if (error.message) {
+                        errorMessage = error.message;
+                      }
+                      
+                      Alert.alert('Error', errorMessage);
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -1593,6 +1633,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowColor: colors.danger,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
+  },
+  dangerCardDisabled: {
+    opacity: 0.6,
     shadowRadius: 8,
     elevation: 3,
   },
