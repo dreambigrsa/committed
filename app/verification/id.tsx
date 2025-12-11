@@ -92,15 +92,13 @@ export default function IdVerificationScreen() {
         .insert({
           user_id: currentUser?.id,
           id_image_url: idImageUrl,
+          document_url: idImageUrl, // Also set document_url for compatibility
+          document_type: 'other', // Default type, can be updated later
           status: 'pending',
         });
 
-      await updateUserProfile({
-        verifications: {
-          ...currentUser?.verifications!,
-          id: true,
-        },
-      });
+      // Don't mark as verified until admin approves
+      // The admin will update the user's verification status upon approval
 
       Alert.alert(
         'Success',
