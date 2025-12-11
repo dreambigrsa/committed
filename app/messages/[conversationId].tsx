@@ -43,6 +43,7 @@ export default function ConversationDetailScreen() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<string | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState<number>(0);
+  const [overlayColor, setOverlayColor] = useState<string>('#000000');
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -163,6 +164,7 @@ export default function ConversationDetailScreen() {
     if (background && background.background_type === 'image') {
       setSelectedBackgroundImage(background.background_value);
       setBackgroundOpacity(background.opacity || 0);
+      setOverlayColor(background.overlay_color || '#000000');
     }
   };
 
@@ -470,6 +472,15 @@ export default function ConversationDetailScreen() {
 
     const opacity = chatBackground.opacity || 0;
     const overlayOpacity = opacity / 10; // Convert 0-10 to 0-1
+    const overlayColorValue = chatBackground.overlay_color || '#000000';
+    
+    // Convert hex color to rgba
+    const hexToRgba = (hex: string, alpha: number) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
 
     return (
       <ImageBackground
@@ -477,7 +488,7 @@ export default function ConversationDetailScreen() {
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       >
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${overlayOpacity})` }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: hexToRgba(overlayColorValue, overlayOpacity) }]} />
       </ImageBackground>
     );
   };
@@ -625,6 +636,12 @@ export default function ConversationDetailScreen() {
       '#FCE4EC', '#F3E5F5', '#E0F2F1', '#FFF9C4', '#FFEBEE',
     ];
 
+    const overlayColors = [
+      '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF',
+      '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080',
+      '#FFC0CB', '#A52A2A', '#808080', '#000080', '#008000',
+    ];
+
     return (
       <Modal
         visible={showBackgroundModal}
@@ -677,12 +694,39 @@ export default function ConversationDetailScreen() {
                       style={styles.backgroundPreview}
                       resizeMode="cover"
                     >
-                      <View style={[styles.backgroundPreview, { backgroundColor: `rgba(0, 0, 0, ${backgroundOpacity / 10})` }]} />
+                      <View 
+                        style={[
+                          styles.backgroundPreview, 
+                          { 
+                            backgroundColor: (() => {
+                              const r = parseInt(overlayColor.slice(1, 3), 16);
+                              const g = parseInt(overlayColor.slice(3, 5), 16);
+                              const b = parseInt(overlayColor.slice(5, 7), 16);
+                              return `rgba(${r}, ${g}, ${b}, ${backgroundOpacity / 10})`;
+                            })()
+                          }
+                        ]} 
+                      />
                     </ImageBackground>
                   </View>
 
+                  <Text style={[styles.backgroundSectionTitle, { marginTop: 20 }]}>Overlay Color</Text>
+                  <View style={styles.colorGrid}>
+                    {overlayColors.map((color) => (
+                      <TouchableOpacity
+                        key={color}
+                        style={[
+                          styles.colorOption, 
+                          { backgroundColor: color },
+                          overlayColor === color && styles.selectedColorOption
+                        ]}
+                        onPress={() => setOverlayColor(color)}
+                      />
+                    ))}
+                  </View>
+
                   <View style={styles.opacityContainer}>
-                    <Text style={styles.opacityLabel}>Darkness: {backgroundOpacity}/10</Text>
+                    <Text style={styles.opacityLabel}>Opacity: {backgroundOpacity}/10</Text>
                     <View style={styles.sliderContainer}>
                       <Text style={styles.sliderLabel}>0</Text>
                       <View style={styles.sliderWrapper}>
@@ -731,12 +775,13 @@ export default function ConversationDetailScreen() {
                         }
                       }
 
-                      const success = await setChatBackground(conversationId, 'image', imageUrl, backgroundOpacity);
+                      const success = await setChatBackground(conversationId, 'image', imageUrl, backgroundOpacity, overlayColor);
                       if (success) {
                         setChatBackgroundState({ 
                           background_type: 'image', 
                           background_value: imageUrl,
-                          opacity: backgroundOpacity 
+                          opacity: backgroundOpacity,
+                          overlay_color: overlayColor
                         });
                         setShowBackgroundModal(false);
                       }
@@ -1253,5 +1298,10 @@ const styles = StyleSheet.create({
     color: colors.text.white,
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  selectedColorOption: {
+    borderWidth: 3,
+    borderColor: colors.primary,
+    transform: [{ scale: 1.1 }],
   },
 });
