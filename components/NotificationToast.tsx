@@ -21,6 +21,54 @@ export default function NotificationToast() {
   const slideAnim = useRef(new Animated.Value(-200)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const previousNotificationsRef = useRef<Set<string>>(new Set());
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const hideToast = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -200,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsVisible(false);
+      setCurrentNotification(null);
+    });
+  };
+
+  const showToast = () => {
+    setIsVisible(true);
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Auto-hide after 5 seconds
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      hideToast();
+    }, 5000);
+  };
 
   // Watch for new notifications
   useEffect(() => {
@@ -42,45 +90,14 @@ export default function NotificationToast() {
     }
   }, [notifications]);
 
-  const showToast = () => {
-    setIsVisible(true);
-    Animated.parallel([
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 7,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      hideToast();
-    }, 5000);
-  };
-
-  const hideToast = () => {
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: -200,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setIsVisible(false);
-      setCurrentNotification(null);
-    });
-  };
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const handlePress = () => {
     if (currentNotification) {
