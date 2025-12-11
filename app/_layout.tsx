@@ -28,8 +28,6 @@ function RootLayoutNav() {
         <Stack.Screen name="settings/blocked-users" options={{ headerShown: true, title: "Blocked Users" }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      {/* Temporarily disabled to debug bundling issue */}
-      {/* <NotificationToast /> */}
     </>
   );
 }
