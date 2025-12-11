@@ -48,8 +48,17 @@ export const [AppContext, useApp] = createContextHook(() => {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       setSession(currentSession);
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         setSession(newSession);
+        
+        // Handle email confirmation
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          const emailConfirmed = !!newSession.user.email_confirmed_at;
+          if (emailConfirmed) {
+            // Email was just confirmed, reload user data
+            await loadUserData(newSession.user.id);
+          }
+        }
       });
 
       return () => {
@@ -736,7 +745,7 @@ export const [AppContext, useApp] = createContextHook(() => {
   const resetPassword = useCallback(async (email: string) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'committed://reset-password',
+        redirectTo: 'committed-app://reset-password',
       });
 
       if (error) throw error;
