@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { Bell, X, Heart, MessageCircle, UserPlus, AlertTriangle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -15,7 +14,7 @@ import { Notification, NotificationType } from '@/types';
 
 export default function NotificationToast() {
   const router = useRouter();
-  const { notifications, getUnreadNotificationsCount, markNotificationAsRead } = useApp();
+  const { notifications, markNotificationAsRead } = useApp();
   const { colors } = useTheme();
   const [currentNotification, setCurrentNotification] = useState<Notification | null>(null);
   const [isVisible, setIsVisible] = useState(false);
