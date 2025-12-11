@@ -2769,6 +2769,59 @@ export const [AppContext, useApp] = createContextHook(() => {
     return follows.some(f => f.followerId === currentUser.id && f.followingId === userId);
   }, [currentUser, follows]);
 
+  const blockUser = useCallback(async (blockedId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      // Check if already blocked
+      const { data: existingBlock } = await supabase
+        .from('blocked_users')
+        .select('id')
+        .eq('blocker_id', currentUser.id)
+        .eq('blocked_id', blockedId)
+        .single();
+
+      if (existingBlock) {
+        return; // Already blocked
+      }
+
+      const { data, error } = await supabase
+        .from('blocked_users')
+        .insert({
+          blocker_id: currentUser.id,
+          blocked_id: blockedId,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // Handle table not found error
+        if (error.message?.includes('schema cache') || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+          console.error('❌ Blocked users table does not exist in database!');
+          throw new Error('Blocked users table missing. Please create it in your database.');
+        }
+        throw error;
+      }
+
+      // Also unfollow if following
+      const isFollowing = follows.some(f => f.followerId === currentUser.id && f.followingId === blockedId);
+      if (isFollowing) {
+        await unfollowUser(blockedId);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('Block user error:', error?.message || error?.code || JSON.stringify(error));
+      throw error;
+    }
+  }, [currentUser, follows, unfollowUser]);
+
+  const isBlocked = useCallback((userId: string): boolean => {
+    // This will need to be checked from database, but for now return false
+    // In production, you'd maintain a blocked users state or check on demand
+    return false;
+  }, []);
+
   const addReelComment = useCallback(async (reelId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
     
@@ -4200,6 +4253,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     followUser,
     unfollowUser,
     isFollowing,
+    blockUser,
+    isBlocked,
     addReelComment,
     getReelComments,
     editReelComment,
