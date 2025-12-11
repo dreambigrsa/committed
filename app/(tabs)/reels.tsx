@@ -369,7 +369,7 @@ export default function ReelsScreen() {
               videoRefs.current[reel.id] = ref;
             }}
             source={{ uri: reel.videoUrl }}
-            style={styles.video}
+            style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
             isLooping
             shouldPlay={isScreenFocused && index === currentIndex && reel.id === currentReelId}
@@ -600,7 +600,7 @@ export default function ReelsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: 0, paddingBottom: 0 }]}>
       {reels.length === 0 ? (
         <>
           <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
@@ -673,14 +673,14 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
     width,
     height,
     position: 'relative',
+    backgroundColor: '#000000',
   },
   videoTouchable: {
-    width: '100%',
-    height: '100%',
-  },
-  video: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   overlay: {
     position: 'absolute',
