@@ -495,8 +495,26 @@ export const [AppContext, useApp] = createContextHook(() => {
         `)
         .order('created_at', { ascending: true });
 
+      const { data: reelCommentLikesData } = await supabase
+        .from('reel_comment_likes')
+        .select('comment_id, user_id');
+
       if (reelCommentsData) {
+        // Create a map of comment likes
+        const likesByComment: Record<string, string[]> = {};
+        if (reelCommentLikesData) {
+          reelCommentLikesData.forEach((like: any) => {
+            if (!likesByComment[like.comment_id]) {
+              likesByComment[like.comment_id] = [];
+            }
+            likesByComment[like.comment_id].push(like.user_id);
+          });
+        }
+
         const commentsByReel: Record<string, ReelComment[]> = {};
+        const allComments: ReelComment[] = [];
+        
+        // First, create all comments
         reelCommentsData.forEach((c: any) => {
           const comment: ReelComment = {
             id: c.id,
@@ -505,14 +523,34 @@ export const [AppContext, useApp] = createContextHook(() => {
             userName: c.users.full_name,
             userAvatar: c.users.profile_picture,
             content: c.content,
-            likes: [],
+            likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
+            parentCommentId: c.parent_comment_id || undefined,
+            replies: [],
           };
-          if (!commentsByReel[c.reel_id]) {
-            commentsByReel[c.reel_id] = [];
-          }
-          commentsByReel[c.reel_id].push(comment);
+          allComments.push(comment);
         });
+
+        // Organize comments into top-level and replies
+        allComments.forEach((comment) => {
+          if (!comment.parentCommentId) {
+            // Top-level comment
+            if (!commentsByReel[comment.reelId]) {
+              commentsByReel[comment.reelId] = [];
+            }
+            commentsByReel[comment.reelId].push(comment);
+          } else {
+            // Reply - find parent and add to replies
+            const parent = allComments.find(c => c.id === comment.parentCommentId);
+            if (parent) {
+              if (!parent.replies) {
+                parent.replies = [];
+              }
+              parent.replies.push(comment);
+            }
+          }
+        });
+        
         setReelComments(commentsByReel);
       }
 
@@ -2442,17 +2480,23 @@ export const [AppContext, useApp] = createContextHook(() => {
     return follows.some(f => f.followerId === currentUser.id && f.followingId === userId);
   }, [currentUser, follows]);
 
-  const addReelComment = useCallback(async (reelId: string, content: string) => {
+  const addReelComment = useCallback(async (reelId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
     
     try {
+      const insertData: any = {
+        reel_id: reelId,
+        user_id: currentUser.id,
+        content,
+      };
+      
+      if (parentCommentId) {
+        insertData.parent_comment_id = parentCommentId;
+      }
+
       const { data, error } = await supabase
         .from('reel_comments')
-        .insert({
-          reel_id: reelId,
-          user_id: currentUser.id,
-          content,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -2467,23 +2511,50 @@ export const [AppContext, useApp] = createContextHook(() => {
         content,
         likes: [],
         createdAt: data.created_at,
+        parentCommentId: data.parent_comment_id || undefined,
       };
       
-      const reel = reels.find(r => r.id === reelId);
-      
-      const updatedComments = {
-        ...reelComments,
-        [reelId]: [...(reelComments[reelId] || []), newComment],
-      };
+      // If it's a reply, add it to the parent comment's replies, otherwise add to top level
+      const updatedComments = { ...reelComments };
+      if (parentCommentId) {
+        // Find parent comment and add reply
+        const reelCommentsList = reelComments[reelId] || [];
+        const updatedReelComments = reelCommentsList.map(comment => {
+          if (comment.id === parentCommentId) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), newComment],
+            };
+          }
+          return comment;
+        });
+        updatedComments[reelId] = updatedReelComments;
+      } else {
+        updatedComments[reelId] = [...(reelComments[reelId] || []), newComment];
+      }
       setReelComments(updatedComments);
       
       const updatedReels = reels.map(reel => {
         if (reel.id === reelId) {
-          // Send notification to reel owner (if not commenting on own reel)
-          if (reel.userId !== currentUser.id) {
+          // Send notification
+          if (parentCommentId) {
+            // Find parent comment owner
+            const reelCommentsList = reelComments[reelId] || [];
+            const parentComment = reelCommentsList.find(c => c.id === parentCommentId);
+            if (parentComment && parentComment.userId !== currentUser.id) {
+              createNotification(
+                parentComment.userId,
+                'post_comment',
+                'New Reply',
+                `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+                { reelId, commentId: data.id, parentCommentId, userId: currentUser.id }
+              );
+            }
+          } else if (reel.userId !== currentUser.id) {
+            // Send notification to reel owner (if not commenting on own reel)
             createNotification(
               reel.userId,
-              'post_comment', // Using post_comment type for reel comments too
+              'post_comment',
               'New Comment',
               `${currentUser.fullName} commented on your reel: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
               { reelId, commentId: data.id, userId: currentUser.id }
@@ -2505,6 +2576,255 @@ export const [AppContext, useApp] = createContextHook(() => {
   const getReelComments = useCallback((reelId: string) => {
     return reelComments[reelId] || [];
   }, [reelComments]);
+
+  const editReelComment = useCallback(async (commentId: string, content: string) => {
+    if (!currentUser) return null;
+    
+    try {
+      let foundComment: ReelComment | null = null;
+      let reelId: string | null = null;
+
+      for (const [rid, commentList] of Object.entries(reelComments)) {
+        const comment = commentList.find(c => c.id === commentId);
+        if (comment) {
+          foundComment = comment;
+          reelId = rid;
+          break;
+        }
+        
+        // Search in replies
+        for (const comment of commentList) {
+          if (comment.replies) {
+            const reply = comment.replies.find(r => r.id === commentId);
+            if (reply) {
+              foundComment = reply;
+              reelId = rid;
+              break;
+            }
+          }
+        }
+        if (foundComment) break;
+      }
+
+      if (!foundComment || foundComment.userId !== currentUser.id || !reelId) {
+        throw new Error('Unauthorized');
+      }
+
+      const { data, error } = await supabase
+        .from('reel_comments')
+        .update({
+          content,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedComments = { ...reelComments };
+      const reelCommentsList = reelComments[reelId];
+      const isReply = foundComment.parentCommentId !== undefined;
+      
+      if (isReply) {
+        const parentId = foundComment.parentCommentId!;
+        updatedComments[reelId] = reelCommentsList.map(comment => {
+          if (comment.id === parentId) {
+            return {
+              ...comment,
+              replies: (comment.replies || []).map(c => 
+                c.id === commentId ? { ...c, content } : c
+              ),
+            };
+          }
+          return comment;
+        });
+      } else {
+        updatedComments[reelId] = reelCommentsList.map(c => 
+          c.id === commentId ? { ...c, content } : c
+        );
+      }
+      setReelComments(updatedComments);
+      
+      return data;
+    } catch (error) {
+      console.error('Edit reel comment error:', error);
+      return null;
+    }
+  }, [currentUser, reelComments]);
+
+  const deleteReelComment = useCallback(async (commentId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      let foundComment: ReelComment | null = null;
+      let reelId: string | null = null;
+      let parentCommentId: string | null = null;
+
+      // Search in top-level comments and replies
+      for (const [rid, commentList] of Object.entries(reelComments)) {
+        const topLevelComment = commentList.find(c => c.id === commentId);
+        if (topLevelComment) {
+          foundComment = topLevelComment;
+          reelId = rid;
+          break;
+        }
+        
+        // Search in replies
+        for (const comment of commentList) {
+          if (comment.replies) {
+            const reply = comment.replies.find(r => r.id === commentId);
+            if (reply) {
+              foundComment = reply;
+              reelId = rid;
+              parentCommentId = comment.id;
+              break;
+            }
+          }
+        }
+        if (foundComment) break;
+      }
+
+      if (!foundComment || foundComment.userId !== currentUser.id || !reelId) {
+        throw new Error('Unauthorized');
+      }
+
+      const { error } = await supabase
+        .from('reel_comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) throw error;
+
+      const updatedComments = { ...reelComments };
+      if (parentCommentId) {
+        // Remove from parent's replies
+        updatedComments[reelId] = reelComments[reelId].map(comment => {
+          if (comment.id === parentCommentId) {
+            return {
+              ...comment,
+              replies: (comment.replies || []).filter(r => r.id !== commentId),
+            };
+          }
+          return comment;
+        });
+      } else {
+        // Remove top-level comment
+        updatedComments[reelId] = reelComments[reelId].filter(c => c.id !== commentId);
+      }
+      setReelComments(updatedComments);
+
+      const updatedReels = reels.map(r => 
+        r.id === reelId ? { ...r, commentCount: Math.max(0, r.commentCount - 1) } : r
+      );
+      setReels(updatedReels);
+      
+      return true;
+    } catch (error) {
+      console.error('Delete reel comment error:', error);
+      return false;
+    }
+  }, [currentUser, reelComments, reels]);
+
+  const toggleReelCommentLike = useCallback(async (commentId: string, reelId: string) => {
+    if (!currentUser) return false;
+    
+    try {
+      // Check if already liked
+      const reelCommentsList = reelComments[reelId] || [];
+      let comment: ReelComment | null = null;
+      let isReply = false;
+      let parentCommentId: string | null = null;
+
+      // Search in top-level comments
+      comment = reelCommentsList.find(c => c.id === commentId) || null;
+      
+      // If not found, search in replies
+      if (!comment) {
+        for (const c of reelCommentsList) {
+          if (c.replies) {
+            const reply = c.replies.find(r => r.id === commentId);
+            if (reply) {
+              comment = reply;
+              isReply = true;
+              parentCommentId = c.id;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!comment) return false;
+
+      const isLiked = comment.likes.includes(currentUser.id);
+
+      if (isLiked) {
+        // Unlike
+        await supabase
+          .from('reel_comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', currentUser.id);
+
+        const updatedLikes = comment.likes.filter(id => id !== currentUser.id);
+        
+        const updatedComments = { ...reelComments };
+        if (isReply && parentCommentId) {
+          updatedComments[reelId] = reelCommentsList.map(c => {
+            if (c.id === parentCommentId) {
+              return {
+                ...c,
+                replies: (c.replies || []).map(r => 
+                  r.id === commentId ? { ...r, likes: updatedLikes } : r
+                ),
+              };
+            }
+            return c;
+          });
+        } else {
+          updatedComments[reelId] = reelCommentsList.map(c => 
+            c.id === commentId ? { ...c, likes: updatedLikes } : c
+          );
+        }
+        setReelComments(updatedComments);
+      } else {
+        // Like
+        await supabase
+          .from('reel_comment_likes')
+          .insert({
+            comment_id: commentId,
+            user_id: currentUser.id,
+          });
+
+        const updatedLikes = [...comment.likes, currentUser.id];
+        
+        const updatedComments = { ...reelComments };
+        if (isReply && parentCommentId) {
+          updatedComments[reelId] = reelCommentsList.map(c => {
+            if (c.id === parentCommentId) {
+              return {
+                ...c,
+                replies: (c.replies || []).map(r => 
+                  r.id === commentId ? { ...r, likes: updatedLikes } : r
+                ),
+              };
+            }
+            return c;
+          });
+        } else {
+          updatedComments[reelId] = reelCommentsList.map(c => 
+            c.id === commentId ? { ...c, likes: updatedLikes } : c
+          );
+        }
+        setReelComments(updatedComments);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Toggle reel comment like error:', error);
+      return false;
+    }
+  }, [currentUser, reelComments]);
 
   const reportContent = useCallback(async (
     contentType: ReportedContent['contentType'],
@@ -3247,6 +3567,9 @@ export const [AppContext, useApp] = createContextHook(() => {
     isFollowing,
     addReelComment,
     getReelComments,
+    editReelComment,
+    deleteReelComment,
+    toggleReelCommentLike,
     reportContent,
     createNotification,
     markNotificationAsRead,
