@@ -2174,6 +2174,12 @@ export const [AppContext, useApp] = createContextHook(() => {
         .single();
 
       if (error) {
+        // Handle table not found error
+        if (error.message?.includes('schema cache') || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+          console.error('❌ Follows table does not exist in database!');
+          console.error('📝 Please run migrations/create-follows-table.sql in your Supabase SQL Editor to create the table.');
+          throw new Error('Follows table missing. Run migrations/create-follows-table.sql in Supabase SQL Editor.');
+        }
         // Handle duplicate follow error gracefully
         if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
           // Already following, just return
@@ -2221,6 +2227,12 @@ export const [AppContext, useApp] = createContextHook(() => {
         .eq('following_id', followingId);
 
       if (error) {
+        // Handle table not found error
+        if (error.message?.includes('schema cache') || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+          console.error('❌ Follows table does not exist in database!');
+          console.error('📝 Please run migrations/create-follows-table.sql in your Supabase SQL Editor to create the table.');
+          throw new Error('Follows table missing. Run migrations/create-follows-table.sql in Supabase SQL Editor.');
+        }
         console.error('Unfollow user error:', error?.message || error?.code || JSON.stringify(error));
         throw error;
       }
