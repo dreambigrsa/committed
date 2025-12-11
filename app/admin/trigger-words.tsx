@@ -154,24 +154,73 @@ export default function TriggerWordsManagementScreen() {
   const activeWords = triggerWords.filter(w => w.active);
   const inactiveWords = triggerWords.filter(w => !w.active);
 
+  // Group words by category
+  const categories = ['romantic', 'intimate', 'suspicious', 'meetup', 'secret', 'general'] as const;
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(categories));
+
+  const toggleCategory = (category: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const getWordsByCategory = (category: string, words: TriggerWord[]) => {
+    return words.filter(w => w.category === category);
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'romantic': return '💕';
+      case 'intimate': return '💋';
+      case 'suspicious': return '⚠️';
+      case 'meetup': return '📍';
+      case 'secret': return '🔒';
+      default: return '📝';
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: 'Trigger Words Management', headerShown: true }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Trigger Words', 
+          headerShown: true,
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.headerAddButton}
+              onPress={() => setShowAddModal(true)}
+            >
+              <Plus size={22} color={colors.primary} />
+            </TouchableOpacity>
+          ),
+        }} 
+      />
       
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Trigger Words</Text>
-          <Text style={styles.headerSubtitle}>
-            Manage words and phrases that trigger infidelity warnings
-          </Text>
+        <Text style={styles.headerTitle}>Trigger Words Management</Text>
+        <Text style={styles.headerSubtitle}>
+          Manage words and phrases that trigger infidelity warnings
+        </Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{activeWords.length}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{inactiveWords.length}</Text>
+            <Text style={styles.statLabel}>Inactive</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{triggerWords.length}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddModal(true)}
-        >
-          <Plus size={20} color={colors.text.white} />
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -181,114 +230,177 @@ export default function TriggerWordsManagementScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Active Words ({activeWords.length})
-              </Text>
-              {activeWords.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No active trigger words</Text>
-                </View>
-              ) : (
-                activeWords.map((word) => (
-                  <View key={word.id} style={styles.wordCard}>
-                    <View style={styles.wordInfo}>
-                      <Text style={styles.wordPhrase}>{word.wordPhrase}</Text>
-                      <View style={styles.wordTags}>
-                        <View style={[styles.tag, { backgroundColor: getSeverityColor(word.severity) + '20' }]}>
-                          <Text style={[styles.tagText, { color: getSeverityColor(word.severity) }]}>
-                            {word.severity.toUpperCase()}
-                          </Text>
+            {/* Active Words by Category */}
+            {activeWords.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Active Words</Text>
+                {categories.map((category) => {
+                  const categoryWords = getWordsByCategory(category, activeWords);
+                  if (categoryWords.length === 0) return null;
+                  const isExpanded = expandedCategories.has(category);
+                  
+                  return (
+                    <View key={category} style={styles.categorySection}>
+                      <TouchableOpacity
+                        style={styles.categoryHeader}
+                        onPress={() => toggleCategory(category)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.categoryHeaderLeft}>
+                          <Text style={styles.categoryIcon}>{getCategoryIcon(category)}</Text>
+                          <View>
+                            <Text style={styles.categoryTitle}>
+                              {category.charAt(0).toUpperCase() + category.slice(1)}
+                            </Text>
+                            <Text style={styles.categoryCount}>
+                              {categoryWords.length} word{categoryWords.length !== 1 ? 's' : ''}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={[styles.tag, { backgroundColor: getCategoryColor(word.category) + '20' }]}>
-                          <Text style={[styles.tagText, { color: getCategoryColor(word.category) }]}>
-                            {word.category}
-                          </Text>
+                        <Text style={[styles.expandIcon, !isExpanded && styles.expandIconCollapsed]}>
+                          ▼
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      {isExpanded && (
+                        <View style={styles.categoryContent}>
+                          {categoryWords.map((word) => (
+                            <View key={word.id} style={styles.wordCard}>
+                              <View style={styles.wordInfo}>
+                                <Text style={styles.wordPhrase}>{word.wordPhrase}</Text>
+                                <View style={styles.wordTags}>
+                                  <View style={[styles.tag, { backgroundColor: getSeverityColor(word.severity) + '20' }]}>
+                                    <Text style={[styles.tagText, { color: getSeverityColor(word.severity) }]}>
+                                      {word.severity.toUpperCase()}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <View style={styles.wordActions}>
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => {
+                                    setEditingWord(word);
+                                    setShowEditModal(true);
+                                  }}
+                                >
+                                  <Edit2 size={18} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => handleToggleActive(word)}
+                                >
+                                  <Text style={styles.deactivateText}>Deactivate</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.actionButton, styles.deleteButton]}
+                                  onPress={() => handleDelete(word)}
+                                >
+                                  <Trash2 size={18} color={colors.danger} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ))}
                         </View>
-                      </View>
+                      )}
                     </View>
-                    <View style={styles.wordActions}>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => {
-                          setEditingWord(word);
-                          setShowEditModal(true);
-                        }}
-                      >
-                        <Edit2 size={18} color={colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleToggleActive(word)}
-                      >
-                        <Text style={styles.deactivateText}>Deactivate</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => handleDelete(word)}
-                      >
-                        <Trash2 size={18} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              )}
-            </View>
+                  );
+                })}
+              </View>
+            )}
 
+            {/* Inactive Words by Category */}
             {inactiveWords.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Inactive Words ({inactiveWords.length})
-                </Text>
-                {inactiveWords.map((word) => (
-                  <View key={word.id} style={[styles.wordCard, styles.inactiveCard]}>
-                    <View style={styles.wordInfo}>
-                      <Text style={[styles.wordPhrase, styles.inactiveText]}>
-                        {word.wordPhrase}
-                      </Text>
-                      <View style={styles.wordTags}>
-                        <View style={[styles.tag, { backgroundColor: getSeverityColor(word.severity) + '20' }]}>
-                          <Text style={[styles.tagText, { color: getSeverityColor(word.severity) }]}>
-                            {word.severity.toUpperCase()}
-                          </Text>
+                <Text style={styles.sectionTitle}>Inactive Words</Text>
+                {categories.map((category) => {
+                  const categoryWords = getWordsByCategory(category, inactiveWords);
+                  if (categoryWords.length === 0) return null;
+                  const isExpanded = expandedCategories.has(category);
+                  
+                  return (
+                    <View key={`inactive-${category}`} style={styles.categorySection}>
+                      <TouchableOpacity
+                        style={styles.categoryHeader}
+                        onPress={() => toggleCategory(category)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.categoryHeaderLeft}>
+                          <Text style={styles.categoryIcon}>{getCategoryIcon(category)}</Text>
+                          <View>
+                            <Text style={styles.categoryTitle}>
+                              {category.charAt(0).toUpperCase() + category.slice(1)} (Inactive)
+                            </Text>
+                            <Text style={styles.categoryCount}>
+                              {categoryWords.length} word{categoryWords.length !== 1 ? 's' : ''}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={[styles.tag, { backgroundColor: getCategoryColor(word.category) + '20' }]}>
-                          <Text style={[styles.tagText, { color: getCategoryColor(word.category) }]}>
-                            {word.category}
-                          </Text>
+                        <Text style={[styles.expandIcon, !isExpanded && styles.expandIconCollapsed]}>
+                          ▼
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      {isExpanded && (
+                        <View style={styles.categoryContent}>
+                          {categoryWords.map((word) => (
+                            <View key={word.id} style={[styles.wordCard, styles.inactiveCard]}>
+                              <View style={styles.wordInfo}>
+                                <Text style={[styles.wordPhrase, styles.inactiveText]}>
+                                  {word.wordPhrase}
+                                </Text>
+                                <View style={styles.wordTags}>
+                                  <View style={[styles.tag, { backgroundColor: getSeverityColor(word.severity) + '20' }]}>
+                                    <Text style={[styles.tagText, { color: getSeverityColor(word.severity) }]}>
+                                      {word.severity.toUpperCase()}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <View style={styles.wordActions}>
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => {
+                                    setEditingWord(word);
+                                    setShowEditModal(true);
+                                  }}
+                                >
+                                  <Edit2 size={18} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => handleToggleActive(word)}
+                                >
+                                  <Text style={styles.activateText}>Activate</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.actionButton, styles.deleteButton]}
+                                  onPress={() => handleDelete(word)}
+                                >
+                                  <Trash2 size={18} color={colors.danger} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ))}
                         </View>
-                      </View>
+                      )}
                     </View>
-                    <View style={styles.wordActions}>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => {
-                          setEditingWord(word);
-                          setShowEditModal(true);
-                        }}
-                      >
-                        <Edit2 size={18} color={colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleToggleActive(word)}
-                      >
-                        <Text style={styles.activateText}>Activate</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => handleDelete(word)}
-                      >
-                        <Trash2 size={18} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
           </>
         )}
       </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAddModal(true)}
+        activeOpacity={0.8}
+      >
+        <Plus size={24} color={colors.text.white} />
+      </TouchableOpacity>
 
       {/* Add Modal */}
       <Modal
@@ -533,36 +645,54 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
+    backgroundColor: colors.background.primary,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
+    marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 14,
     color: colors.text.secondary,
-    marginTop: 4,
+    marginBottom: 16,
   },
-  addButton: {
+  statsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 12,
   },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text.white,
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.border.light,
+    marginHorizontal: 8,
+  },
+  headerAddButton: {
+    padding: 8,
+    marginRight: 8,
   },
   content: {
     flex: 1,
@@ -579,27 +709,78 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: 16,
+  },
+  categorySection: {
+    marginBottom: 12,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: colors.background.secondary,
+  },
+  categoryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  categoryIcon: {
+    fontSize: 24,
+  },
+  categoryTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
-    marginBottom: 12,
+    marginBottom: 2,
+  },
+  categoryCount: {
+    fontSize: 12,
+    color: colors.text.secondary,
+  },
+  expandIcon: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    transform: [{ rotate: '0deg' }],
+  },
+  expandIconCollapsed: {
+    transform: [{ rotate: '-90deg' }],
+  },
+  categoryContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
   },
   emptyContainer: {
-    padding: 20,
+    padding: 40,
     alignItems: 'center',
   },
   emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  emptySubtext: {
     fontSize: 14,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   wordCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.background.secondary,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: colors.background.primary,
+    padding: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border.light,
   },
@@ -792,6 +973,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.white,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    zIndex: 1000,
   },
 });
 
