@@ -3900,6 +3900,65 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  const getWarningTemplates = useCallback(async () => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) return [];
+    try {
+      const { data, error } = await supabase
+        .from('warning_templates')
+        .select('*')
+        .order('severity', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((t: any) => ({
+        id: t.id,
+        severity: t.severity,
+        titleTemplate: t.title_template,
+        messageTemplate: t.message_template,
+        inChatWarningTemplate: t.in_chat_warning_template,
+        description: t.description,
+        active: t.active,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+      }));
+    } catch (error) {
+      console.error('Get warning templates error:', error);
+      return [];
+    }
+  }, [currentUser]);
+
+  const updateWarningTemplate = useCallback(async (
+    id: string,
+    updates: {
+      titleTemplate?: string;
+      messageTemplate?: string;
+      inChatWarningTemplate?: string;
+      description?: string;
+      active?: boolean;
+    }
+  ) => {
+    if (!currentUser || !['admin', 'super_admin', 'moderator'].includes(currentUser.role)) {
+      return false;
+    }
+    try {
+      const updateData: any = {};
+      if (updates.titleTemplate !== undefined) updateData.title_template = updates.titleTemplate;
+      if (updates.messageTemplate !== undefined) updateData.message_template = updates.messageTemplate;
+      if (updates.inChatWarningTemplate !== undefined) updateData.in_chat_warning_template = updates.inChatWarningTemplate;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.active !== undefined) updateData.active = updates.active;
+
+      const { error } = await supabase
+        .from('warning_templates')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Update warning template error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
   return {
     currentUser,
     isLoading,
@@ -4002,6 +4061,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     addTriggerWord,
     updateTriggerWord,
     deleteTriggerWord,
+    getWarningTemplates,
+    updateWarningTemplate,
   };
 });
 
