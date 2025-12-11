@@ -112,6 +112,8 @@ export interface Comment {
   replies?: Comment[];
 }
 
+export type MessageType = 'text' | 'image' | 'document';
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -119,6 +121,11 @@ export interface Message {
   receiverId: string;
   content: string;
   mediaUrl?: string;
+  documentUrl?: string;
+  documentName?: string;
+  messageType: MessageType;
+  deletedForSender?: boolean;
+  deletedForReceiver?: boolean;
   read: boolean;
   createdAt: string;
 }
