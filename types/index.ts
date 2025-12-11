@@ -108,6 +108,8 @@ export interface Comment {
   content: string;
   likes: string[];
   createdAt: string;
+  parentCommentId?: string;
+  replies?: Comment[];
 }
 
 export interface Message {
