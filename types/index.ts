@@ -223,4 +223,6 @@ export interface ReelComment {
   content: string;
   likes: string[];
   createdAt: string;
+  parentCommentId?: string;
+  replies?: ReelComment[];
 }
