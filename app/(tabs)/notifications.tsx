@@ -7,14 +7,17 @@ import {
   FlatList,
   TouchableOpacity,
   Animated,
+  Alert,
+  Text as RNText,
 } from 'react-native';
-
-import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Heart, Check, X, AlertTriangle, MessageCircle, Bell, UserPlus, CheckCircle2, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Notification, NotificationType } from '@/types';
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const { 
     getPendingRequests, 
     acceptRelationshipRequest, 
@@ -22,6 +25,10 @@ export default function NotificationsScreen() {
     notifications,
     cheatingAlerts,
     markNotificationAsRead,
+    deleteNotification,
+    clearAllNotifications,
+    posts,
+    reels,
   } = useApp();
   const { colors } = useTheme();
   const pendingRequests = getPendingRequests();
@@ -116,25 +123,168 @@ export default function NotificationsScreen() {
     if (!notification.read) {
       await markNotificationAsRead(notification.id);
     }
+
+    // Navigate based on notification type
+    const data = notification.data || {};
+    
+    switch (notification.type) {
+      case 'post_like':
+        if (data.postId) {
+          // Navigate to feed - the post should be visible there
+          router.push('/(tabs)/feed' as any);
+        }
+        break;
+      case 'post_comment':
+        // Check if it's a reel comment
+        if (data.reelId) {
+          router.push('/(tabs)/reels' as any);
+        } else if (data.postId) {
+          router.push('/(tabs)/feed' as any);
+        }
+        break;
+      case 'message':
+        if (data.conversationId) {
+          router.push(`/messages/${data.conversationId}` as any);
+        }
+        break;
+      case 'follow':
+        if (data.followerId) {
+          router.push(`/profile/${data.followerId}` as any);
+        }
+        break;
+      case 'relationship_request':
+        setActiveTab('requests');
+        break;
+      default:
+        // For other types, just mark as read
+        break;
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteNotification(notificationId);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearAll = async () => {
+    Alert.alert(
+      'Clear All Notifications',
+      'Are you sure you want to delete all notifications?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            await clearAllNotifications();
+          },
+        },
+      ]
+    );
+  };
+
+  const extractUsername = (message: string, notification: Notification & { source: 'notification' | 'alert' }): { username: string; userId: string | null } | null => {
+    const data = notification.data || {};
+    
+    // First, try to get userId from notification data (most reliable)
+    const userId = data.userId || data.followerId || data.senderId;
+    
+    if (userId) {
+      // Try to find username from posts/reels
+      const post = posts.find(p => p.userId === userId);
+      const reel = reels.find(r => r.userId === userId);
+      const username = post?.userName || reel?.userName;
+      
+      if (username) {
+        return { username, userId };
+      }
+    }
+    
+    // Fallback: Try to extract from message text
+    const match = message.match(/([A-Z][a-z]+ [A-Z][a-z]+)/);
+    if (match) {
+      const fullName = match[1];
+      // Try to find user by name in posts/reels
+      const allUsers = new Set<string>();
+      posts.forEach(p => {
+        if (p.userName === fullName) allUsers.add(p.userId);
+      });
+      reels.forEach(r => {
+        if (r.userName === fullName) allUsers.add(r.userId);
+      });
+      const foundUserId = allUsers.size === 1 ? Array.from(allUsers)[0] : null;
+      return { username: fullName, userId: foundUserId };
+    }
+    return null;
+  };
+
+  const renderMessageWithClickableUsername = (message: string, notification: Notification & { source: 'notification' | 'alert' }) => {
+    const usernameInfo = extractUsername(message, notification);
+    
+    if (usernameInfo && usernameInfo.userId && usernameInfo.username) {
+      const parts = message.split(usernameInfo.username);
+      if (parts.length === 2) {
+        return (
+          <Text style={[styles.notificationText, !notification.read && styles.unreadText]}>
+            {parts[0]}
+            <TouchableOpacity
+              onPress={() => router.push(`/profile/${usernameInfo.userId}` as any)}
+              activeOpacity={0.7}
+            >
+              <RNText style={[styles.notificationText, !notification.read && styles.unreadText, styles.clickableUsername]}>
+                {usernameInfo.username}
+              </RNText>
+            </TouchableOpacity>
+            {parts[1]}
+          </Text>
+        );
+      }
+    }
+
+    return (
+      <Text style={[styles.notificationText, !notification.read && styles.unreadText]}>
+        {message}
+      </Text>
+    );
   };
 
   const renderNotificationItem = ({ item }: { item: Notification & { source: 'notification' | 'alert' } }) => (
-    <TouchableOpacity
-      style={[styles.notificationCard, !item.read && styles.unreadNotification]}
-      onPress={() => handleNotificationPress(item)}
-    >
-      <View style={[styles.iconContainer, !item.read && styles.unreadIconContainer]}>
-        {getNotificationIcon(item.type)}
-      </View>
-      <View style={styles.notificationContent}>
-        <Text style={styles.notificationTitle}>{item.title}</Text>
-        <Text style={[styles.notificationText, !item.read && styles.unreadText]}>
-          {item.message}
-        </Text>
-        <Text style={styles.notificationTime}>{formatTimeAgo(item.createdAt)}</Text>
-      </View>
-      {!item.read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
+    <View style={[styles.notificationCard, !item.read && styles.unreadNotification]}>
+      <TouchableOpacity
+        style={styles.notificationContentWrapper}
+        onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconContainer, !item.read && styles.unreadIconContainer]}>
+          {getNotificationIcon(item.type)}
+        </View>
+        <View style={styles.notificationContent}>
+          <Text style={styles.notificationTitle}>{item.title}</Text>
+          {renderMessageWithClickableUsername(item.message, item)}
+          <Text style={styles.notificationTime}>{formatTimeAgo(item.createdAt)}</Text>
+        </View>
+        {!item.read && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => handleDeleteNotification(item.id)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Trash2 size={18} color={colors.text.tertiary} />
+      </TouchableOpacity>
+    </View>
   );
 
   const renderRequestItem = ({ item }: { item: any }) => (
@@ -185,7 +335,17 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.secondary }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Notifications</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Notifications</Text>
+          {allNotifications.length > 0 && (
+            <TouchableOpacity
+              onPress={handleClearAll}
+              style={styles.clearAllButton}
+            >
+              <Text style={styles.clearAllText}>Clear All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <Animated.View style={[styles.tabs, { opacity: fadeAnim }]}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'all' && styles.activeTab]}
@@ -401,14 +561,27 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700' as const,
     color: colors.text.white,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  clearAllButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  clearAllText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.danger,
+  },
   notificationCard: {
     backgroundColor: colors.background.primary,
     borderRadius: 16,
-    padding: 16,
     marginBottom: 10,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border.light,
     shadowColor: '#000',
@@ -416,6 +589,23 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    overflow: 'hidden',
+  },
+  notificationContentWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    padding: 16,
+  },
+  clickableUsername: {
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+  deleteButton: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   unreadNotification: {
     backgroundColor: colors.badge.pending,
