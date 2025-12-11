@@ -38,6 +38,7 @@ export default function ReelsScreen() {
   const [editCaption, setEditCaption] = useState<string>('');
   const [lastTap, setLastTap] = useState<{ time: number; reelId: string } | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
+  const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -60,16 +61,25 @@ export default function ReelsScreen() {
   // Stop all videos when component unmounts or loses focus
   useFocusEffect(
     React.useCallback(() => {
+      // Screen is focused
+      setIsScreenFocused(true);
+      
       // Play current video when screen gains focus
       if (currentReelId && videoRefs.current[currentReelId]) {
-        videoRefs.current[currentReelId]?.playAsync().catch(() => {});
+        setTimeout(() => {
+          videoRefs.current[currentReelId]?.playAsync().catch(() => {});
+        }, 100);
       }
       
       return () => {
-        // Stop all videos when leaving the screen
+        // Screen lost focus - stop all videos
+        setIsScreenFocused(false);
+        
+        // Stop all videos when leaving the screen - use stopAsync to fully stop playback
         Object.keys(videoRefs.current).forEach((reelId) => {
           const video = videoRefs.current[reelId];
           if (video) {
+            video.stopAsync().catch(() => {});
             video.pauseAsync().catch(() => {});
           }
         });
@@ -98,19 +108,32 @@ export default function ReelsScreen() {
       Object.keys(videoRefs.current).forEach((reelId) => {
         const video = videoRefs.current[reelId];
         if (video) {
+          video.stopAsync().catch(() => {});
           video.pauseAsync().catch(() => {});
         }
       });
     };
   }, [reels.length]);
   
-  // Ensure only the current reel is playing
+  // Ensure only the current reel is playing (only if screen is focused)
   useEffect(() => {
+    if (!isScreenFocused) {
+      // Screen is not focused, pause all videos
+      Object.keys(videoRefs.current).forEach((reelId) => {
+        const video = videoRefs.current[reelId];
+        if (video) {
+          video.stopAsync().catch(() => {});
+          video.pauseAsync().catch(() => {});
+        }
+      });
+      return;
+    }
+
     Object.keys(videoRefs.current).forEach((reelId) => {
       const video = videoRefs.current[reelId];
       if (video) {
         if (reelId === currentReelId) {
-          // This is the current reel, ensure it's playing
+          // This is the current reel, ensure it's playing (only if screen is focused)
           video.playAsync().catch(() => {});
         } else {
           // This is not the current reel, ensure it's paused
@@ -118,7 +141,7 @@ export default function ReelsScreen() {
         }
       }
     });
-  }, [currentReelId]);
+  }, [currentReelId, isScreenFocused]);
 
   if (!currentUser) {
     return null;
@@ -277,10 +300,10 @@ export default function ReelsScreen() {
     
     try {
       const following = checkIsFollowing(userId);
-      if (following) {
-        await unfollowUser(userId);
-      } else {
-        await followUser(userId);
+    if (following) {
+      await unfollowUser(userId);
+    } else {
+      await followUser(userId);
       }
       // AppContext handles state updates and errors gracefully
     } catch (error: any) {
@@ -312,16 +335,23 @@ export default function ReelsScreen() {
             style={styles.video}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay={index === currentIndex && reel.id === currentReelId}
+            shouldPlay={isScreenFocused && index === currentIndex && reel.id === currentReelId}
             isMuted={isMuted}
             onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
               if (status.isLoaded) {
-                // Only auto-play if this is the current reel and it's not playing
-                if (index === currentIndex && reel.id === currentReelId && !status.isPlaying) {
+                // If screen is not focused, pause all videos
+                if (!isScreenFocused && status.isPlaying) {
+                  videoRefs.current[reel.id]?.stopAsync().catch(() => {});
+                  videoRefs.current[reel.id]?.pauseAsync().catch(() => {});
+                  return;
+                }
+                
+                // Only auto-play if screen is focused, this is the current reel and it's not playing
+                if (isScreenFocused && index === currentIndex && reel.id === currentReelId && !status.isPlaying) {
                   videoRefs.current[reel.id]?.playAsync().catch(() => {});
                 }
-                // Pause if this is not the current reel
-                if (reel.id !== currentReelId && status.isPlaying) {
+                // Pause if this is not the current reel or screen is not focused
+                if ((reel.id !== currentReelId || !isScreenFocused) && status.isPlaying) {
                   videoRefs.current[reel.id]?.pauseAsync().catch(() => {});
                 }
               }
@@ -353,58 +383,58 @@ export default function ReelsScreen() {
                 </TouchableOpacity>
                 <View style={styles.userNameContainer}>
                   <View style={styles.userNameRow}>
-                    <TouchableOpacity 
-                      onPress={() => router.push(`/profile/${reel.userId}` as any)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
-                    </TouchableOpacity>
-                    {!isOwner && currentUser && (
-                      <TouchableOpacity
+                  <TouchableOpacity 
+                    onPress={() => router.push(`/profile/${reel.userId}` as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.userName}>@{reel.userName.replace(/\s+/g, '').toLowerCase()}</Text>
+                  </TouchableOpacity>
+                  {!isOwner && currentUser && (
+                    <TouchableOpacity
                         style={[styles.followButton, checkIsFollowing(reel.userId) && styles.followButtonActive]}
-                        onPress={() => handleFollow(reel.userId)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.followButtonText}>
+                      onPress={() => handleFollow(reel.userId)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.followButtonText}>
                           {checkIsFollowing(reel.userId) ? 'Unfollow' : 'Follow'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  
-                  {editingReel === reel.id ? (
-                    <View style={styles.editCaptionContainer}>
-                      <TextInput
-                        style={styles.editCaptionInput}
-                        value={editCaption}
-                        onChangeText={setEditCaption}
-                        multiline
-                        placeholder="Edit caption..."
-                        placeholderTextColor={colors.text.tertiary}
-                      />
-                      <View style={styles.editCaptionActions}>
-                        <TouchableOpacity
-                          style={styles.editCaptionButton}
-                          onPress={() => {
-                            setEditingReel(null);
-                            setEditCaption('');
-                          }}
-                        >
-                          <X size={16} color={colors.text.white} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.editCaptionButton}
-                          onPress={() => handleSaveEdit(reel.id)}
-                        >
-                          <Text style={styles.editCaptionSaveText}>Save</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.caption} numberOfLines={3}>
-                      {reel.caption}
-                    </Text>
+                      </Text>
+                    </TouchableOpacity>
                   )}
+              </View>
+              
+              {editingReel === reel.id ? (
+                <View style={styles.editCaptionContainer}>
+                  <TextInput
+                    style={styles.editCaptionInput}
+                    value={editCaption}
+                    onChangeText={setEditCaption}
+                    multiline
+                    placeholder="Edit caption..."
+                    placeholderTextColor={colors.text.tertiary}
+                  />
+                  <View style={styles.editCaptionActions}>
+                    <TouchableOpacity
+                      style={styles.editCaptionButton}
+                      onPress={() => {
+                        setEditingReel(null);
+                        setEditCaption('');
+                      }}
+                    >
+                      <X size={16} color={colors.text.white} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.editCaptionButton}
+                      onPress={() => handleSaveEdit(reel.id)}
+                    >
+                      <Text style={styles.editCaptionSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.caption} numberOfLines={3}>
+                  {reel.caption}
+                </Text>
+              )}
                 </View>
               </View>
             </View>
