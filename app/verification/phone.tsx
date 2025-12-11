@@ -14,6 +14,7 @@ import { Phone, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { sendSmsCode, createVerificationCode } from '@/lib/verification-services';
 
 export default function PhoneVerificationScreen() {
   const router = useRouter();
@@ -29,26 +30,47 @@ export default function PhoneVerificationScreen() {
       return;
     }
 
+    // Validate phone number format (basic validation)
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
+      Alert.alert('Error', 'Please enter a valid phone number with country code (e.g., +1234567890)');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       
-      await supabase
-        .from('verification_codes')
-        .insert({
-          user_id: currentUser?.id,
-          phone_number: phoneNumber,
-          code,
-          type: 'phone',
-          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        });
+      // Create verification code in database first
+      const codeResult = await createVerificationCode(
+        currentUser?.id || '',
+        'phone',
+        phoneNumber,
+        code
+      );
 
-      console.log('Verification code:', code);
-      setCodeSent(true);
-      Alert.alert('Code Sent', `Verification code sent to ${phoneNumber}. Code: ${code} (Demo mode)`);
-    } catch (error) {
+      if (!codeResult.success) {
+        throw new Error(codeResult.error || 'Failed to create verification code');
+      }
+
+      // Try to send SMS via configured service
+      const smsResult = await sendSmsCode(phoneNumber, code);
+
+      if (smsResult.success) {
+        setCodeSent(true);
+        Alert.alert('Code Sent', `Verification code sent to ${phoneNumber}`);
+      } else {
+        // If SMS service is not configured, show code in alert (fallback for testing)
+        setCodeSent(true);
+        Alert.alert(
+          'Code Generated',
+          `SMS service is not configured. Your verification code is: ${code}\n\nPlease enter this code to verify.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
       console.error('Failed to send verification code:', error);
-      Alert.alert('Error', 'Failed to send verification code');
+      Alert.alert('Error', error.message || 'Failed to send verification code');
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +90,8 @@ export default function PhoneVerificationScreen() {
         .eq('user_id', currentUser?.id)
         .eq('phone_number', phoneNumber)
         .eq('code', verificationCode)
-        .eq('type', 'phone')
+        .eq('verification_type', 'phone')
+        .eq('used', false)
         .gte('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
@@ -85,11 +108,11 @@ export default function PhoneVerificationScreen() {
         },
       });
 
+      // Mark code as used instead of deleting
       await supabase
         .from('verification_codes')
-        .delete()
-        .eq('user_id', currentUser?.id)
-        .eq('type', 'phone');
+        .update({ used: true })
+        .eq('id', data.id);
 
       Alert.alert('Success', 'Phone number verified successfully!', [
         { text: 'OK', onPress: () => router.back() },
