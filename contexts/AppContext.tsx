@@ -3615,17 +3615,26 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser, reels, logActivity]);
 
   const getChatBackground = useCallback(async (conversationId: string) => {
-    if (!currentUser) return null;
+    if (!currentUser) {
+      console.log('getChatBackground: No current user');
+      return null;
+    }
     
     try {
+      console.log('Fetching chat background from database:', { userId: currentUser.id, conversationId });
       const { data, error } = await supabase
         .from('chat_backgrounds')
         .select('*')
         .eq('user_id', currentUser.id)
         .eq('conversation_id', conversationId)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no row exists
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+      if (error) {
+        console.error('Get chat background database error:', error);
+        throw error;
+      }
+      
+      console.log('Chat background query result:', data);
       return data;
     } catch (error) {
       console.error('Get chat background error:', error);
@@ -3640,7 +3649,10 @@ export const [AppContext, useApp] = createContextHook(() => {
     opacity?: number,
     overlayColor?: string
   ) => {
-    if (!currentUser) return false;
+    if (!currentUser) {
+      console.log('setChatBackground: No current user');
+      return false;
+    }
     
     try {
       const updateData: any = {
@@ -3659,13 +3671,21 @@ export const [AppContext, useApp] = createContextHook(() => {
         updateData.overlay_color = overlayColor;
       }
 
-      const { error } = await supabase
+      console.log('Saving chat background to database:', updateData);
+      
+      const { data, error } = await supabase
         .from('chat_backgrounds')
         .upsert(updateData, {
           onConflict: 'user_id,conversation_id'
-        });
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Set chat background database error:', error);
+        throw error;
+      }
+      
+      console.log('Chat background saved successfully:', data);
       return true;
     } catch (error) {
       console.error('Set chat background error:', error);
