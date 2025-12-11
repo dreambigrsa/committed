@@ -168,6 +168,49 @@ export interface CheatingAlert {
   createdAt: string;
 }
 
+export interface MessageWarning {
+  id: string;
+  messageId: string;
+  conversationId: string;
+  userId: string;
+  partnerUserId: string;
+  warningType: 'trigger_word' | 'suspicious_pattern' | 'frequent_contact';
+  triggerWords: string[];
+  messageContent: string;
+  severity: 'low' | 'medium' | 'high';
+  acknowledged: boolean;
+  acknowledgedAt?: string;
+  createdAt: string;
+}
+
+export interface InfidelityReport {
+  id: string;
+  relationshipId: string;
+  userId: string;
+  partnerUserId: string;
+  reportType: 'ignored_warnings' | 'pattern_detected' | 'multiple_warnings';
+  warningCount: number;
+  firstWarningAt?: string;
+  lastWarningAt?: string;
+  summary: string;
+  evidence: any;
+  status: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface TriggerWord {
+  id: string;
+  wordPhrase: string;
+  severity: 'low' | 'medium' | 'high';
+  category: 'romantic' | 'intimate' | 'suspicious' | 'meetup' | 'secret' | 'general';
+  active: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Follow {
   id: string;
   followerId: string;
