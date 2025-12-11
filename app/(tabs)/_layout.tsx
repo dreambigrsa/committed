@@ -19,20 +19,6 @@ export default function TabLayout() {
   const unreadAlerts = cheatingAlerts.filter(a => !a.read).length;
   const totalUnread = unreadCount + unreadAlerts;
   
-  // Notification icon with badge component
-  const NotificationIconWithBadge = ({ color }: { color: string }) => (
-    <View style={{ position: 'relative' }}>
-      <Bell size={24} color={color} />
-      {totalUnread > 0 && (
-        <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
-          <Text style={styles.badgeText}>
-            {totalUnread > 99 ? '99+' : totalUnread}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-  
   return (
     <Tabs
       screenOptions={{
@@ -86,7 +72,18 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: "Notifications",
-          tabBarIcon: ({ color }) => <NotificationIconWithBadge color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View style={{ position: 'relative' }}>
+              <Bell size={24} color={color} />
+              {totalUnread > 0 && (
+                <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
+                  <Text style={styles.badgeText}>
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
