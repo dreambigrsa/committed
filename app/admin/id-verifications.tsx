@@ -22,12 +22,12 @@ interface IdVerificationRequest {
   user_id: string;
   document_type: string;
   document_url: string;
-  id_image_url?: string;
   status: 'pending' | 'approved' | 'rejected';
   reviewed_by?: string;
   reviewed_at?: string;
   rejection_reason?: string;
-  created_at: string;
+  submitted_at?: string; // verification_documents uses submitted_at instead of created_at
+  created_at?: string; // Fallback for compatibility
   user?: {
     full_name: string;
     email: string;
@@ -54,7 +54,7 @@ export default function IdVerificationsScreen() {
       const { data: requestsData, error: requestsError } = await supabase
         .from('verification_documents')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('submitted_at', { ascending: false });
 
       if (requestsError) throw requestsError;
 
@@ -295,7 +295,7 @@ export default function IdVerificationsScreen() {
                       </Text>
                       <Text style={styles.requestEmail}>{request.user?.email || 'No email'}</Text>
                       <Text style={styles.requestDate}>
-                        Submitted: {new Date(request.created_at).toLocaleDateString()}
+                        Submitted: {new Date(request.submitted_at || request.created_at || Date.now()).toLocaleDateString()}
                       </Text>
                     </View>
                     <View style={styles.pendingBadge}>
@@ -411,7 +411,7 @@ export default function IdVerificationsScreen() {
                 </Text>
                 <Text style={styles.modalText}>
                   <Text style={styles.modalLabel}>Submitted:</Text>{' '}
-                  {new Date(selectedRequest.created_at).toLocaleString()}
+                  {new Date(selectedRequest.submitted_at || selectedRequest.created_at || Date.now()).toLocaleString()}
                 </Text>
               </View>
 
@@ -419,7 +419,7 @@ export default function IdVerificationsScreen() {
                 <Text style={styles.modalSectionTitle}>ID Document</Text>
                 <View style={styles.imageContainer}>
                   <Image
-                    source={{ uri: selectedRequest.id_image_url || selectedRequest.document_url }}
+                    source={{ uri: selectedRequest.document_url }}
                     style={styles.idImage}
                     contentFit="contain"
                   />
