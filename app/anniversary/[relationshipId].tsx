@@ -61,23 +61,25 @@ export default function AnniversaryScreen() {
     }
   }, [relationshipId]);
 
-  const handleCreateAnniversary = async () => {
+  const handleCreateAnniversaryWithDate = async (date: Date) => {
     setIsCreating(true);
     try {
+      // Format date as YYYY-MM-DD for DATE column
+      const dateStr = date.toISOString().split('T')[0];
+      
       const { error } = await supabase
         .from('anniversaries')
         .insert({
           relationship_id: relationshipId,
-          anniversary_date: selectedDate.toISOString().split('T')[0], // Store as DATE format
+          anniversary_date: dateStr,
           reminder_sent: false,
         });
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Anniversary reminder added!');
-      setShowDatePicker(false);
       setSelectedDate(new Date()); // Reset date
       await loadAnniversaries();
+      Alert.alert('Success', 'Anniversary reminder added!');
     } catch (error: any) {
       console.error('Failed to create anniversary:', error);
       Alert.alert(
@@ -87,6 +89,11 @@ export default function AnniversaryScreen() {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleCreateAnniversary = async () => {
+    await handleCreateAnniversaryWithDate(selectedDate);
+    setShowDatePicker(false);
   };
 
   const handleDeleteAnniversary = async (id: string) => {
@@ -228,61 +235,84 @@ export default function AnniversaryScreen() {
             </View>
           )}
 
-          <Modal
-            visible={showDatePicker}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setShowDatePicker(false)}
-          >
-            <View style={styles.datePickerModal}>
-              <TouchableOpacity
-                style={styles.datePickerModalOverlay}
-                activeOpacity={1}
-                onPress={() => setShowDatePicker(false)}
-              >
+          {/* Android: Use native date picker dialog (not in modal) */}
+          {Platform.OS === 'android' && showDatePicker && (
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display="default"
+              onChange={(event, date) => {
+                // Always close the picker first
+                setShowDatePicker(false);
+                
+                // Only proceed if user confirmed (didn't cancel)
+                if (event.type === 'set' && date) {
+                  setSelectedDate(date);
+                  // Create anniversary with the selected date
+                  handleCreateAnniversaryWithDate(date);
+                }
+              }}
+              minimumDate={new Date()}
+            />
+          )}
+
+          {/* iOS: Use custom modal with spinner */}
+          {Platform.OS === 'ios' && (
+            <Modal
+              visible={showDatePicker}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setShowDatePicker(false)}
+            >
+              <View style={styles.datePickerModal}>
                 <TouchableOpacity
+                  style={styles.datePickerModalOverlay}
                   activeOpacity={1}
-                  onPress={(e) => e.stopPropagation()}
-                  style={styles.datePickerCard}
+                  onPress={() => setShowDatePicker(false)}
                 >
-                  <Text style={styles.datePickerTitle}>Select Anniversary Date</Text>
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={(e) => e.stopPropagation()}
+                    style={styles.datePickerCard}
+                  >
+                    <Text style={styles.datePickerTitle}>Select Anniversary Date</Text>
                     <View style={styles.datePickerContainer}>
-                    <DateTimePicker
-                      value={selectedDate}
-                      mode="date"
-                      display={Platform.select({ ios: 'spinner', android: 'spinner', default: 'default' }) || 'default'}
-                      onChange={(event, date) => {
-                        if (date) {
-                          setSelectedDate(date);
-                        }
-                      }}
-                      minimumDate={new Date()}
-                      style={Platform.OS === 'android' ? { width: '100%', height: 200 } : undefined}
-                    />
-                  </View>
-                  <View style={styles.datePickerActions}>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => setShowDatePicker(false)}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.confirmButton}
-                      onPress={handleCreateAnniversary}
-                      disabled={isCreating}
-                    >
-                      {isCreating ? (
-                        <ActivityIndicator color={colors.text.white} size="small" />
-                      ) : (
-                        <Text style={styles.confirmButtonText}>Add Reminder</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                      <DateTimePicker
+                        value={selectedDate}
+                        mode="date"
+                        display="spinner"
+                        onChange={(event, date) => {
+                          if (date) {
+                            setSelectedDate(date);
+                          }
+                        }}
+                        minimumDate={new Date()}
+                      />
+                    </View>
+                    <View style={styles.datePickerActions}>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => setShowDatePicker(false)}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.confirmButton}
+                        onPress={handleCreateAnniversary}
+                        disabled={isCreating}
+                      >
+                        {isCreating ? (
+                          <ActivityIndicator color={colors.text.white} size="small" />
+                        ) : (
+                          <Text style={styles.confirmButtonText}>Add Reminder</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            </View>
-          </Modal>
+              </View>
+            </Modal>
+          )}
         </ScrollView>
       </SafeAreaView>
     </>
