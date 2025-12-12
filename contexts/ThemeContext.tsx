@@ -101,6 +101,48 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
   const [isDark, setIsDark] = useState(false);
   const [visualTheme, setVisualTheme] = useState<VisualTheme>('default');
 
+  // Apply visual theme to base colors
+  // This ensures components using useTheme() get the correct themed colors
+  // Must be called before other hooks to maintain hook order
+  const colors = useMemo(() => {
+    const baseColors = isDark ? darkColors : lightColors;
+    
+    // Apply visual theme modifications
+    if (visualTheme === 'default') {
+      return { ...baseColors };
+    }
+    
+    const themed = { ...baseColors };
+    
+    if (visualTheme === 'colorful') {
+      // More vibrant, colorful theme
+      themed.primary = '#E91E63'; // Pink
+      themed.secondary = '#00BCD4'; // Cyan
+      themed.accent = '#FFC107'; // Amber
+      themed.danger = '#F44336'; // Red
+    } else if (visualTheme === 'minimal') {
+      // Muted, minimal theme
+      themed.primary = '#6C757D'; // Gray
+      themed.secondary = '#495057'; // Dark Gray
+      themed.accent = '#868E96'; // Light Gray
+      themed.danger = '#DC3545'; // Red (unchanged)
+    }
+    
+    return themed;
+  }, [isDark, visualTheme]);
+
+  // Determine if dark mode should be active
+  // This effect runs on mount and whenever themeMode, systemColorScheme, or visualTheme changes
+  useEffect(() => {
+    const newIsDark = themeMode === 'system' 
+      ? systemColorScheme === 'dark' 
+      : themeMode === 'dark';
+    
+    setIsDark(newIsDark);
+    // Update global colors with visual theme
+    updateGlobalColors(newIsDark, visualTheme);
+  }, [themeMode, systemColorScheme, visualTheme]);
+
   // Load visual theme from database
   const loadVisualTheme = useCallback(async (userId: string) => {
     try {
@@ -137,18 +179,6 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
     }
   }, []);
 
-  // Determine if dark mode should be active
-  // This effect runs on mount and whenever themeMode, systemColorScheme, or visualTheme changes
-  useEffect(() => {
-    const newIsDark = themeMode === 'system' 
-      ? systemColorScheme === 'dark' 
-      : themeMode === 'dark';
-    
-    setIsDark(newIsDark);
-    // Update global colors with visual theme
-    updateGlobalColors(newIsDark, visualTheme);
-  }, [themeMode, systemColorScheme, visualTheme]);
-
   // Load theme preference from database
   const loadThemePreference = useCallback(async (userId: string) => {
     try {
@@ -184,35 +214,6 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
       console.error('Failed to save theme preference:', error);
     }
   }, []);
-
-  // Apply visual theme to base colors
-  // This ensures components using useTheme() get the correct themed colors
-  const colors = useMemo(() => {
-    const baseColors = isDark ? darkColors : lightColors;
-    
-    // Apply visual theme modifications
-    if (visualTheme === 'default') {
-      return { ...baseColors };
-    }
-    
-    const themed = { ...baseColors };
-    
-    if (visualTheme === 'colorful') {
-      // More vibrant, colorful theme
-      themed.primary = '#E91E63'; // Pink
-      themed.secondary = '#00BCD4'; // Cyan
-      themed.accent = '#FFC107'; // Amber
-      themed.danger = '#F44336'; // Red
-    } else if (visualTheme === 'minimal') {
-      // Muted, minimal theme
-      themed.primary = '#6C757D'; // Gray
-      themed.secondary = '#495057'; // Dark Gray
-      themed.accent = '#868E96'; // Light Gray
-      themed.danger = '#DC3545'; // Red (unchanged)
-    }
-    
-    return themed;
-  }, [isDark, visualTheme]);
 
   return {
     colors,
