@@ -1826,23 +1826,34 @@ export const [AppContext, useApp] = createContextHook(() => {
       const { data, error } = await supabase
         .from('messages')
         .insert(insertData)
-        .select()
-        .single();
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to send message:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+
+      // Handle case where SELECT might be blocked by RLS but insert succeeded
+      if (!data || data.length === 0) {
+        // Insert succeeded but SELECT was blocked - real-time subscription will handle it
+        console.log('Message inserted but SELECT blocked by RLS - real-time subscription will handle it');
+        return null; // Return null, real-time subscription will add the message
+      }
+
+      const messageData = data[0];
 
       const newMessage: Message = {
-        id: data.id,
+        id: messageData.id,
         conversationId,
         senderId: currentUser.id,
         receiverId,
         content: content || '',
-        mediaUrl: data.media_url,
-        documentUrl: data.document_url,
-        documentName: data.document_name,
-        messageType: data.message_type || 'text',
+        mediaUrl: messageData.media_url,
+        documentUrl: messageData.document_url,
+        documentName: messageData.document_name,
+        messageType: messageData.message_type || 'text',
         read: false,
-        createdAt: data.created_at,
+        createdAt: messageData.created_at,
       };
       
       const updatedMessages = {
@@ -1887,14 +1898,16 @@ export const [AppContext, useApp] = createContextHook(() => {
         return prev;
       });
       
-      // Send notification to receiver
-      await createNotification(
-        receiverId,
-        'message',
-        'New Message',
-        `${currentUser.fullName}: ${lastMessageText.substring(0, 50)}${lastMessageText.length > 50 ? '...' : ''}`,
-        { conversationId, senderId: currentUser.id }
-      );
+      // Send notification to receiver (only if receiver is not the sender)
+      if (receiverId !== currentUser.id) {
+        await createNotification(
+          receiverId,
+          'message',
+          'New Message',
+          `${currentUser.fullName}: ${lastMessageText.substring(0, 50)}${lastMessageText.length > 50 ? '...' : ''}`,
+          { conversationId, senderId: currentUser.id }
+        );
+      }
       
       return newMessage;
     } catch (error) {
@@ -2026,10 +2039,15 @@ export const [AppContext, useApp] = createContextHook(() => {
       } else {
         // Delete for me only
         if (isSender) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('messages')
             .update({ deleted_for_sender: true })
             .eq('id', messageId);
+
+          if (updateError) {
+            console.error('Failed to delete message for sender:', JSON.stringify(updateError, null, 2));
+            throw updateError;
+          }
 
           // Update conversation last message if this was the last message
           const { lastMessage, lastMessageAt } = await getLastNonDeletedMessage(conversationId, currentUser.id);
@@ -2049,10 +2067,15 @@ export const [AppContext, useApp] = createContextHook(() => {
           };
           setMessages(updatedMessages);
         } else if (isReceiver) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('messages')
             .update({ deleted_for_receiver: true })
             .eq('id', messageId);
+
+          if (updateError) {
+            console.error('Failed to delete message for receiver:', JSON.stringify(updateError, null, 2));
+            throw updateError;
+          }
 
           // Update conversation last message if this was the last message
           const { lastMessage, lastMessageAt } = await getLastNonDeletedMessage(conversationId, currentUser.id);
