@@ -353,9 +353,7 @@ export default function ConversationDetailScreen() {
       setIsDownloading(true);
       
       // Request media library permissions (only photos, not audio)
-      const { status } = await MediaLibrary.requestPermissionsAsync({
-        accessPrivileges: 'readwrite',
-      });
+      const { status } = await MediaLibrary.requestPermissionsAsync();
       
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Please grant access to save photos to your gallery.');
@@ -743,12 +741,9 @@ export default function ConversationDetailScreen() {
     // Check if this message has a warning
     const messageWarning = warnings.find(w => w.messageId === item.id && !w.acknowledged);
 
-    if (isDeleted && item.content === 'This message was deleted') {
-      return (
-        <View style={[styles.messageContainer, isMe ? styles.myMessageContainer : styles.theirMessageContainer]}>
-          <Text style={styles.deletedMessageText}>This message was deleted</Text>
-        </View>
-      );
+    // Don't render deleted messages at all - they should be filtered out
+    if (isDeleted) {
+      return null;
     }
 
     return (
