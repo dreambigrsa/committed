@@ -181,6 +181,14 @@ export default function AdminDashboardScreen() {
       color: '#2ECC71',
       visible: currentUser.role === 'super_admin' || currentUser.role === 'admin',
     },
+    {
+      title: 'Ban Appeals',
+      icon: AlertTriangle,
+      description: 'Review ban and restriction appeals',
+      route: '/admin/ban-appeals',
+      color: '#E74C3C',
+      visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
+    },
   ];
 
   return (
