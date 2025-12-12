@@ -235,7 +235,7 @@ async function extractFaceFeaturesAzure(imageData: string, provider: FaceMatchin
         'Ocp-Apim-Subscription-Key': provider.azure_subscription_key,
         'Content-Type': 'application/octet-stream',
       },
-      body: imageBytes,
+      body: imageBytes as any,
     });
 
     if (!response.ok) {

@@ -17,7 +17,6 @@ import { X, Video as VideoIcon, Upload } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';

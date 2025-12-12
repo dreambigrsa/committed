@@ -22,7 +22,6 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { RelationshipType } from '@/types';
 import * as ImagePicker from 'expo-image-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 

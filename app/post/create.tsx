@@ -17,7 +17,6 @@ import { X, Image as ImageIcon } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
-// @ts-expect-error - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';

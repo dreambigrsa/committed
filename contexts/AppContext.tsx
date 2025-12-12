@@ -2701,7 +2701,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     subs.push(messagesChannel);
 
     // Setup notifications channel with polling fallback
-    let notificationPollInterval: NodeJS.Timeout | null = null;
+    let notificationPollInterval: ReturnType<typeof setInterval> | null = null;
     
     const startNotificationPolling = (pollUserId: string) => {
       if (notificationPollInterval) return; // Already polling
