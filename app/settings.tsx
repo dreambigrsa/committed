@@ -46,13 +46,15 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { currentUser, deleteAccount, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
-  const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference } = useTheme();
+  const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference, visualTheme, loadVisualTheme, saveVisualTheme } = useTheme();
+  const { language, setLanguage: setLanguageContext, loadLanguagePreference, saveLanguagePreference, t } = useLanguage();
   const relationship = getCurrentUserRelationship();
   const styles = createStyles(colors);
 
@@ -94,9 +96,7 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // App Preferences
-  const [language, setLanguage] = useState('en');
-  const [theme, setTheme] = useState('default');
+  // App Preferences - Now managed by contexts (LanguageContext and ThemeContext)
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -116,8 +116,10 @@ export default function SettingsScreen() {
       loadBlockedUsers();
       load2FAStatus();
       loadThemePreference(currentUser.id);
+      loadVisualTheme(currentUser.id);
+      loadLanguagePreference(currentUser.id);
     }
-  }, [currentUser]);
+  }, [currentUser, loadThemePreference, loadVisualTheme, loadLanguagePreference]);
 
   const loadSettings = async () => {
     if (!currentUser) return;
@@ -166,12 +168,8 @@ export default function SettingsScreen() {
         if (settings.privacy_settings) {
           setPrivacy(settings.privacy_settings);
         }
-        if (settings.language) {
-          setLanguage(settings.language);
-        }
-        if (settings.visual_theme) {
-          setTheme(settings.visual_theme);
-        }
+        // Language and visual theme are loaded by their respective contexts
+        // No need to set local state here
       }
 
       // Load gender and date of birth from users table
@@ -505,44 +503,10 @@ export default function SettingsScreen() {
     }
   };
 
+  // Language and theme are now saved via their respective context functions
+  // This function is kept for backward compatibility but is no longer used
   const saveAppPreferences = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const { data: existingData } = await supabase
-        .from('user_settings')
-        .select('notification_settings, privacy_settings, theme_preference, visual_theme')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-
-      const existingNotifications = existingData && existingData.length > 0 
-        ? existingData[0].notification_settings 
-        : notifications;
-      const existingPrivacy = existingData && existingData.length > 0 
-        ? existingData[0].privacy_settings 
-        : privacy;
-      // Use current themeMode from ThemeContext (handled separately, but preserve it)
-      const existingThemePreference = themeMode;
-
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: currentUser.id,
-          notification_settings: existingNotifications,
-          privacy_settings: existingPrivacy,
-          theme_preference: existingThemePreference, // Preserve dark mode preference
-          language: language,
-          visual_theme: theme,
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      console.error('Failed to save app preferences:', error);
-    }
+    // No-op: Language saved via saveLanguagePreference, theme via saveVisualTheme
   };
 
   const handleChangePrivacyLevel = async () => {
@@ -1112,14 +1076,14 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Bell size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Notifications</Text>
+              <Text style={styles.sectionTitle}>{t('notifications')}</Text>
             </View>
 
             <View style={styles.settingsList}>
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Heart size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Relationship Updates</Text>
+                  <Text style={styles.settingLabel}>{t('relationshipUpdates')}</Text>
                 </View>
                 <Switch
                   value={notifications.relationshipUpdates}
@@ -1135,7 +1099,7 @@ export default function SettingsScreen() {
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <AlertTriangle size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Cheating Alerts</Text>
+                  <Text style={styles.settingLabel}>{t('cheatingAlerts')}</Text>
                 </View>
                 <Switch
                   value={notifications.cheatingAlerts}
@@ -1151,7 +1115,7 @@ export default function SettingsScreen() {
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Shield size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Verification Attempts</Text>
+                  <Text style={styles.settingLabel}>{t('verificationAttempts')}</Text>
                 </View>
                 <Switch
                   value={notifications.verificationAttempts}
@@ -1167,7 +1131,7 @@ export default function SettingsScreen() {
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Calendar size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Anniversary Reminders</Text>
+                  <Text style={styles.settingLabel}>{t('anniversaryReminders')}</Text>
                 </View>
                 <Switch
                   value={notifications.anniversaryReminders}
@@ -1183,7 +1147,7 @@ export default function SettingsScreen() {
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Bell size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Marketing & Promotions</Text>
+                  <Text style={styles.settingLabel}>{t('marketingPromotions')}</Text>
                 </View>
                 <Switch
                   value={notifications.marketingPromotions}
@@ -1202,7 +1166,7 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Settings size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>App Preferences</Text>
+              <Text style={styles.sectionTitle}>{t('settings')}</Text>
             </View>
 
             <View style={styles.settingsList}>
@@ -1232,33 +1196,36 @@ export default function SettingsScreen() {
                 style={styles.settingItem}
                 onPress={() => {
                   Alert.alert(
-                    'Language',
-                    'Select language',
+                    t('selectLanguage'),
+                    '',
                     [
-                      { text: 'English', onPress: () => {
-                        setLanguage('en');
-                        saveAppPreferences();
+                      { text: t('english'), onPress: async () => {
+                        if (currentUser) {
+                          await saveLanguagePreference(currentUser.id, 'en');
+                        }
                       }},
-                      { text: 'Spanish', onPress: () => {
-                        setLanguage('es');
-                        saveAppPreferences();
+                      { text: t('spanish'), onPress: async () => {
+                        if (currentUser) {
+                          await saveLanguagePreference(currentUser.id, 'es');
+                        }
                       }},
-                      { text: 'French', onPress: () => {
-                        setLanguage('fr');
-                        saveAppPreferences();
+                      { text: t('french'), onPress: async () => {
+                        if (currentUser) {
+                          await saveLanguagePreference(currentUser.id, 'fr');
+                        }
                       }},
-                      { text: 'Cancel', style: 'cancel' },
+                      { text: t('cancel'), style: 'cancel' },
                     ]
                   );
                 }}
               >
                 <View style={styles.settingLeft}>
                   <Globe size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Language</Text>
+                  <Text style={styles.settingLabel}>{t('language')}</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>
-                    {language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'French'}
+                    {language === 'en' ? t('english') : language === 'es' ? t('spanish') : t('french')}
                   </Text>
                   <ChevronRight size={20} color={colors.text.tertiary} />
                 </View>
@@ -1268,33 +1235,36 @@ export default function SettingsScreen() {
                 style={styles.settingItem}
                 onPress={() => {
                   Alert.alert(
-                    'Theme',
-                    'Select theme',
+                    t('selectTheme'),
+                    '',
                     [
-                      { text: 'Default', onPress: () => {
-                        setTheme('default');
-                        saveAppPreferences();
+                      { text: t('default'), onPress: async () => {
+                        if (currentUser) {
+                          await saveVisualTheme(currentUser.id, 'default');
+                        }
                       }},
-                      { text: 'Colorful', onPress: () => {
-                        setTheme('colorful');
-                        saveAppPreferences();
+                      { text: t('colorful'), onPress: async () => {
+                        if (currentUser) {
+                          await saveVisualTheme(currentUser.id, 'colorful');
+                        }
                       }},
-                      { text: 'Minimal', onPress: () => {
-                        setTheme('minimal');
-                        saveAppPreferences();
+                      { text: t('minimal'), onPress: async () => {
+                        if (currentUser) {
+                          await saveVisualTheme(currentUser.id, 'minimal');
+                        }
                       }},
-                      { text: 'Cancel', style: 'cancel' },
+                      { text: t('cancel'), style: 'cancel' },
                     ]
                   );
                 }}
               >
                 <View style={styles.settingLeft}>
                   <Settings size={20} color={colors.text.secondary} />
-                  <Text style={styles.settingLabel}>Theme</Text>
+                  <Text style={styles.settingLabel}>{t('theme')}</Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>
-                    {theme === 'default' ? 'Default' : theme === 'colorful' ? 'Colorful' : theme === 'minimal' ? 'Minimal' : theme}
+                    {visualTheme === 'default' ? t('default') : visualTheme === 'colorful' ? t('colorful') : t('minimal')}
                   </Text>
                   <ChevronRight size={20} color={colors.text.tertiary} />
                 </View>
