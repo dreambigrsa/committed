@@ -15,12 +15,15 @@ import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import colors from '@/constants/colors';
 import { ReportedContent } from '@/types';
+import BanUserModal from '@/components/BanUserModal';
 
 export default function AdminReportsScreen() {
   const { currentUser } = useApp();
   const [reports, setReports] = useState<ReportedContent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [banModalVisible, setBanModalVisible] = useState<boolean>(false);
+  const [selectedReport, setSelectedReport] = useState<ReportedContent | null>(null);
 
   useEffect(() => {
     loadReports();
@@ -137,93 +140,89 @@ export default function AdminReportsScreen() {
       Alert.alert('Error', 'No user ID available for this report');
       return;
     }
+    setSelectedReport(report);
+    setBanModalVisible(true);
+  };
 
-    // Map content type to restriction feature
-    const featureMap: Record<string, string> = {
-      'post': 'posts',
-      'reel': 'reels',
-      'comment': 'comments',
-      'reel_comments': 'reel_comments',
-      'message': 'messages',
-    };
+  const handleBanFeatures = async (features: string[]) => {
+    if (!selectedReport?.reportedUserId) return;
 
-    const defaultFeature = featureMap[report.contentType] || 'all';
-    const featureDisplayName = defaultFeature === 'all' ? 'All Features' : defaultFeature.charAt(0).toUpperCase() + defaultFeature.slice(1);
+    try {
+      // Insert restrictions for each selected feature
+      const restrictions = features.map(feature => ({
+        user_id: selectedReport.reportedUserId,
+        restricted_feature: feature,
+        reason: `Reported: ${selectedReport.reason}`,
+        restricted_by: currentUser?.id,
+        is_active: true,
+      }));
 
-    Alert.alert(
-      'Ban User',
-      `Select what to restrict for this user:\n\nReported for: ${report.contentType}\nReason: ${report.reason}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: `Ban from ${featureDisplayName}`,
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Add restriction
-              const { error: restrictionError } = await supabase
-                .from('user_restrictions')
-                .insert({
-                  user_id: report.reportedUserId,
-                  restricted_feature: defaultFeature,
-                  reason: `Reported: ${report.reason}`,
-                  restricted_by: currentUser?.id,
-                  is_active: true,
-                });
+      const { error: restrictionError } = await supabase
+        .from('user_restrictions')
+        .insert(restrictions);
 
-              if (restrictionError) {
-                console.error('Add restriction error:', restrictionError);
-                Alert.alert('Error', restrictionError.message || 'Failed to add restriction');
-                return;
-              }
+      if (restrictionError) {
+        console.error('Add restriction error:', restrictionError);
+        Alert.alert('Error', restrictionError.message || 'Failed to add restrictions');
+        return;
+      }
 
-              await handleReviewReport(report.id, 'resolved', `User banned from ${featureDisplayName}`);
-              Alert.alert('Success', `User has been banned from ${featureDisplayName}`);
-            } catch (error: any) {
-              console.error('Ban user error:', error);
-              Alert.alert('Error', error?.message || 'Failed to ban user');
-            }
-          },
-        },
-        {
-          text: 'Ban from All Features (Full Ban)',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Full ban using Supabase Auth
-              await supabase.auth.admin.updateUserById(report.reportedUserId!, { ban_duration: 'infinity' });
-              
-              // Update database
-              await supabase
-                .from('users')
-                .update({ 
-                  banned_at: new Date().toISOString(),
-                  banned_by: currentUser?.id,
-                  ban_reason: `Reported: ${report.reason}`,
-                })
-                .eq('id', report.reportedUserId);
+      const featureNames = features.map(f => f.charAt(0).toUpperCase() + f.slice(1).replace('_', ' ')).join(', ');
+      await handleReviewReport(selectedReport.id, 'resolved', `User banned from: ${featureNames}`);
+      Alert.alert('Success', `User has been banned from: ${featureNames}`);
+      setBanModalVisible(false);
+      setSelectedReport(null);
+      loadReports();
+    } catch (error: any) {
+      console.error('Ban user error:', error);
+      Alert.alert('Error', error?.message || 'Failed to ban user');
+    }
+  };
 
-              // Add restriction for all
-              await supabase
-                .from('user_restrictions')
-                .insert({
-                  user_id: report.reportedUserId,
-                  restricted_feature: 'all',
-                  reason: `Reported: ${report.reason}`,
-                  restricted_by: currentUser?.id,
-                  is_active: true,
-                });
+  const handleFullBan = async () => {
+    if (!selectedReport?.reportedUserId) return;
 
-              await handleReviewReport(report.id, 'resolved', 'User fully banned');
-              Alert.alert('Success', 'User has been fully banned');
-            } catch (error: any) {
-              console.error('Full ban error:', error);
-              Alert.alert('Error', error?.message || 'Failed to ban user');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      // Update database
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({ 
+          banned_at: new Date().toISOString(),
+          banned_by: currentUser?.id,
+          ban_reason: `Reported: ${selectedReport.reason}`,
+        })
+        .eq('id', selectedReport.reportedUserId);
+
+      if (dbError) {
+        console.error('DB update error:', dbError);
+        throw dbError;
+      }
+
+      // Add restriction for all
+      const { error: restrictionError } = await supabase
+        .from('user_restrictions')
+        .insert({
+          user_id: selectedReport.reportedUserId,
+          restricted_feature: 'all',
+          reason: `Reported: ${selectedReport.reason}`,
+          restricted_by: currentUser?.id,
+          is_active: true,
+        });
+
+      if (restrictionError) {
+        console.error('Restriction error:', restrictionError);
+        throw restrictionError;
+      }
+
+      await handleReviewReport(selectedReport.id, 'resolved', 'User fully banned');
+      Alert.alert('Success', 'User has been fully banned');
+      setBanModalVisible(false);
+      setSelectedReport(null);
+      loadReports();
+    } catch (error: any) {
+      console.error('Full ban error:', error);
+      Alert.alert('Error', error?.message || 'Failed to ban user');
+    }
   };
 
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
@@ -240,6 +239,19 @@ export default function AdminReportsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: 'Reported Content', headerShown: true }} />
+      
+      <BanUserModal
+        visible={banModalVisible}
+        onClose={() => {
+          setBanModalVisible(false);
+          setSelectedReport(null);
+        }}
+        onBanFeatures={handleBanFeatures}
+        onFullBan={handleFullBan}
+        reportedContentType={selectedReport?.contentType}
+        reason={selectedReport?.reason}
+        colors={colors}
+      />
       
       {loading ? (
         <View style={styles.loadingContainer}>
