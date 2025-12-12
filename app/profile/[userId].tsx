@@ -29,7 +29,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser, unblockUser, isBlocked: checkIsBlocked } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -43,6 +43,7 @@ export default function UserProfileScreen() {
   const [viewingReel, setViewingReel] = useState<Reel | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const imageViewerScrollRef = useRef<ScrollView>(null);
   
   const relationship = user ? getUserRelationship(user.id) : null;
@@ -52,8 +53,9 @@ export default function UserProfileScreen() {
       loadUserProfile();
       checkFollowStatus();
       loadFollowCounts();
+      checkBlockStatus();
     }
-  }, [userId, checkIsFollowing]);
+  }, [userId, checkIsFollowing, checkIsBlocked]);
 
   useEffect(() => {
     loadUserContent();
@@ -65,6 +67,12 @@ export default function UserProfileScreen() {
       setIsFollowing(checkIsFollowing(userId));
     }
   }, [userId, currentUser, checkIsFollowing]);
+
+  const checkBlockStatus = () => {
+    if (userId && currentUser) {
+      setIsBlocked(checkIsBlocked(userId));
+    }
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -167,32 +175,63 @@ export default function UserProfileScreen() {
   const handleBlock = async () => {
     if (!currentUser || !userId || currentUser.id === userId) return;
     
-    Alert.alert(
-      'Block User',
-      `Are you sure you want to block ${user?.fullName}? They won't be able to see your profile, send you messages, or interact with your content.`,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => setShowBlockMenu(false) },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsBlocking(true);
-              await blockUser(userId);
-              Alert.alert('Success', `${user?.fullName} has been blocked.`, [
-                { text: 'OK', onPress: () => router.back() }
-              ]);
-              setShowBlockMenu(false);
-            } catch (error: any) {
-              console.error('Failed to block user:', error);
-              Alert.alert('Error', error.message || 'Failed to block user. Please try again.');
-            } finally {
-              setIsBlocking(false);
-            }
+    if (isBlocked) {
+      // Unblock
+      Alert.alert(
+        'Unblock User',
+        `Are you sure you want to unblock ${user?.fullName}? They will be able to see your profile and send you messages again.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => setShowBlockMenu(false) },
+          {
+            text: 'Unblock',
+            style: 'default',
+            onPress: async () => {
+              try {
+                setIsBlocking(true);
+                await unblockUser(userId);
+                setIsBlocked(false);
+                Alert.alert('Success', `${user?.fullName} has been unblocked.`);
+                setShowBlockMenu(false);
+              } catch (error: any) {
+                console.error('Failed to unblock user:', error);
+                Alert.alert('Error', error.message || 'Failed to unblock user. Please try again.');
+              } finally {
+                setIsBlocking(false);
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    } else {
+      // Block
+      Alert.alert(
+        'Block User',
+        `Are you sure you want to block ${user?.fullName}? They won't be able to see your profile, send you messages, or interact with your content.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => setShowBlockMenu(false) },
+          {
+            text: 'Block',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setIsBlocking(true);
+                await blockUser(userId);
+                setIsBlocked(true);
+                Alert.alert('Success', `${user?.fullName} has been blocked.`, [
+                  { text: 'OK', onPress: () => router.back() }
+                ]);
+                setShowBlockMenu(false);
+              } catch (error: any) {
+                console.error('Failed to block user:', error);
+                Alert.alert('Error', error.message || 'Failed to block user. Please try again.');
+              } finally {
+                setIsBlocking(false);
+              }
+            },
+          },
+        ]
+      );
+    }
   };
 
   if (isLoading) {
@@ -355,30 +394,38 @@ export default function UserProfileScreen() {
 
             {!isOwnProfile && (
               <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
-                  onPress={handleFollow}
-                  activeOpacity={0.8}
-                  disabled={isBlocking}
-                >
-                  {isFollowing ? (
-                    <UserMinus size={18} color={colors.text.primary} />
-                  ) : (
-                    <UserPlus size={18} color={colors.text.white} />
-                  )}
-                  <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
-                    {isFollowing ? 'Unfollow' : 'Follow'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.actionButtonMessage} 
-                  onPress={handleMessage}
-                  activeOpacity={0.8}
-                  disabled={isBlocking}
-                >
-                  <MessageCircle size={18} color={colors.primary} />
-                  <Text style={styles.actionButtonTextMessage}>Message</Text>
-                </TouchableOpacity>
+                {!isBlocked ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.actionButton, isFollowing ? styles.actionButtonUnfollow : styles.actionButtonFollow]}
+                      onPress={handleFollow}
+                      activeOpacity={0.8}
+                      disabled={isBlocking}
+                    >
+                      {isFollowing ? (
+                        <UserMinus size={18} color={colors.text.primary} />
+                      ) : (
+                        <UserPlus size={18} color={colors.text.white} />
+                      )}
+                      <Text style={[styles.actionButtonText, isFollowing && styles.actionButtonTextUnfollow]}>
+                        {isFollowing ? 'Unfollow' : 'Follow'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.actionButtonMessage} 
+                      onPress={handleMessage}
+                      activeOpacity={0.8}
+                      disabled={isBlocking}
+                    >
+                      <MessageCircle size={18} color={colors.primary} />
+                      <Text style={styles.actionButtonTextMessage}>Message</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <View style={styles.blockedNotice}>
+                    <Text style={styles.blockedNoticeText}>You have blocked this user</Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   style={styles.actionButtonMore}
                   onPress={() => setShowBlockMenu(true)}
@@ -619,8 +666,10 @@ export default function UserProfileScreen() {
               onPress={handleBlock}
               disabled={isBlocking}
             >
-              <UserX size={20} color={colors.danger} />
-              <Text style={styles.blockMenuText}>Block {user?.fullName}</Text>
+              <UserX size={20} color={isBlocked ? colors.primary : colors.danger} />
+              <Text style={[styles.blockMenuText, isBlocked && styles.blockMenuTextUnblock]}>
+                {isBlocked ? 'Unblock' : 'Block'} {user?.fullName}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.blockMenuCancel}
@@ -827,12 +876,12 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     width: '100%',
     marginTop: 12,
     marginBottom: 20,
     paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   actionButton: {
     flex: 1,
@@ -872,13 +921,13 @@ const styles = StyleSheet.create({
   },
   actionButtonMore: {
     width: 44,
-    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background.primary,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.border.light,
+    minHeight: 44,
   },
   actionButtonText: {
     fontSize: 15,
@@ -1034,6 +1083,9 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.danger,
   },
+  blockMenuTextUnblock: {
+    color: colors.primary,
+  },
   blockMenuCancel: {
     marginTop: 12,
     padding: 16,
@@ -1043,5 +1095,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text.secondary,
+  },
+  blockedNotice: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  blockedNoticeText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
   },
 });
