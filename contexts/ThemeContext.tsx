@@ -93,22 +93,61 @@ const darkColors = {
   },
 };
 
+export type VisualTheme = 'default' | 'colorful' | 'minimal';
+
 export const [ThemeContext, useTheme] = createContextHook(() => {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [isDark, setIsDark] = useState(false);
+  const [visualTheme, setVisualTheme] = useState<VisualTheme>('default');
+
+  // Load visual theme from database
+  const loadVisualTheme = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('visual_theme')
+        .eq('user_id', userId)
+        .single();
+
+      if (!error && data?.visual_theme) {
+        setVisualTheme(data.visual_theme as VisualTheme);
+      }
+    } catch (error) {
+      console.error('Failed to load visual theme:', error);
+    }
+  }, []);
+
+  // Save visual theme to database
+  const saveVisualTheme = useCallback(async (userId: string, theme: VisualTheme) => {
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: userId,
+          visual_theme: theme,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) throw error;
+      setVisualTheme(theme);
+    } catch (error) {
+      console.error('Failed to save visual theme:', error);
+    }
+  }, []);
 
   // Determine if dark mode should be active
-  // This effect runs on mount and whenever themeMode or systemColorScheme changes
+  // This effect runs on mount and whenever themeMode, systemColorScheme, or visualTheme changes
   useEffect(() => {
     const newIsDark = themeMode === 'system' 
       ? systemColorScheme === 'dark' 
       : themeMode === 'dark';
     
     setIsDark(newIsDark);
-    // Update global colors so all files using `import colors from '@/constants/colors'` work
-    updateGlobalColors(newIsDark);
-  }, [themeMode, systemColorScheme]);
+    // Update global colors with visual theme
+    updateGlobalColors(newIsDark, visualTheme);
+  }, [themeMode, systemColorScheme, visualTheme]);
 
   // Load theme preference from database
   const loadThemePreference = useCallback(async (userId: string) => {
@@ -155,6 +194,10 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
     setThemeMode,
     loadThemePreference,
     saveThemePreference,
+    visualTheme,
+    setVisualTheme,
+    loadVisualTheme,
+    saveVisualTheme,
   };
 });
 
