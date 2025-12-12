@@ -2700,9 +2700,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       .subscribe();
     subs.push(messagesChannel);
 
-    // Setup notifications channel with retry logic and polling fallback
-    let notificationRetryCount = 0;
-    const maxRetries = 3;
+    // Setup notifications channel with polling fallback
     let notificationPollInterval: NodeJS.Timeout | null = null;
     
     const startNotificationPolling = (pollUserId: string) => {
@@ -2790,18 +2788,17 @@ export const [AppContext, useApp] = createContextHook(() => {
       })();
     };
     
-    // Setup notifications channel - single postgres_changes subscription without filter
-    // Subscribing to ALL inserts and filtering in handler to avoid binding mismatch errors
+    // Setup notifications channel
+    // Use a unique channel name to avoid conflicts
+    console.log('📡 Setting up notifications subscription for user:', userId);
     const notificationsChannel = supabase
-      .channel(`notifications_${userId}`)
+      .channel(`user_notifications_${userId}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          // NO FILTER - this is the key to avoiding binding mismatch errors
-          // We filter in the handler instead
         },
         (payload: any) => {
           // Only process notifications for this user (filter in handler)
@@ -2839,32 +2836,24 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
       )
       .subscribe((status, err) => {
-        console.log('📡 Notifications subscription status:', status);
+        console.log('📡 Notifications subscription:', status);
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Notifications real-time subscription active');
-          notificationRetryCount = 0;
+          console.log('✅ Notifications subscription: SUBSCRIBED');
           // Stop polling if real-time is working
           if (notificationPollInterval) {
             clearInterval(notificationPollInterval);
             notificationPollInterval = null;
             console.log('🛑 Stopped notification polling (real-time is working)');
           }
-        } else if (status === 'CHANNEL_ERROR') {
-          // Only log if it's a binding error - don't fail completely
-          if (err && err.message && err.message.includes('mismatch')) {
-            console.warn('⚠️ Notifications binding mismatch - using polling fallback:', err.message);
-          } else {
-            console.error('❌ Notifications channel error:', status, err);
-          }
-          // Always start polling as fallback
+        } else if (status === 'CLOSED') {
+          console.log('❌ Notifications subscription: CLOSED - Starting polling fallback');
           if (!notificationPollInterval) {
-            console.warn('⚠️ Starting notification polling fallback (every 2 seconds)');
             startNotificationPolling(userId);
           }
-        } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.error('❌ Notifications subscription:', status, err);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('❌ Notifications subscription error:', status, err);
           if (!notificationPollInterval) {
-            console.warn('⚠️ Starting notification polling fallback (every 2 seconds)');
+            console.log('⚠️ Starting notification polling fallback');
             startNotificationPolling(userId);
           }
         }
