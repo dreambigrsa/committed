@@ -1,7 +1,9 @@
 // Supabase Edge Function for sending SMS via Twilio
 // Deploy this function to Supabase: supabase functions deploy send-sms
 
+// @ts-ignore - Deno runtime import
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// @ts-ignore - Deno runtime import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const TWILIO_API_URL = 'https://api.twilio.com/2010-04-01';
@@ -16,7 +18,7 @@ interface RequestBody {
   };
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
