@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { AlertTriangle, CheckCircle, XCircle, Eye } from 'lucide-react-native';
+import { AlertTriangle, CheckCircle, XCircle, Eye, Ban } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import colors from '@/constants/colors';
@@ -132,6 +132,99 @@ export default function AdminReportsScreen() {
     );
   };
 
+  const handleBanUser = async (report: ReportedContent) => {
+    if (!report.reportedUserId) {
+      Alert.alert('Error', 'No user ID available for this report');
+      return;
+    }
+
+    // Map content type to restriction feature
+    const featureMap: Record<string, string> = {
+      'post': 'posts',
+      'reel': 'reels',
+      'comment': 'comments',
+      'reel_comments': 'reel_comments',
+      'message': 'messages',
+    };
+
+    const defaultFeature = featureMap[report.contentType] || 'all';
+
+    Alert.alert(
+      'Ban User',
+      `Select what to restrict for this user:\n\nReported for: ${report.contentType}\nReason: ${report.reason}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Ban from ' + (defaultFeature === 'all' ? 'All Features' : defaultFeature),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Add restriction
+              const { error: restrictionError } = await supabase
+                .from('user_restrictions')
+                .insert({
+                  user_id: report.reportedUserId,
+                  restricted_feature: defaultFeature,
+                  reason: `Reported: ${report.reason}`,
+                  restricted_by: currentUser?.id,
+                  is_active: true,
+                });
+
+              if (restrictionError) {
+                console.error('Add restriction error:', restrictionError);
+                Alert.alert('Error', restrictionError.message || 'Failed to add restriction');
+                return;
+              }
+
+              await handleReviewReport(report.id, 'resolved', `User banned from ${defaultFeature}`);
+              Alert.alert('Success', `User has been banned from ${defaultFeature}`);
+            } catch (error: any) {
+              console.error('Ban user error:', error);
+              Alert.alert('Error', error?.message || 'Failed to ban user');
+            }
+          },
+        },
+        {
+          text: 'Ban from All Features',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Full ban using Supabase Auth
+              await supabase.auth.admin.updateUserById(report.reportedUserId!, { ban_duration: 'infinity' });
+              
+              // Update database
+              await supabase
+                .from('users')
+                .update({ 
+                  banned_at: new Date().toISOString(),
+                  banned_by: currentUser?.id,
+                  ban_reason: `Reported: ${report.reason}`,
+                })
+                .eq('id', report.reportedUserId);
+
+              // Add restriction for all
+              await supabase
+                .from('user_restrictions')
+                .insert({
+                  user_id: report.reportedUserId,
+                  restricted_feature: 'all',
+                  reason: `Reported: ${report.reason}`,
+                  restricted_by: currentUser?.id,
+                  is_active: true,
+                });
+
+              await handleReviewReport(report.id, 'resolved', 'User fully banned');
+              Alert.alert('Success', 'User has been fully banned');
+            } catch (error: any) {
+              console.error('Full ban error:', error);
+              Alert.alert('Error', error?.message || 'Failed to ban user');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin' && currentUser.role !== 'moderator')) {
     return (
       <SafeAreaView style={styles.container}>
@@ -226,6 +319,15 @@ export default function AdminReportsScreen() {
                     >
                       <Text style={styles.actionButtonText}>Delete Content</Text>
                     </TouchableOpacity>
+                    {report.reportedUserId && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.banButton]}
+                        onPress={() => handleBanUser(report)}
+                      >
+                        <Ban size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Ban User</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       style={[styles.actionButton, styles.resolveButton]}
                       onPress={() => handleReviewReport(report.id, 'resolved', 'Warning sent')}
@@ -404,6 +506,9 @@ const styles = StyleSheet.create({
   },
   deleteContentButton: {
     backgroundColor: '#8B0000',
+  },
+  banButton: {
+    backgroundColor: colors.danger,
   },
   resolveButton: {
     backgroundColor: colors.secondary,
