@@ -15,11 +15,12 @@ import {
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film, X, UserX, MoreVertical } from 'lucide-react-native';
+import { CheckCircle2, Heart, Shield, UserPlus, UserMinus, MessageCircle, Grid, Film, X, UserX, MoreVertical, Flag } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { User, Post, Reel } from '@/types';
 import { supabase } from '@/lib/supabase';
+import ReportContentModal from '@/components/ReportContentModal';
 
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 44) / 3;
@@ -29,7 +30,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser, unblockUser, isBlocked: checkIsBlocked } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser, unblockUser, isBlocked: checkIsBlocked, reportContent } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -44,6 +45,7 @@ export default function UserProfileScreen() {
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [reportingProfile, setReportingProfile] = useState(false);
   const imageViewerScrollRef = useRef<ScrollView>(null);
   
   const relationship = user ? getUserRelationship(user.id) : null;
@@ -671,6 +673,18 @@ export default function UserProfileScreen() {
                 {isBlocked ? 'Unblock' : 'Block'} {user?.fullName}
               </Text>
             </TouchableOpacity>
+            {!isOwnProfile && (
+              <TouchableOpacity
+                style={styles.blockMenuItem}
+                onPress={() => {
+                  setShowBlockMenu(false);
+                  setReportingProfile(true);
+                }}
+              >
+                <Flag size={20} color={colors.danger} />
+                <Text style={styles.blockMenuText}>Report {user?.fullName}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.blockMenuCancel}
               onPress={() => setShowBlockMenu(false)}
@@ -680,6 +694,18 @@ export default function UserProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Report Profile Modal */}
+      {user && (
+        <ReportContentModal
+          visible={reportingProfile}
+          onClose={() => setReportingProfile(false)}
+          contentType="profile"
+          reportedUserId={user.id}
+          onReport={reportContent}
+          colors={colors}
+        />
+      )}
     </SafeAreaView>
   );
 }
