@@ -25,6 +25,7 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [achievements, setAchievements] = useState<any[]>([]);
   const [coupleLevel, setCoupleLevel] = useState<any>(null);
   const [reelComments, setReelComments] = useState<Record<string, ReelComment[]>>({});
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]); // Array of blocked user IDs
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [, setSubscriptions] = useState<RealtimeChannel[]>([]);
 
@@ -468,6 +469,16 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: a.created_at,
         }));
         setCheatingAlerts(formattedAlerts);
+      }
+
+      // Load blocked users
+      const { data: blockedUsersData } = await supabase
+        .from('blocked_users')
+        .select('blocked_id')
+        .eq('blocker_id', userId);
+
+      if (blockedUsersData) {
+        setBlockedUsers(blockedUsersData.map((b: any) => b.blocked_id));
       }
 
       const { data: followsData } = await supabase
@@ -2809,6 +2820,9 @@ export const [AppContext, useApp] = createContextHook(() => {
         await unfollowUser(blockedId);
       }
 
+      // Update local state
+      setBlockedUsers([...blockedUsers, blockedId]);
+
       return data;
     } catch (error: any) {
       console.error('Block user error:', error?.message || error?.code || JSON.stringify(error));
@@ -2817,10 +2831,31 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser, follows, unfollowUser]);
 
   const isBlocked = useCallback((userId: string): boolean => {
-    // This will need to be checked from database, but for now return false
-    // In production, you'd maintain a blocked users state or check on demand
-    return false;
-  }, []);
+    if (!currentUser) return false;
+    return blockedUsers.includes(userId);
+  }, [currentUser, blockedUsers]);
+
+  const unblockUser = useCallback(async (blockedId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('blocked_users')
+        .delete()
+        .eq('blocker_id', currentUser.id)
+        .eq('blocked_id', blockedId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setBlockedUsers(blockedUsers.filter(id => id !== blockedId));
+    } catch (error: any) {
+      console.error('Unblock user error:', error?.message || error?.code || JSON.stringify(error));
+      throw error;
+    }
+  }, [currentUser, blockedUsers]);
 
   const addReelComment = useCallback(async (reelId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
@@ -4254,6 +4289,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     unfollowUser,
     isFollowing,
     blockUser,
+    unblockUser,
     isBlocked,
     addReelComment,
     getReelComments,
