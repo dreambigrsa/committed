@@ -136,13 +136,30 @@ export default function SettingsScreen() {
       if (data && data.length > 0) {
         const settings = data[0];
         if (settings.notification_settings) {
-          // Normalize notification settings to ensure all keys exist
+          // Helper function to ensure boolean values (handle string "true"/"false" from JSONB)
+          const toBoolean = (value: any, fallback: boolean): boolean => {
+            if (value === null || value === undefined) return fallback;
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'string') return value.toLowerCase() === 'true';
+            return Boolean(value);
+          };
+
+          // Normalize notification settings to ensure all keys exist and are proper booleans
           const normalizedSettings = {
-            relationshipUpdates: settings.notification_settings.relationshipUpdates ?? settings.notification_settings.relationshipRequests ?? true,
-            cheatingAlerts: settings.notification_settings.cheatingAlerts ?? true,
-            verificationAttempts: settings.notification_settings.verificationAttempts ?? settings.notification_settings.verificationUpdates ?? true,
-            anniversaryReminders: settings.notification_settings.anniversaryReminders ?? true,
-            marketingPromotions: settings.notification_settings.marketingPromotions ?? settings.notification_settings.partnerActivity ?? false,
+            relationshipUpdates: toBoolean(
+              settings.notification_settings.relationshipUpdates ?? settings.notification_settings.relationshipRequests,
+              true
+            ),
+            cheatingAlerts: toBoolean(settings.notification_settings.cheatingAlerts, true),
+            verificationAttempts: toBoolean(
+              settings.notification_settings.verificationAttempts ?? settings.notification_settings.verificationUpdates,
+              true
+            ),
+            anniversaryReminders: toBoolean(settings.notification_settings.anniversaryReminders, true),
+            marketingPromotions: toBoolean(
+              settings.notification_settings.marketingPromotions ?? settings.notification_settings.partnerActivity,
+              false
+            ),
           };
           setNotifications(normalizedSettings);
         }
