@@ -1558,8 +1558,65 @@ export const [AppContext, useApp] = createContextHook(() => {
     );
   }, [currentUser, relationshipRequests]);
 
+  // Helper function to check if user is restricted from a feature
+  const checkUserRestriction = useCallback(async (userId: string, feature: string): Promise<{ restricted: boolean; reason?: string }> => {
+    try {
+      // First check if user is fully banned
+      const { data: userData } = await supabase
+        .from('users')
+        .select('banned_at')
+        .eq('id', userId)
+        .single();
+
+      if (userData?.banned_at) {
+        return { restricted: true, reason: 'Your account has been banned' };
+      }
+
+      // Check for active restrictions
+      // Check for feature-specific or full ban restrictions
+      const now = new Date().toISOString();
+      const { data: restrictions } = await supabase
+        .from('user_restrictions')
+        .select('restricted_feature, reason, expires_at')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .or(`restricted_feature.eq.${feature},restricted_feature.eq.all`)
+        .limit(10); // Get multiple to filter by expires_at
+
+      // Filter by expiration date (permanent or not expired)
+      const activeRestrictions = restrictions?.filter(r => 
+        !r.expires_at || new Date(r.expires_at) > new Date(now)
+      );
+
+      if (activeRestrictions && activeRestrictions.length > 0) {
+        const restriction = activeRestrictions[0];
+        const featureName = feature === 'posts' ? 'posts' : 
+                           feature === 'comments' ? 'comments' :
+                           feature === 'messages' ? 'messages' :
+                           feature === 'reels' ? 'reels' :
+                           feature === 'reel_comments' ? 'reel comments' : feature;
+        return { 
+          restricted: true, 
+          reason: restriction.reason || `You are banned from ${featureName}` 
+        };
+      }
+
+      return { restricted: false };
+    } catch (error) {
+      console.error('Check restriction error:', error);
+      // On error, allow the action (fail open for better UX)
+      return { restricted: false };
+    }
+  }, []);
+
   const createPost = useCallback(async (content: string, mediaUrls: string[], mediaType: Post['mediaType']) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from creating posts
+    const restriction = await checkUserRestriction(currentUser.id, 'posts');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from creating posts');
+    }
     
     try {
       const { data, error } = await supabase
@@ -1601,6 +1658,12 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const createReel = useCallback(async (videoUrl: string, caption: string, thumbnailUrl?: string) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from creating reels
+    const restriction = await checkUserRestriction(currentUser.id, 'reels');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from creating reels');
+    }
     
     try {
       const { data, error } = await supabase
@@ -1759,6 +1822,12 @@ export const [AppContext, useApp] = createContextHook(() => {
   const addComment = useCallback(async (postId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
     
+    // Check if user is restricted from commenting
+    const restriction = await checkUserRestriction(currentUser.id, 'comments');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from commenting');
+    }
+    
     try {
       const insertData: any = {
         post_id: postId,
@@ -1869,6 +1938,12 @@ export const [AppContext, useApp] = createContextHook(() => {
     messageType: 'text' | 'image' | 'document' = 'text'
   ) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from sending messages
+    const restriction = await checkUserRestriction(currentUser.id, 'messages');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from sending messages');
+    }
     
     try {
       const insertData: any = {
@@ -3376,6 +3451,12 @@ export const [AppContext, useApp] = createContextHook(() => {
   const addReelComment = useCallback(async (reelId: string, content: string, parentCommentId?: string) => {
     if (!currentUser) return null;
     
+    // Check if user is restricted from commenting on reels
+    const restriction = await checkUserRestriction(currentUser.id, 'reel_comments');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from commenting on reels');
+    }
+    
     try {
       const insertData: any = {
         reel_id: reelId,
@@ -3476,6 +3557,12 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const editReelComment = useCallback(async (commentId: string, content: string) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from editing reel comments
+    const restriction = await checkUserRestriction(currentUser.id, 'reel_comments');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from editing reel comments');
+    }
     
     try {
       let foundComment: ReelComment | null = null;
@@ -3943,6 +4030,12 @@ export const [AppContext, useApp] = createContextHook(() => {
   const editPost = useCallback(async (postId: string, content: string, mediaUrls: string[], mediaType: Post['mediaType']) => {
     if (!currentUser) return null;
     
+    // Check if user is restricted from editing posts
+    const restriction = await checkUserRestriction(currentUser.id, 'posts');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from editing posts');
+    }
+    
     try {
       const post = posts.find(p => p.id === postId);
       if (!post || post.userId !== currentUser.id) {
@@ -4013,6 +4106,12 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const editComment = useCallback(async (commentId: string, content: string) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from editing comments
+    const restriction = await checkUserRestriction(currentUser.id, 'comments');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from editing comments');
+    }
     
     try {
       let foundComment: Comment | null = null;
@@ -4235,6 +4334,12 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const editReel = useCallback(async (reelId: string, caption: string) => {
     if (!currentUser) return null;
+    
+    // Check if user is restricted from editing reels
+    const restriction = await checkUserRestriction(currentUser.id, 'reels');
+    if (restriction.restricted) {
+      throw new Error(restriction.reason || 'You are banned from editing reels');
+    }
     
     try {
       const reel = reels.find(r => r.id === reelId);
