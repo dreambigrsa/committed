@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Image } from 'expo-image';
-import { Search, Shield, Ban, CheckCircle, XCircle, Edit2, Trash2 } from 'lucide-react-native';
+import { Search, Shield, Ban, CheckCircle, XCircle, Edit2, Trash2, X } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import colors from '@/constants/colors';
@@ -41,23 +41,27 @@ export default function AdminUsersScreen() {
       if (error) throw error;
 
       if (data) {
-        // Check ban status - use database field as primary source since it's more reliable
-        // Also check for active restrictions
+        // Check ban status - use database field as primary source
+        // Also check for active "all" restrictions
         const usersWithBanStatus = await Promise.all(
           data.map(async (u: any) => {
             let isBanned = !!u.banned_at;
             
-            // Also check Supabase Auth if database field is not set
+            // Also check if user has "all" restriction
             if (!isBanned) {
               try {
-                const { data: authUser, error } = await supabase.auth.admin.getUserById(u.id);
-                if (!error && authUser?.user) {
-                  const userMetadata = authUser.user as any;
-                  isBanned = userMetadata?.ban_duration === 'infinity' || !!userMetadata?.banned_until;
-                }
+                const { data: restrictions } = await supabase
+                  .from('user_restrictions')
+                  .select('restricted_feature')
+                  .eq('user_id', u.id)
+                  .eq('restricted_feature', 'all')
+                  .eq('is_active', true)
+                  .limit(1);
+                
+                isBanned = !!(restrictions && restrictions.length > 0);
               } catch (err) {
-                // If we can't check auth, rely on database field
-                console.log('Could not check auth ban status for user:', u.id);
+                // If we can't check restrictions, rely on database field
+                console.log('Could not check restrictions for user:', u.id);
               }
             }
             
@@ -109,7 +113,7 @@ export default function AdminUsersScreen() {
             style: 'default',
             onPress: async () => {
               try {
-                // Update database first
+                // Update database - Auth admin API requires service role (backend only)
                 const { error: dbError } = await supabase
                   .from('users')
                   .update({ 
@@ -124,20 +128,12 @@ export default function AdminUsersScreen() {
                   throw dbError;
                 }
                 
-                // Then update Supabase Auth
-                const { error: unbanError } = await supabase.auth.admin.updateUserById(userId, { ban_duration: null as any });
-                if (unbanError) {
-                  console.error('Auth unban error:', unbanError);
-                  // Don't throw - database update succeeded
-                }
-                
-                // Also remove all active restrictions (optional - admin can choose to keep restrictions)
-                // Commented out so restrictions remain unless manually removed
-                // await supabase
-                //   .from('user_restrictions')
-                //   .update({ is_active: false })
-                //   .eq('user_id', userId)
-                //   .eq('is_active', true);
+                // Remove all active restrictions
+                await supabase
+                  .from('user_restrictions')
+                  .update({ is_active: false })
+                  .eq('user_id', userId)
+                  .eq('is_active', true);
                 
                 Alert.alert('Success', 'User has been unbanned');
                 // Force reload users to update button state
@@ -162,7 +158,7 @@ export default function AdminUsersScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                // Update database first (more reliable)
+                // Update database - Auth admin API requires service role (backend only)
                 const { error: dbError } = await supabase
                   .from('users')
                   .update({ 
@@ -177,12 +173,16 @@ export default function AdminUsersScreen() {
                   throw dbError;
                 }
                 
-                // Then update Supabase Auth
-                const { error: banError } = await supabase.auth.admin.updateUserById(userId, { ban_duration: 'infinity' });
-                if (banError) {
-                  console.error('Auth ban error:', banError);
-                  // Don't throw - database update succeeded, so we can continue
-                }
+                // Add restriction for all features
+                await supabase
+                  .from('user_restrictions')
+                  .insert({
+                    user_id: userId,
+                    restricted_feature: 'all',
+                    reason: 'Banned by admin',
+                    restricted_by: currentUser?.id,
+                    is_active: true,
+                  });
                 
                 Alert.alert('Success', 'User has been banned');
                 // Force reload users to update button state
@@ -513,37 +513,52 @@ export default function AdminUsersScreen() {
                       )}
                     </View>
                     
-                    {selectedUserId === user.id && restrictions.length > 0 && (
+                    {selectedUserId === user.id && (
                       <View style={styles.restrictionsContainer}>
-                        <Text style={styles.restrictionsTitle}>Active Restrictions:</Text>
-                        {restrictions.map((restriction) => (
-                          <View key={restriction.id} style={styles.restrictionItem}>
-                            <View style={styles.restrictionInfo}>
-                              <Text style={styles.restrictionFeature}>
-                                {restriction.restricted_feature.charAt(0).toUpperCase() + restriction.restricted_feature.slice(1)}
-                              </Text>
-                              {restriction.reason && (
-                                <Text style={styles.restrictionReason}>{restriction.reason}</Text>
-                              )}
-                              <Text style={styles.restrictionDate}>
-                                Since: {new Date(restriction.restricted_at).toLocaleDateString()}
-                              </Text>
-                            </View>
-                            <TouchableOpacity
-                              style={styles.removeRestrictionButton}
-                              onPress={() => handleRemoveRestriction(restriction.id, user.id)}
-                            >
-                              <XCircle size={16} color={colors.danger} />
-                              <Text style={styles.removeRestrictionText}>Remove</Text>
-                            </TouchableOpacity>
+                        <View style={styles.restrictionsHeader}>
+                          <Text style={styles.restrictionsTitle}>Active Restrictions</Text>
+                          <TouchableOpacity onPress={() => {
+                            setSelectedUserId(null);
+                            setRestrictions([]);
+                          }}>
+                            <X size={18} color={colors.text.secondary} />
+                          </TouchableOpacity>
+                        </View>
+                        {restrictions.length > 0 ? (
+                          <View style={styles.restrictionsList}>
+                            {restrictions.map((restriction) => (
+                              <View key={restriction.id} style={styles.restrictionCard}>
+                                <View style={styles.restrictionInfo}>
+                                  <View style={styles.restrictionHeaderRow}>
+                                    <View style={[styles.restrictionBadge, { backgroundColor: colors.primary + '20' }]}>
+                                      <Text style={[styles.restrictionFeature, { color: colors.primary }]}>
+                                        {restriction.restricted_feature === 'all' 
+                                          ? 'All Features' 
+                                          : restriction.restricted_feature.charAt(0).toUpperCase() + restriction.restricted_feature.slice(1).replace('_', ' ')}
+                                      </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                      style={styles.removeRestrictionButton}
+                                      onPress={() => handleRemoveRestriction(restriction.id, user.id)}
+                                    >
+                                      <XCircle size={18} color={colors.danger} />
+                                    </TouchableOpacity>
+                                  </View>
+                                  {restriction.reason && (
+                                    <Text style={styles.restrictionReason}>{restriction.reason}</Text>
+                                  )}
+                                  <Text style={styles.restrictionDate}>
+                                    Since: {new Date(restriction.restricted_at).toLocaleDateString()}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
                           </View>
-                        ))}
-                      </View>
-                    )}
-                    
-                    {selectedUserId === user.id && restrictions.length === 0 && (
-                      <View style={styles.restrictionsContainer}>
-                        <Text style={styles.noRestrictionsText}>No active restrictions</Text>
+                        ) : (
+                          <View style={styles.noRestrictionsContainer}>
+                            <Text style={styles.noRestrictionsText}>No active restrictions</Text>
+                          </View>
+                        )}
                       </View>
                     )}
                   </>
@@ -726,56 +741,68 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B0000',
   },
   restrictionsContainer: {
-    marginTop: 12,
-    padding: 12,
+    marginTop: 16,
+    padding: 16,
     backgroundColor: colors.background.secondary,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
-  restrictionsTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text.primary,
-    marginBottom: 8,
-  },
-  restrictionItem: {
+  restrictionsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    marginBottom: 12,
+  },
+  restrictionsTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  restrictionsList: {
+    gap: 12,
+  },
+  restrictionCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  restrictionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  restrictionBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  restrictionFeature: {
+    fontSize: 13,
+    fontWeight: '700' as const,
   },
   restrictionInfo: {
     flex: 1,
   },
-  restrictionFeature: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text.primary,
-    marginBottom: 4,
-  },
   restrictionReason: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text.secondary,
-    marginBottom: 2,
+    marginBottom: 6,
+    lineHeight: 18,
   },
   restrictionDate: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.text.tertiary,
   },
   removeRestrictionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: colors.danger + '20',
+    padding: 4,
   },
-  removeRestrictionText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: colors.danger,
+  noRestrictionsContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   noRestrictionsText: {
     fontSize: 14,
