@@ -1,6 +1,7 @@
 // Supabase Edge Function for sending Email via Resend
 // Deploy this function to Supabase: supabase functions deploy send-email
 
+// @ts-ignore - Deno runtime import
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -15,7 +16,7 @@ interface RequestBody {
   };
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
