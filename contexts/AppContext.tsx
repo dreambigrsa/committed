@@ -933,9 +933,16 @@ export const [AppContext, useApp] = createContextHook(() => {
     try {
       // Safety check: Never send notifications to the current user for their own actions
       if (!currentUser || userId === currentUser.id) {
-        console.log(`Skipping notification: Cannot notify user for their own action (userId: ${userId}, currentUser: ${currentUser?.id})`);
+        console.log(`⏭️ Skipping notification: Cannot notify user for their own action (userId: ${userId}, currentUser: ${currentUser?.id})`);
         return;
       }
+      
+      console.log('📨 Creating notification:', {
+        recipientUserId: userId,
+        type,
+        title,
+        currentUserId: currentUser.id
+      });
 
       // Check if this notification type is enabled for the user
       const isEnabled = await isNotificationEnabled(userId, type);
@@ -991,7 +998,8 @@ export const [AppContext, useApp] = createContextHook(() => {
           if (directError.code === 'PGRST116') {
             // Insert succeeded but SELECT was blocked by RLS - this is okay
             // The notification was created, real-time subscription will handle it
-            console.log('Notification inserted successfully but SELECT blocked by RLS - real-time subscription will add it');
+            console.log('✅ Notification inserted successfully but SELECT blocked by RLS - real-time subscription will add it for user:', userId);
+            // The notification was inserted, real-time will handle it
             return; // Exit early, real-time subscription will add the notification to state
           }
           notificationError = directError;
@@ -1001,7 +1009,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         } else {
           // Empty result but no error - insert succeeded, RLS blocked SELECT
           // Real-time subscription will handle it
-          console.log('Notification inserted successfully - real-time subscription will add it');
+          console.log('✅ Notification inserted successfully - real-time subscription will add it for user:', userId);
           return;
         }
       }
@@ -1017,8 +1025,10 @@ export const [AppContext, useApp] = createContextHook(() => {
         throw notificationError;
       }
 
-      // Add to local state immediately for real-time feel
-      if (notificationData) {
+      // Only add to local state if this notification is for the current user
+      // Otherwise, let the real-time subscription handle it for the correct recipient
+      if (notificationData && notificationData.user_id === currentUser.id) {
+        console.log('✅ Adding notification to local state immediately:', notificationData.id);
         const newNotification: Notification = {
           id: notificationData.id,
           userId: notificationData.user_id,
@@ -1029,7 +1039,20 @@ export const [AppContext, useApp] = createContextHook(() => {
           read: notificationData.read,
           createdAt: notificationData.created_at,
         };
-        setNotifications(prev => [newNotification, ...prev]);
+        setNotifications(prev => {
+          // Check for duplicates
+          const exists = prev.some(n => n.id === newNotification.id);
+          if (exists) {
+            return prev;
+          }
+          return [newNotification, ...prev];
+        });
+      } else if (notificationData) {
+        console.log('📤 Notification created for another user, waiting for real-time subscription:', {
+          notificationId: notificationData.id,
+          recipientUserId: notificationData.user_id,
+          currentUserId: currentUser.id
+        });
       }
     } catch (error) {
       console.error('Create notification error:', error);
@@ -2678,7 +2701,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     subs.push(messagesChannel);
 
     const notificationsChannel = supabase
-      .channel('notifications')
+      .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
         {
@@ -2688,20 +2711,51 @@ export const [AppContext, useApp] = createContextHook(() => {
           filter: `user_id=eq.${userId}`,
         },
         (payload: any) => {
-          const newNotification: Notification = {
-            id: payload.new.id,
+          console.log('📬 Real-time notification received:', {
+            notificationId: payload.new.id,
             userId: payload.new.user_id,
             type: payload.new.type,
-            title: payload.new.title,
-            message: payload.new.message,
-            data: payload.new.data,
-            read: payload.new.read,
-            createdAt: payload.new.created_at,
-          };
-          setNotifications(prev => [newNotification, ...prev]);
+            currentUserId: userId
+          });
+          
+          // Double-check: only add notifications that belong to the current user
+          // The filter should handle this, but be extra safe
+          if (payload.new.user_id !== userId) {
+            console.log(`⚠️ Skipping notification: user_id mismatch (notification for ${payload.new.user_id}, current user ${userId})`);
+            return;
+          }
+          
+          // Check if notification already exists (avoid duplicates)
+          setNotifications(prev => {
+            const exists = prev.some(n => n.id === payload.new.id);
+            if (exists) {
+              console.log('⚠️ Notification already exists, skipping duplicate:', payload.new.id);
+              return prev;
+            }
+            
+            console.log('✅ Adding notification to state:', payload.new.id);
+            const newNotification: Notification = {
+              id: payload.new.id,
+              userId: payload.new.user_id,
+              type: payload.new.type,
+              title: payload.new.title,
+              message: payload.new.message,
+              data: payload.new.data,
+              read: payload.new.read,
+              createdAt: payload.new.created_at,
+            };
+            return [newNotification, ...prev];
+          });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Notifications subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Notifications real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Notifications channel error');
+        }
+      });
     subs.push(notificationsChannel);
 
     // Subscribe to conversation updates (for last_message changes)
