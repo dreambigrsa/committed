@@ -856,6 +856,7 @@ export const [AppContext, useApp] = createContextHook(() => {
   ): Promise<boolean> => {
     try {
       // Map notification types to preference keys
+      // Note: 'message' notifications are always enabled - they're too important to block
       const notificationTypeToPreferenceKey: Partial<Record<NotificationType, string>> = {
         'relationship_request': 'relationshipUpdates',
         'relationship_verified': 'relationshipUpdates',
@@ -866,9 +867,14 @@ export const [AppContext, useApp] = createContextHook(() => {
         'anniversary_reminder': 'anniversaryReminders',
         'post_like': 'marketingPromotions', // Social interactions could be considered marketing
         'post_comment': 'marketingPromotions',
-        'message': 'relationshipUpdates', // Messages are relationship-related
+        // 'message' is intentionally not mapped - messages are always enabled
         'follow': 'marketingPromotions', // Follow notifications are social/marketing
       };
+
+      // Messages are always enabled - they're critical notifications
+      if (type === 'message') {
+        return true;
+      }
 
       const preferenceKey = notificationTypeToPreferenceKey[type];
       
@@ -891,8 +897,19 @@ export const [AppContext, useApp] = createContextHook(() => {
 
       const settings = data.notification_settings;
       
+      // Helper to convert JSONB value to boolean
+      const toBoolean = (value: any): boolean => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') return value.toLowerCase() === 'true';
+        return value !== false && value !== 'false' && value !== null && value !== undefined;
+      };
+      
       // Check if the preference is enabled (default to true if not set)
-      return settings[preferenceKey] !== false;
+      const preferenceValue = settings[preferenceKey];
+      if (preferenceValue === undefined || preferenceValue === null) {
+        return true; // Default to enabled if not set
+      }
+      return toBoolean(preferenceValue);
     } catch (error) {
       console.error('Error checking notification preference:', error);
       // Default to enabled on error
