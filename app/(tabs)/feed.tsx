@@ -18,11 +18,12 @@ import {
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2, Image as ImageIcon } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2, Image as ImageIcon, Flag } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
+import ReportContentModal from '@/components/ReportContentModal';
 import * as ImagePicker from 'expo-image-picker';
 // @ts-ignore - legacy path works at runtime, TypeScript definitions may not include it
 import * as FileSystem from 'expo-file-system/legacy';
@@ -32,7 +33,7 @@ const { width } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editComment, deleteComment, toggleCommentLike, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost } = useApp();
+  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editComment, deleteComment, toggleCommentLike, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost, reportContent } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
@@ -47,6 +48,7 @@ export default function FeedScreen() {
   const imageViewerScrollRef = useRef<ScrollView>(null);
   const postScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [reportingPost, setReportingPost] = useState<{ id: string; userId: string } | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -1105,14 +1107,12 @@ export default function FeedScreen() {
               <Text style={styles.postTime}>{formatTimeAgo(post.createdAt)}</Text>
             </View>
           </TouchableOpacity>
-          {(isOwner || isAdmin) && (
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() => setShowPostMenu(showPostMenu === post.id ? null : post.id)}
-            >
-              <MoreVertical size={20} color={colors.text.secondary} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setShowPostMenu(showPostMenu === post.id ? null : post.id)}
+          >
+            <MoreVertical size={20} color={colors.text.secondary} />
+          </TouchableOpacity>
         </View>
 
         {showPostMenu === post.id && (
@@ -1152,6 +1152,18 @@ export default function FeedScreen() {
                   <Text style={[styles.menuItemText, styles.deleteText]}>Reject (Admin)</Text>
                 </TouchableOpacity>
               </>
+            )}
+            {!isOwner && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowPostMenu(null);
+                  setReportingPost({ id: post.id, userId: post.userId });
+                }}
+              >
+                <Flag size={18} color={colors.danger} />
+                <Text style={[styles.menuItemText, styles.deleteText]}>Report</Text>
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -1380,12 +1392,23 @@ export default function FeedScreen() {
                 </Text>
               </View>
             )}
-          </View>
-        </Modal>
-      )}
-    </SafeAreaView>
-  );
-}
+            </View>
+          </Modal>
+        )}
+
+        {/* Report Content Modal */}
+        <ReportContentModal
+          visible={!!reportingPost}
+          onClose={() => setReportingPost(null)}
+          contentType="post"
+          contentId={reportingPost?.id}
+          reportedUserId={reportingPost?.userId}
+          onReport={reportContent}
+          colors={colors}
+        />
+      </SafeAreaView>
+    );
+  }
 
 function CommentsModal({
   postId,
