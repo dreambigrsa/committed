@@ -925,6 +925,12 @@ export const [AppContext, useApp] = createContextHook(() => {
     data?: Record<string, any>
   ) => {
     try {
+      // Safety check: Never send notifications to the current user for their own actions
+      if (!currentUser || userId === currentUser.id) {
+        console.log(`Skipping notification: Cannot notify user for their own action (userId: ${userId}, currentUser: ${currentUser?.id})`);
+        return;
+      }
+
       // Check if this notification type is enabled for the user
       const isEnabled = await isNotificationEnabled(userId, type);
       
@@ -1022,7 +1028,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Create notification error:', error);
     }
-  }, [isNotificationEnabled]);
+  }, [currentUser, isNotificationEnabled]);
 
   const refreshRelationships = useCallback(async () => {
     if (!currentUser) return;
@@ -1616,7 +1622,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           });
         
         // Send notification to post owner (if not liking own post)
-        if (post && post.userId !== currentUser.id) {
+        if (post && post.userId && post.userId !== currentUser.id) {
           await createNotification(
             post.userId,
             'post_like',
@@ -1671,7 +1677,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           });
         
         // Send notification to reel owner (if not liking own reel)
-        if (reel && reel.userId !== currentUser.id) {
+        if (reel && reel.userId && reel.userId !== currentUser.id) {
           await createNotification(
             reel.userId,
             'post_like', // Using post_like type for reel likes too
@@ -1757,7 +1763,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         // Find parent comment owner
         const postComments = comments[postId] || [];
         const parentComment = postComments.find(c => c.id === parentCommentId);
-        if (parentComment && parentComment.userId !== currentUser.id) {
+        if (parentComment && parentComment.userId && parentComment.userId !== currentUser.id) {
           createNotification(
             parentComment.userId,
             'post_comment',
@@ -1768,7 +1774,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
       } else {
         const post = posts.find(p => p.id === postId);
-        if (post && post.userId !== currentUser.id) {
+        if (post && post.userId && post.userId !== currentUser.id) {
           // Send notification to post owner (if not commenting on own post)
           createNotification(
             post.userId,
@@ -2914,14 +2920,16 @@ export const [AppContext, useApp] = createContextHook(() => {
 
         setFollows([...follows, newFollow]);
         
-        // Send notification to the user being followed
-        await createNotification(
-          followingId,
-          'follow',
-          'New Follower',
-          `${currentUser.fullName} started following you`,
-          { followerId: currentUser.id }
-        );
+        // Send notification to the user being followed (only if not following yourself)
+        if (followingId && followingId !== currentUser.id) {
+          await createNotification(
+            followingId,
+            'follow',
+            'New Follower',
+            `${currentUser.fullName} started following you`,
+            { followerId: currentUser.id }
+          );
+        }
         
         return newFollow;
       }
@@ -3113,7 +3121,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         // Find parent comment owner
         const reelCommentsList = reelComments[reelId] || [];
         const parentComment = reelCommentsList.find(c => c.id === parentCommentId);
-        if (parentComment && parentComment.userId !== currentUser.id) {
+        if (parentComment && parentComment.userId && parentComment.userId !== currentUser.id) {
           createNotification(
             parentComment.userId,
             'post_comment',
@@ -3124,7 +3132,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
       } else {
         const reel = reels.find(r => r.id === reelId);
-        if (reel && reel.userId !== currentUser.id) {
+        if (reel && reel.userId && reel.userId !== currentUser.id) {
           // Send notification to reel owner (if not commenting on own reel)
           createNotification(
             reel.userId,
