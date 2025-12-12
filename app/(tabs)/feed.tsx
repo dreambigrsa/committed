@@ -1433,8 +1433,9 @@ function CommentsModal({
   deleteComment: (commentId: string) => Promise<boolean>;
   toggleCommentLike: (commentId: string, postId: string) => Promise<boolean>;
 }) {
-  const { currentUser } = useApp();
+  const { currentUser, reportContent } = useApp();
   const [commentText, setCommentText] = useState<string>('');
+  const [reportingComment, setReportingComment] = useState<{ id: string; userId: string } | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<string>('');
   const [editingComment, setEditingComment] = useState<string | null>(null);
@@ -1606,6 +1607,14 @@ function CommentsModal({
                         <MessageCircle size={16} color={colors.text.secondary} />
                         <Text style={styles.commentActionText}>Reply</Text>
                       </TouchableOpacity>
+                      {!isOwner && (
+                        <TouchableOpacity
+                          style={styles.commentActionButton}
+                          onPress={() => setReportingComment({ id: comment.id, userId: comment.userId })}
+                        >
+                          <Flag size={14} color={colors.danger} />
+                        </TouchableOpacity>
+                      )}
                       <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
                     </View>
                     
@@ -1772,6 +1781,17 @@ function CommentsModal({
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>
+
+      {/* Report Comment Modal */}
+      <ReportContentModal
+        visible={!!reportingComment}
+        onClose={() => setReportingComment(null)}
+        contentType="comment"
+        contentId={reportingComment?.id}
+        reportedUserId={reportingComment?.userId}
+        onReport={reportContent}
+        colors={colors}
+      />
     </Modal>
   );
 }
