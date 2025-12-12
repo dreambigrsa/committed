@@ -13,7 +13,7 @@ import {
 import { Stack } from 'expo-router';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
-import { CheckCircle, XCircle, RefreshCw, Video as VideoIcon } from 'lucide-react-native';
+import { CheckCircle, XCircle, RefreshCw, Video as VideoIcon, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import colors from '@/constants/colors';
@@ -32,10 +32,10 @@ interface ReviewReel {
 }
 
 export default function AdminReelsReviewScreen() {
-  const { currentUser } = useApp();
+  const { currentUser, adminDeleteReel, adminRejectReel } = useApp();
   const [reels, setReels] = useState<ReviewReel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'rejected' | 'resubmit'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'resubmit'>('pending');
   const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export default function AdminReelsReviewScreen() {
       <Stack.Screen options={{ title: 'Review Reels', headerShown: true }} />
       
       <View style={styles.filterContainer}>
-        {(['all', 'pending', 'rejected', 'resubmit'] as const).map((f) => (
+        {(['all', 'pending', 'approved', 'rejected', 'resubmit'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.filterButton, filter === f && styles.filterButtonActive]}
@@ -158,6 +158,12 @@ export default function AdminReelsReviewScreen() {
                 {reels.filter(r => r.moderationStatus === 'pending').length}
               </Text>
               <Text style={styles.statLabel}>Pending</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {reels.filter(r => r.moderationStatus === 'approved').length}
+              </Text>
+              <Text style={styles.statLabel}>Approved</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
@@ -285,6 +291,59 @@ export default function AdminReelsReviewScreen() {
                       >
                         <XCircle size={16} color={colors.text.white} />
                         <Text style={styles.actionButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {reel.moderationStatus === 'approved' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={async () => {
+                          const reason = rejectionReason[reel.id] || 'Rejected by admin';
+                          const success = await adminRejectReel(reel.id, reason);
+                          if (success) {
+                            Alert.alert('Success', 'Reel rejected successfully');
+                            setRejectionReason(prev => {
+                              const next = { ...prev };
+                              delete next[reel.id];
+                              return next;
+                            });
+                            loadReels();
+                          } else {
+                            Alert.alert('Error', 'Failed to reject reel');
+                          }
+                        }}
+                      >
+                        <XCircle size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.danger }]}
+                        onPress={async () => {
+                          Alert.alert(
+                            'Delete Reel',
+                            'Are you sure you want to delete this reel?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  const success = await adminDeleteReel(reel.id);
+                                  if (success) {
+                                    Alert.alert('Success', 'Reel deleted successfully');
+                                    loadReels();
+                                  } else {
+                                    Alert.alert('Error', 'Failed to delete reel');
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Trash2 size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Delete</Text>
                       </TouchableOpacity>
                     </>
                   )}
