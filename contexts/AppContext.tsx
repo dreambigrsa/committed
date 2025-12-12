@@ -933,18 +933,50 @@ export const [AppContext, useApp] = createContextHook(() => {
         return;
       }
 
-      const { data: notificationData, error: notificationError } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          type,
-          title,
-          message,
-          data,
-          read: false,
-        })
-        .select()
-        .single();
+      // Try using the database function first (bypasses RLS), fallback to direct insert
+      let notificationData: any = null;
+      let notificationError: any = null;
+
+      // First, try using the database function (if it exists)
+      const { data: functionData, error: functionError } = await supabase.rpc('create_notification', {
+        p_user_id: userId,
+        p_type: type,
+        p_title: title,
+        p_message: message,
+        p_data: data || null
+      });
+
+      if (!functionError && functionData) {
+        // Function worked, fetch the created notification
+        const { data: fetchedNotification, error: fetchError } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('id', functionData)
+          .single();
+        
+        if (!fetchError && fetchedNotification) {
+          notificationData = fetchedNotification;
+        } else {
+          notificationError = fetchError;
+        }
+      } else {
+        // Function doesn't exist or failed, try direct insert
+        const { data: directData, error: directError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: userId,
+            type,
+            title,
+            message,
+            data,
+            read: false,
+          })
+          .select()
+          .single();
+        
+        notificationData = directData;
+        notificationError = directError;
+      }
 
       if (notificationError) {
         console.error('Failed to create notification:', JSON.stringify(notificationError, null, 2));
