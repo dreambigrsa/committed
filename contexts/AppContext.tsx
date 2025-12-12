@@ -849,6 +849,57 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  // Helper function to check if a notification type is enabled for a user
+  const isNotificationEnabled = useCallback(async (
+    userId: string,
+    type: NotificationType
+  ): Promise<boolean> => {
+    try {
+      // Map notification types to preference keys
+      const notificationTypeToPreferenceKey: Partial<Record<NotificationType, string>> = {
+        'relationship_request': 'relationshipUpdates',
+        'relationship_verified': 'relationshipUpdates',
+        'relationship_ended': 'relationshipUpdates',
+        'relationship_end_request': 'relationshipUpdates',
+        'cheating_alert': 'cheatingAlerts',
+        'verification_attempt': 'verificationAttempts',
+        'anniversary_reminder': 'anniversaryReminders',
+        'post_like': 'marketingPromotions', // Social interactions could be considered marketing
+        'post_comment': 'marketingPromotions',
+        'message': 'relationshipUpdates', // Messages are relationship-related
+        'follow': 'marketingPromotions', // Follow notifications are social/marketing
+      };
+
+      const preferenceKey = notificationTypeToPreferenceKey[type];
+      
+      // If no mapping exists, allow the notification (default to enabled)
+      if (!preferenceKey) {
+        return true;
+      }
+
+      // Fetch user's notification settings
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('notification_settings')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data || !data.notification_settings) {
+        // If no settings found, default to enabled
+        return true;
+      }
+
+      const settings = data.notification_settings;
+      
+      // Check if the preference is enabled (default to true if not set)
+      return settings[preferenceKey] !== false;
+    } catch (error) {
+      console.error('Error checking notification preference:', error);
+      // Default to enabled on error
+      return true;
+    }
+  }, []);
+
   const createNotification = useCallback(async (
     userId: string,
     type: NotificationType,
@@ -857,6 +908,14 @@ export const [AppContext, useApp] = createContextHook(() => {
     data?: Record<string, any>
   ) => {
     try {
+      // Check if this notification type is enabled for the user
+      const isEnabled = await isNotificationEnabled(userId, type);
+      
+      if (!isEnabled) {
+        console.log(`Notification ${type} is disabled for user ${userId}`);
+        return;
+      }
+
       await supabase
         .from('notifications')
         .insert({
@@ -870,7 +929,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Create notification error:', error);
     }
-  }, []);
+  }, [isNotificationEnabled]);
 
   const refreshRelationships = useCallback(async () => {
     if (!currentUser) return;
