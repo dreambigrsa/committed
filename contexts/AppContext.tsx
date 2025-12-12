@@ -2700,63 +2700,145 @@ export const [AppContext, useApp] = createContextHook(() => {
       .subscribe();
     subs.push(messagesChannel);
 
-    const notificationsChannel = supabase
-      .channel(`notifications:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload: any) => {
-          console.log('📬 Real-time notification received:', {
-            notificationId: payload.new.id,
-            userId: payload.new.user_id,
-            type: payload.new.type,
-            currentUserId: userId
-          });
+    // Setup notifications channel with retry logic and polling fallback
+    let notificationRetryCount = 0;
+    const maxRetries = 3;
+    let notificationPollInterval: NodeJS.Timeout | null = null;
+    
+    const startNotificationPolling = (pollUserId: string) => {
+      if (notificationPollInterval) return; // Already polling
+      
+      console.log('🔄 Starting notification polling fallback...');
+      notificationPollInterval = setInterval(async () => {
+        try {
+          const { data: newNotifications, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', pollUserId)
+            .order('created_at', { ascending: false })
+            .limit(10);
           
-          // Double-check: only add notifications that belong to the current user
-          // The filter should handle this, but be extra safe
-          if (payload.new.user_id !== userId) {
-            console.log(`⚠️ Skipping notification: user_id mismatch (notification for ${payload.new.user_id}, current user ${userId})`);
+          if (error) {
+            console.error('Error polling notifications:', error);
             return;
           }
           
-          // Check if notification already exists (avoid duplicates)
-          setNotifications(prev => {
-            const exists = prev.some(n => n.id === payload.new.id);
-            if (exists) {
-              console.log('⚠️ Notification already exists, skipping duplicate:', payload.new.id);
+          if (newNotifications && newNotifications.length > 0) {
+            setNotifications(prev => {
+              const existingIds = new Set(prev.map(n => n.id));
+              const formatted = newNotifications
+                .filter((n: any) => !existingIds.has(n.id))
+                .map((n: any) => ({
+                  id: n.id,
+                  userId: n.user_id,
+                  type: n.type,
+                  title: n.title,
+                  message: n.message,
+                  data: n.data,
+                  read: n.read,
+                  createdAt: n.created_at,
+                }));
+              
+              if (formatted.length > 0) {
+                console.log(`📬 Polling found ${formatted.length} new notification(s)`);
+                return [...formatted, ...prev];
+              }
               return prev;
-            }
-            
-            console.log('✅ Adding notification to state:', payload.new.id);
-            const newNotification: Notification = {
-              id: payload.new.id,
+            });
+          }
+        } catch (error) {
+          console.error('Error in notification polling:', error);
+        }
+      }, 5000); // Poll every 5 seconds
+    };
+    
+    const setupNotificationsChannel = () => {
+      const notificationsChannel = supabase
+        .channel(`notifications_${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload: any) => {
+            console.log('📬 Real-time notification received:', {
+              notificationId: payload.new.id,
               userId: payload.new.user_id,
               type: payload.new.type,
-              title: payload.new.title,
-              message: payload.new.message,
-              data: payload.new.data,
-              read: payload.new.read,
-              createdAt: payload.new.created_at,
-            };
-            return [newNotification, ...prev];
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Notifications subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Notifications real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Notifications channel error');
-        }
-      });
-    subs.push(notificationsChannel);
+              currentUserId: userId
+            });
+            
+            // Double-check: only add notifications that belong to the current user
+            if (payload.new.user_id !== userId) {
+              console.log(`⚠️ Skipping notification: user_id mismatch (notification for ${payload.new.user_id}, current user ${userId})`);
+              return;
+            }
+            
+            // Check if notification already exists (avoid duplicates)
+            setNotifications(prev => {
+              const exists = prev.some(n => n.id === payload.new.id);
+              if (exists) {
+                console.log('⚠️ Notification already exists, skipping duplicate:', payload.new.id);
+                return prev;
+              }
+              
+              console.log('✅ Adding notification to state:', payload.new.id);
+              const newNotification: Notification = {
+                id: payload.new.id,
+                userId: payload.new.user_id,
+                type: payload.new.type,
+                title: payload.new.title,
+                message: payload.new.message,
+                data: payload.new.data,
+                read: payload.new.read,
+                createdAt: payload.new.created_at,
+              };
+              return [newNotification, ...prev];
+            });
+          }
+        )
+        .subscribe((status, err) => {
+          console.log('📡 Notifications subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Notifications real-time subscription active');
+            notificationRetryCount = 0; // Reset retry count on success
+            // Stop polling if real-time is working
+            if (notificationPollInterval) {
+              clearInterval(notificationPollInterval);
+              notificationPollInterval = null;
+              console.log('🛑 Stopped notification polling (real-time is working)');
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.error('❌ Notifications channel error:', status, err);
+            
+            // Retry subscription if we haven't exceeded max retries
+            if (notificationRetryCount < maxRetries) {
+              notificationRetryCount++;
+              console.log(`🔄 Retrying notifications subscription (attempt ${notificationRetryCount}/${maxRetries})...`);
+              setTimeout(() => {
+                // Remove old channel and create new one
+                const oldChannel = subs.find(s => s.topic === `realtime:notifications_${userId}`);
+                if (oldChannel) {
+                  supabase.removeChannel(oldChannel);
+                }
+                setupNotificationsChannel();
+              }, 2000 * notificationRetryCount); // Exponential backoff
+            } else {
+              console.warn('⚠️ Notifications real-time failed after max retries. Using polling fallback.');
+              // Start polling fallback
+              startNotificationPolling(userId);
+            }
+          }
+        });
+      
+      subs.push(notificationsChannel);
+      return notificationsChannel;
+    };
+    
+    setupNotificationsChannel();
 
     // Subscribe to conversation updates (for last_message changes)
     const conversationsChannel = supabase
@@ -3005,6 +3087,11 @@ export const [AppContext, useApp] = createContextHook(() => {
       subs.forEach(sub => {
         supabase.removeChannel(sub);
       });
+      // Clear polling interval if it exists
+      if (notificationPollInterval) {
+        clearInterval(notificationPollInterval);
+        notificationPollInterval = null;
+      }
     };
   }, []);
 
