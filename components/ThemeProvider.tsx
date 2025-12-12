@@ -1,11 +1,14 @@
 import React from 'react';
 import { ThemeContext } from '@/contexts/ThemeContext';
+import { LanguageContext } from '@/contexts/LanguageContext';
 
-// Simple wrapper for ThemeContext Provider
+// Wrapper for ThemeContext and LanguageContext Providers
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext>
-      {children}
+      <LanguageContext>
+        {children}
+      </LanguageContext>
     </ThemeContext>
   );
 }
