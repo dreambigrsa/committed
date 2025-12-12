@@ -28,6 +28,36 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]); // Array of blocked user IDs
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [, setSubscriptions] = useState<RealtimeChannel[]>([]);
+  
+  // Ban modal state
+  const [banModalVisible, setBanModalVisible] = useState(false);
+  const [banModalData, setBanModalData] = useState<{
+    reason: string;
+    restrictionType: 'full_ban' | 'feature_restriction';
+    restrictedFeature?: string;
+    restrictionId?: string;
+  } | null>(null);
+  
+  // Helper function to show ban modal
+  const showBanModal = useCallback((restriction: {
+    restricted: boolean;
+    reason?: string;
+    restrictionType?: 'full_ban' | 'feature_restriction';
+    restrictedFeature?: string;
+    restrictionId?: string;
+  }) => {
+    if (restriction.restricted) {
+      setBanModalData({
+        reason: restriction.reason || 'Your account has been restricted',
+        restrictionType: restriction.restrictionType || 'feature_restriction',
+        restrictedFeature: restriction.restrictedFeature,
+        restrictionId: restriction.restrictionId,
+      });
+      setBanModalVisible(true);
+      return true;
+    }
+    return false;
+  }, []);
 
   useEffect(() => {
     initializeAuth();
@@ -1559,29 +1589,38 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser, relationshipRequests]);
 
   // Helper function to check if user is restricted from a feature
-  const checkUserRestriction = useCallback(async (userId: string, feature: string): Promise<{ restricted: boolean; reason?: string }> => {
+  const checkUserRestriction = useCallback(async (userId: string, feature: string): Promise<{ 
+    restricted: boolean; 
+    reason?: string;
+    restrictionType?: 'full_ban' | 'feature_restriction';
+    restrictedFeature?: string;
+    restrictionId?: string;
+  }> => {
     try {
       // First check if user is fully banned
       const { data: userData } = await supabase
         .from('users')
-        .select('banned_at')
+        .select('banned_at, ban_reason')
         .eq('id', userId)
         .single();
 
       if (userData?.banned_at) {
-        return { restricted: true, reason: 'Your account has been banned' };
+        return { 
+          restricted: true, 
+          reason: userData.ban_reason || 'Your account has been suspended due to a violation of our community guidelines. If you believe this is an error, you may submit an appeal.',
+          restrictionType: 'full_ban'
+        };
       }
 
       // Check for active restrictions
-      // Check for feature-specific or full ban restrictions
       const now = new Date().toISOString();
       const { data: restrictions } = await supabase
         .from('user_restrictions')
-        .select('restricted_feature, reason, expires_at')
+        .select('id, restricted_feature, reason, expires_at')
         .eq('user_id', userId)
         .eq('is_active', true)
         .or(`restricted_feature.eq.${feature},restricted_feature.eq.all`)
-        .limit(10); // Get multiple to filter by expires_at
+        .limit(10);
 
       // Filter by expiration date (permanent or not expired)
       const activeRestrictions = restrictions?.filter(r => 
@@ -1590,14 +1629,23 @@ export const [AppContext, useApp] = createContextHook(() => {
 
       if (activeRestrictions && activeRestrictions.length > 0) {
         const restriction = activeRestrictions[0];
-        const featureName = feature === 'posts' ? 'posts' : 
-                           feature === 'comments' ? 'comments' :
-                           feature === 'messages' ? 'messages' :
-                           feature === 'reels' ? 'reels' :
-                           feature === 'reel_comments' ? 'reel comments' : feature;
+        const isFullBan = restriction.restricted_feature === 'all';
+        const featureName = feature === 'posts' ? 'creating posts' : 
+                           feature === 'comments' ? 'commenting' :
+                           feature === 'messages' ? 'sending messages' :
+                           feature === 'reels' ? 'creating reels' :
+                           feature === 'reel_comments' ? 'commenting on reels' : feature;
+        
+        const defaultReason = isFullBan 
+          ? 'Your account has been suspended due to a violation of our community guidelines. If you believe this is an error, you may submit an appeal.'
+          : `You are currently restricted from ${featureName} due to a violation of our community guidelines. If you believe this is an error, you may submit an appeal.`;
+
         return { 
           restricted: true, 
-          reason: restriction.reason || `You are banned from ${featureName}` 
+          reason: restriction.reason || defaultReason,
+          restrictionType: isFullBan ? 'full_ban' : 'feature_restriction',
+          restrictedFeature: restriction.restricted_feature,
+          restrictionId: restriction.id
         };
       }
 
@@ -1614,8 +1662,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from creating posts
     const restriction = await checkUserRestriction(currentUser.id, 'posts');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from creating posts');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -1661,8 +1709,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from creating reels
     const restriction = await checkUserRestriction(currentUser.id, 'reels');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from creating reels');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -1824,8 +1872,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from commenting
     const restriction = await checkUserRestriction(currentUser.id, 'comments');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from commenting');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -1941,8 +1989,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from sending messages
     const restriction = await checkUserRestriction(currentUser.id, 'messages');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from sending messages');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -3453,8 +3501,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from commenting on reels
     const restriction = await checkUserRestriction(currentUser.id, 'reel_comments');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from commenting on reels');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -3560,8 +3608,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from editing reel comments
     const restriction = await checkUserRestriction(currentUser.id, 'reel_comments');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from editing reel comments');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -4032,8 +4080,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from editing posts
     const restriction = await checkUserRestriction(currentUser.id, 'posts');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from editing posts');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -4109,8 +4157,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from editing comments
     const restriction = await checkUserRestriction(currentUser.id, 'comments');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from editing comments');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -4337,8 +4385,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     // Check if user is restricted from editing reels
     const restriction = await checkUserRestriction(currentUser.id, 'reels');
-    if (restriction.restricted) {
-      throw new Error(restriction.reason || 'You are banned from editing reels');
+    if (showBanModal(restriction)) {
+      return null;
     }
     
     try {
@@ -4967,6 +5015,9 @@ export const [AppContext, useApp] = createContextHook(() => {
     setChatBackground,
     getMessageWarnings,
     acknowledgeWarning,
+    banModalVisible,
+    banModalData,
+    setBanModalVisible,
     getInfidelityReports,
     logActivity,
     endRelationship,
