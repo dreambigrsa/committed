@@ -947,20 +947,21 @@ export const [AppContext, useApp] = createContextHook(() => {
       });
 
       if (!functionError && functionData) {
-        // Function worked, fetch the created notification
-        const { data: fetchedNotification, error: fetchError } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('id', functionData)
-          .single();
-        
-        if (!fetchError && fetchedNotification) {
-          notificationData = fetchedNotification;
-        } else {
-          notificationError = fetchError;
-        }
+        // Function worked and returned the notification ID
+        // Construct notification object from what we know (we can't SELECT due to RLS)
+        notificationData = {
+          id: functionData,
+          user_id: userId,
+          type: type,
+          title: title,
+          message: message,
+          data: data || null,
+          read: false,
+          created_at: new Date().toISOString()
+        };
       } else {
         // Function doesn't exist or failed, try direct insert
+        // Don't use .single() because RLS SELECT policy prevents User A from reading User B's notifications
         const { data: directData, error: directError } = await supabase
           .from('notifications')
           .insert({
@@ -971,11 +972,26 @@ export const [AppContext, useApp] = createContextHook(() => {
             data,
             read: false,
           })
-          .select()
-          .single();
+          .select();
         
-        notificationData = directData;
-        notificationError = directError;
+        if (directError) {
+          // Check if it's the PGRST116 error (insert succeeded but SELECT blocked)
+          if (directError.code === 'PGRST116') {
+            // Insert succeeded but SELECT was blocked by RLS - this is okay
+            // The notification was created, real-time subscription will handle it
+            console.log('Notification inserted successfully but SELECT blocked by RLS - real-time subscription will add it');
+            return; // Exit early, real-time subscription will add the notification to state
+          }
+          notificationError = directError;
+        } else if (directData && directData.length > 0) {
+          // Got the data back (shouldn't happen when inserting for another user, but handle it)
+          notificationData = directData[0];
+        } else {
+          // Empty result but no error - insert succeeded, RLS blocked SELECT
+          // Real-time subscription will handle it
+          console.log('Notification inserted successfully - real-time subscription will add it');
+          return;
+        }
       }
 
       if (notificationError) {
