@@ -306,38 +306,15 @@ export const [AppContext, useApp] = createContextHook(() => {
         .order('last_message_at', { ascending: false });
 
       if (conversationsData && conversationsData.length > 0) {
-        const formattedConversations: Conversation[] = await Promise.all(
-          conversationsData.map(async (conv: any) => {
-            const participantIds = conv.participant_ids;
-            const { data: participantsData } = await supabase
-              .from('users')
-              .select('id, full_name, profile_picture')
-              .in('id', participantIds);
-
-            const participantNames = participantsData?.map((p: any) => p.full_name) || [];
-            const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
-
-            return {
-              id: conv.id,
-              participants: participantIds,
-              participantNames,
-              participantAvatars,
-              lastMessage: conv.last_message || '',
-              lastMessageAt: conv.last_message_at,
-              unreadCount: 0,
-            };
-          })
-        );
-        setConversations(formattedConversations);
-
+        // First, load all messages to calculate accurate last messages
         const { data: messagesData } = await supabase
           .from('messages')
           .select('*')
           .in('conversation_id', conversationsData.map((c: any) => c.id))
           .order('created_at', { ascending: true });
 
+        const messagesByConversation: Record<string, Message[]> = {};
         if (messagesData) {
-          const messagesByConversation: Record<string, Message[]> = {};
           messagesData.forEach((m: any) => {
             // Filter out messages deleted for current user
             const isSender = m.sender_id === userId;
@@ -368,6 +345,47 @@ export const [AppContext, useApp] = createContextHook(() => {
           });
           setMessages(messagesByConversation);
         }
+
+        // Now format conversations with accurate last message from non-deleted messages
+        const formattedConversations: Conversation[] = await Promise.all(
+          conversationsData.map(async (conv: any) => {
+            const participantIds = conv.participant_ids;
+            const { data: participantsData } = await supabase
+              .from('users')
+              .select('id, full_name, profile_picture')
+              .in('id', participantIds);
+
+            const participantNames = participantsData?.map((p: any) => p.full_name) || [];
+            const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+
+            // Calculate last message from non-deleted messages
+            const convMessages = messagesByConversation[conv.id] || [];
+            let lastMessage = '';
+            let lastMessageAt = conv.last_message_at;
+            
+            if (convMessages.length > 0) {
+              // Get the most recent message
+              const lastMsg = convMessages[convMessages.length - 1];
+              lastMessageAt = lastMsg.createdAt;
+              lastMessage = lastMsg.messageType === 'image' 
+                ? '📷 Image' 
+                : lastMsg.messageType === 'document' 
+                ? `📄 ${lastMsg.documentName || 'Document'}`
+                : lastMsg.content;
+            }
+
+            return {
+              id: conv.id,
+              participants: participantIds,
+              participantNames,
+              participantAvatars,
+              lastMessage: lastMessage || conv.last_message || '',
+              lastMessageAt: lastMessageAt || conv.last_message_at,
+              unreadCount: 0,
+            };
+          })
+        );
+        setConversations(formattedConversations);
       }
 
       const { data: commentsData } = await supabase
@@ -2082,6 +2100,24 @@ export const [AppContext, useApp] = createContextHook(() => {
           ),
         };
         setMessages(updatedMessages);
+
+        // Update local conversations state
+        setConversations(prev => {
+          const existingIndex = prev.findIndex(c => c.id === conversationId);
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              lastMessage: lastMessage,
+              lastMessageAt: lastMessageAt,
+            };
+            // Sort by last_message_at descending (most recent first)
+            return updated.sort((a, b) => 
+              new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+            );
+          }
+          return prev;
+        });
       } else {
         // Delete for me only
         if (isSender) {
@@ -2112,6 +2148,24 @@ export const [AppContext, useApp] = createContextHook(() => {
             ),
           };
           setMessages(updatedMessages);
+
+          // Update local conversations state
+          setConversations(prev => {
+            const existingIndex = prev.findIndex(c => c.id === conversationId);
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                lastMessage: lastMessage,
+                lastMessageAt: lastMessageAt,
+              };
+              // Sort by last_message_at descending (most recent first)
+              return updated.sort((a, b) => 
+                new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+              );
+            }
+            return prev;
+          });
         } else if (isReceiver) {
           const { error: updateError } = await supabase
             .from('messages')
@@ -2140,6 +2194,24 @@ export const [AppContext, useApp] = createContextHook(() => {
             ),
           };
           setMessages(updatedMessages);
+
+          // Update local conversations state
+          setConversations(prev => {
+            const existingIndex = prev.findIndex(c => c.id === conversationId);
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                lastMessage: lastMessage,
+                lastMessageAt: lastMessageAt,
+              };
+              // Sort by last_message_at descending (most recent first)
+              return updated.sort((a, b) => 
+                new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+              );
+            }
+            return prev;
+          });
         }
       }
 
