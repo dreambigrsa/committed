@@ -288,3 +288,31 @@ export interface ReelComment {
   parentCommentId?: string;
   replies?: ReelComment[];
 }
+
+export interface BanAppeal {
+  id: string;
+  userId: string;
+  restrictionId?: string;
+  appealType: 'full_ban' | 'feature_restriction';
+  restrictedFeature?: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'under_review';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  adminResponse?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserRestriction {
+  id: string;
+  userId: string;
+  restrictedFeature: 'posts' | 'comments' | 'messages' | 'reels' | 'reel_comments' | 'all';
+  reason?: string;
+  restrictedBy?: string;
+  restrictedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
