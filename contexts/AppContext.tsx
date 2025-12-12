@@ -933,7 +933,7 @@ export const [AppContext, useApp] = createContextHook(() => {
         return;
       }
 
-      await supabase
+      const { data: notificationData, error: notificationError } = await supabase
         .from('notifications')
         .insert({
           user_id: userId,
@@ -942,7 +942,29 @@ export const [AppContext, useApp] = createContextHook(() => {
           message,
           data,
           read: false,
-        });
+        })
+        .select()
+        .single();
+
+      if (notificationError) {
+        console.error('Failed to create notification:', notificationError);
+        throw notificationError;
+      }
+
+      // Add to local state immediately for real-time feel
+      if (notificationData) {
+        const newNotification: Notification = {
+          id: notificationData.id,
+          userId: notificationData.user_id,
+          type: notificationData.type,
+          title: notificationData.title,
+          message: notificationData.message,
+          data: notificationData.data,
+          read: notificationData.read,
+          createdAt: notificationData.created_at,
+        };
+        setNotifications(prev => [newNotification, ...prev]);
+      }
     } catch (error) {
       console.error('Create notification error:', error);
     }
@@ -1658,32 +1680,36 @@ export const [AppContext, useApp] = createContextHook(() => {
       }
       setComments(updatedComments);
       
+      // Send notifications (outside of map to allow async/await)
+      if (parentCommentId) {
+        // Find parent comment owner
+        const postComments = comments[postId] || [];
+        const parentComment = postComments.find(c => c.id === parentCommentId);
+        if (parentComment && parentComment.userId !== currentUser.id) {
+          createNotification(
+            parentComment.userId,
+            'post_comment',
+            'New Reply',
+            `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+            { postId, commentId: data.id, parentCommentId, userId: currentUser.id }
+          ).catch(err => console.error('Failed to send reply notification:', err));
+        }
+      } else {
+        const post = posts.find(p => p.id === postId);
+        if (post && post.userId !== currentUser.id) {
+          // Send notification to post owner (if not commenting on own post)
+          createNotification(
+            post.userId,
+            'post_comment',
+            'New Comment',
+            `${currentUser.fullName} commented on your post: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+            { postId, commentId: data.id, userId: currentUser.id }
+          ).catch(err => console.error('Failed to send comment notification:', err));
+        }
+      }
+      
       const updatedPosts = posts.map(post => {
         if (post.id === postId) {
-          // Send notification
-          if (parentCommentId) {
-            // Find parent comment owner
-            const postComments = comments[postId] || [];
-            const parentComment = postComments.find(c => c.id === parentCommentId);
-            if (parentComment && parentComment.userId !== currentUser.id) {
-              createNotification(
-                parentComment.userId,
-                'post_comment',
-                'New Reply',
-                `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-                { postId, commentId: data.id, parentCommentId, userId: currentUser.id }
-              );
-            }
-          } else if (post.userId !== currentUser.id) {
-            // Send notification to post owner (if not commenting on own post)
-            createNotification(
-              post.userId,
-              'post_comment',
-              'New Comment',
-              `${currentUser.fullName} commented on your post: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-              { postId, commentId: data.id, userId: currentUser.id }
-            );
-          }
           return { ...post, commentCount: post.commentCount + 1 };
         }
         return post;
@@ -2987,32 +3013,36 @@ export const [AppContext, useApp] = createContextHook(() => {
       }
       setReelComments(updatedComments);
       
+      // Send notifications (outside of map to allow async/await)
+      if (parentCommentId) {
+        // Find parent comment owner
+        const reelCommentsList = reelComments[reelId] || [];
+        const parentComment = reelCommentsList.find(c => c.id === parentCommentId);
+        if (parentComment && parentComment.userId !== currentUser.id) {
+          createNotification(
+            parentComment.userId,
+            'post_comment',
+            'New Reply',
+            `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+            { reelId, commentId: data.id, parentCommentId, userId: currentUser.id }
+          ).catch(err => console.error('Failed to send reel reply notification:', err));
+        }
+      } else {
+        const reel = reels.find(r => r.id === reelId);
+        if (reel && reel.userId !== currentUser.id) {
+          // Send notification to reel owner (if not commenting on own reel)
+          createNotification(
+            reel.userId,
+            'post_comment',
+            'New Comment',
+            `${currentUser.fullName} commented on your reel: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
+            { reelId, commentId: data.id, userId: currentUser.id }
+          ).catch(err => console.error('Failed to send reel comment notification:', err));
+        }
+      }
+      
       const updatedReels = reels.map(reel => {
         if (reel.id === reelId) {
-          // Send notification
-          if (parentCommentId) {
-            // Find parent comment owner
-            const reelCommentsList = reelComments[reelId] || [];
-            const parentComment = reelCommentsList.find(c => c.id === parentCommentId);
-            if (parentComment && parentComment.userId !== currentUser.id) {
-              createNotification(
-                parentComment.userId,
-                'post_comment',
-                'New Reply',
-                `${currentUser.fullName} replied to your comment: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-                { reelId, commentId: data.id, parentCommentId, userId: currentUser.id }
-              );
-            }
-          } else if (reel.userId !== currentUser.id) {
-            // Send notification to reel owner (if not commenting on own reel)
-            createNotification(
-              reel.userId,
-              'post_comment',
-              'New Comment',
-              `${currentUser.fullName} commented on your reel: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`,
-              { reelId, commentId: data.id, userId: currentUser.id }
-            );
-          }
           return { ...reel, commentCount: reel.commentCount + 1 };
         }
         return reel;
