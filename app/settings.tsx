@@ -136,7 +136,15 @@ export default function SettingsScreen() {
       if (data && data.length > 0) {
         const settings = data[0];
         if (settings.notification_settings) {
-          setNotifications(settings.notification_settings);
+          // Normalize notification settings to ensure all keys exist
+          const normalizedSettings = {
+            relationshipUpdates: settings.notification_settings.relationshipUpdates ?? settings.notification_settings.relationshipRequests ?? true,
+            cheatingAlerts: settings.notification_settings.cheatingAlerts ?? true,
+            verificationAttempts: settings.notification_settings.verificationAttempts ?? settings.notification_settings.verificationUpdates ?? true,
+            anniversaryReminders: settings.notification_settings.anniversaryReminders ?? true,
+            marketingPromotions: settings.notification_settings.marketingPromotions ?? settings.notification_settings.partnerActivity ?? false,
+          };
+          setNotifications(normalizedSettings);
         }
         if (settings.privacy_settings) {
           setPrivacy(settings.privacy_settings);
