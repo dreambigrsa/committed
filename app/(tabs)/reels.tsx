@@ -16,11 +16,12 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film, MoreVertical, Edit2, Trash2, X, UserPlus } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Volume2, VolumeX, Plus, Film, MoreVertical, Edit2, Trash2, X, UserPlus, Flag } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import ReportContentModal from '@/components/ReportContentModal';
 import { Reel } from '@/types';
 
 const { width, height } = Dimensions.get('window');
@@ -28,7 +29,7 @@ const { width, height } = Dimensions.get('window');
 export default function ReelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike, reportContent } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentReelId, setCurrentReelId] = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function ReelsScreen() {
   const [lastTap, setLastTap] = useState<{ time: number; reelId: string } | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
   const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
+  const [reportingReel, setReportingReel] = useState<{ id: string; userId: string } | null>(null);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -518,6 +520,18 @@ export default function ReelsScreen() {
                   </TouchableOpacity>
                 </>
               )}
+              {!isOwner && (
+                <TouchableOpacity
+                  style={styles.reelMenuItem}
+                  onPress={() => {
+                    setShowReelMenu(null);
+                    setReportingReel({ id: reel.id, userId: reel.userId });
+                  }}
+                >
+                  <Flag size={18} color={colors.danger} />
+                  <Text style={[styles.reelMenuItemText, styles.reelMenuItemDelete]}>Report</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -568,16 +582,14 @@ export default function ReelsScreen() {
               </View>
             </TouchableOpacity>
 
-            {(isOwner || isAdmin) && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => setShowReelMenu(showReelMenu === reel.id ? null : reel.id)}
-              >
-                <View style={styles.actionIconContainer}>
-                  <MoreVertical size={28} color={colors.text.white} strokeWidth={2.5} />
-                </View>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => setShowReelMenu(showReelMenu === reel.id ? null : reel.id)}
+            >
+              <View style={styles.actionIconContainer}>
+                <MoreVertical size={28} color={colors.text.white} strokeWidth={2.5} />
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -657,6 +669,17 @@ export default function ReelsScreen() {
           </View>
         </>
       )}
+
+      {/* Report Reel Modal */}
+      <ReportContentModal
+        visible={!!reportingReel}
+        onClose={() => setReportingReel(null)}
+        contentType="reel"
+        contentId={reportingReel?.id}
+        reportedUserId={reportingReel?.userId}
+        onReport={reportContent}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -1251,7 +1274,8 @@ function ReelCommentsModal({
   deleteComment: (commentId: string) => Promise<boolean>;
   toggleCommentLike: (commentId: string, reelId: string) => Promise<boolean>;
 }) {
-  const { currentUser } = useApp();
+  const { currentUser, reportContent } = useApp();
+  const [reportingComment, setReportingComment] = useState<{ id: string; userId: string } | null>(null);
   const [commentText, setCommentText] = useState<string>('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<string>('');
@@ -1430,6 +1454,14 @@ function ReelCommentsModal({
                           <MessageCircle size={16} color={colors.text.secondary} />
                           <Text style={styles.commentActionText}>Reply</Text>
                         </TouchableOpacity>
+                        {!isOwner && (
+                          <TouchableOpacity
+                            style={styles.commentActionButton}
+                            onPress={() => setReportingComment({ id: comment.id, userId: comment.userId })}
+                          >
+                            <Flag size={14} color={colors.danger} />
+                          </TouchableOpacity>
+                        )}
                         <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
                       </View>
                       
@@ -1597,6 +1629,17 @@ function ReelCommentsModal({
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>
+
+      {/* Report Comment Modal */}
+      <ReportContentModal
+        visible={!!reportingComment}
+        onClose={() => setReportingComment(null)}
+        contentType="comment"
+        contentId={reportingComment?.id}
+        reportedUserId={reportingComment?.userId}
+        onReport={reportContent}
+        colors={colors}
+      />
     </Modal>
   );
 }
