@@ -17,7 +17,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn } from 'lucide-react-native';
+import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -29,11 +29,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import ReportContentModal from '@/components/ReportContentModal';
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning } = useApp();
+  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning, reportContent } = useApp();
   const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -48,6 +49,7 @@ export default function ConversationDetailScreen() {
   const [overlayColor, setOverlayColor] = useState<string>('#000000');
   const [warnings, setWarnings] = useState<any[]>([]);
   const [warningTemplates, setWarningTemplates] = useState<any[]>([]);
+  const [reportingMessage, setReportingMessage] = useState<{ id: string; senderId: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const conversation = getConversation(conversationId);
 
@@ -842,13 +844,24 @@ export default function ConversationDetailScreen() {
             <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
               {messageTime}
             </Text>
-            <TouchableOpacity
-              onPress={() => handleDeleteMessage(item.id, isMe)}
-              style={styles.deleteMessageButton}
-              hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-            >
-              <Trash2 size={14} color={isMe ? 'rgba(255, 255, 255, 0.7)' : colors.text.tertiary} />
-            </TouchableOpacity>
+            <View style={styles.messageActions}>
+              {!isMe && (
+                <TouchableOpacity
+                  onPress={() => setReportingMessage({ id: item.id, senderId: item.senderId })}
+                  style={styles.reportMessageButton}
+                  hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+                >
+                  <Flag size={14} color={colors.danger} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => handleDeleteMessage(item.id, isMe)}
+                style={styles.deleteMessageButton}
+                hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+              >
+                <Trash2 size={14} color={isMe ? 'rgba(255, 255, 255, 0.7)' : colors.text.tertiary} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -1195,6 +1208,17 @@ export default function ConversationDetailScreen() {
       </SafeAreaView>
       {renderBackgroundModal()}
       {renderImageViewer()}
+
+      {/* Report Message Modal */}
+      <ReportContentModal
+        visible={!!reportingMessage}
+        onClose={() => setReportingMessage(null)}
+        contentType="message"
+        contentId={reportingMessage?.id}
+        reportedUserId={reportingMessage?.senderId}
+        onReport={reportContent}
+        colors={colors}
+      />
     </>
   );
 }
@@ -1312,6 +1336,14 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 11,
+  },
+  messageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  reportMessageButton: {
+    padding: 2,
   },
   deleteMessageButton: {
     padding: 2,
