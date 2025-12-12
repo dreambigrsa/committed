@@ -123,9 +123,37 @@ const colors: typeof lightColors = {
   },
 };
 
+// Visual theme color modifications
+type VisualTheme = 'default' | 'colorful' | 'minimal';
+
+function applyVisualTheme(baseColors: typeof lightColors, visualTheme: VisualTheme): typeof lightColors {
+  if (visualTheme === 'default') {
+    return baseColors;
+  }
+
+  const themed = { ...baseColors };
+
+  if (visualTheme === 'colorful') {
+    // More vibrant, colorful theme
+    themed.primary = '#E91E63'; // Pink
+    themed.secondary = '#00BCD4'; // Cyan
+    themed.accent = '#FFC107'; // Amber
+    themed.danger = '#F44336'; // Red
+  } else if (visualTheme === 'minimal') {
+    // Muted, minimal theme
+    themed.primary = '#6C757D'; // Gray
+    themed.secondary = '#495057'; // Dark Gray
+    themed.accent = '#868E96'; // Light Gray
+    themed.danger = '#DC3545'; // Red (unchanged)
+  }
+
+  return themed;
+}
+
 // Function to update global colors (called by ThemeContext)
-export function updateGlobalColors(isDark: boolean) {
-  const sourceColors = isDark ? darkColors : lightColors;
+export function updateGlobalColors(isDark: boolean, visualTheme: VisualTheme = 'default') {
+  const baseColors = isDark ? darkColors : lightColors;
+  const sourceColors = applyVisualTheme(baseColors, visualTheme);
   
   // Update all top-level properties
   colors.primary = sourceColors.primary;
