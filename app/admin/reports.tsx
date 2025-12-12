@@ -66,7 +66,7 @@ export default function AdminReportsScreen() {
 
   const handleReviewReport = async (reportId: string, action: 'resolved' | 'dismissed', actionTaken?: string) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('reported_content')
         .update({
           status: action,
@@ -76,10 +76,17 @@ export default function AdminReportsScreen() {
         })
         .eq('id', reportId);
 
+      if (error) {
+        console.error('Update report error:', error);
+        Alert.alert('Error', error.message || 'Failed to update report');
+        return;
+      }
+
       Alert.alert('Success', `Report ${action}`);
       loadReports();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update report');
+    } catch (error: any) {
+      console.error('Update report error:', error);
+      Alert.alert('Error', error?.message || 'Failed to update report');
     }
   };
 
@@ -101,15 +108,22 @@ export default function AdminReportsScreen() {
                                report.contentType === 'comment' ? 'comments' : null;
 
               if (tableName) {
-                await supabase
+                const { error } = await supabase
                   .from(tableName)
                   .delete()
                   .eq('id', report.contentId);
 
+                if (error) {
+                  console.error('Delete content error:', error);
+                  Alert.alert('Error', error.message || 'Failed to delete content');
+                  return;
+                }
+
                 await handleReviewReport(report.id, 'resolved', 'Content deleted');
               }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete content');
+            } catch (error: any) {
+              console.error('Delete content error:', error);
+              Alert.alert('Error', error?.message || 'Failed to delete content');
             }
           },
         },
