@@ -149,7 +149,13 @@ export const [AppContext, useApp] = createContextHook(() => {
             createdAt: p.created_at,
           };
         });
-        setPosts(formattedPosts);
+        
+        // Sort posts by createdAt (newest first) - chronological order like Facebook
+        const sortedPosts = formattedPosts.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        
+        setPosts(sortedPosts);
       }
 
       // Load reels: show approved reels or user's own reels (regardless of status)
@@ -1643,7 +1649,12 @@ export const [AppContext, useApp] = createContextHook(() => {
         return post;
       });
       
-      setPosts(updatedPosts);
+      // Maintain sort order by createdAt (newest first) - don't reorder based on likes
+      const sortedPosts = [...updatedPosts].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setPosts(sortedPosts);
     } catch (error) {
       console.error('Toggle like error:', error);
     }
@@ -1792,7 +1803,13 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
         return post;
       });
-      setPosts(updatedPosts);
+      
+      // Maintain sort order by createdAt (newest first)
+      const sortedPosts = [...updatedPosts].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setPosts(sortedPosts);
       
       return newComment;
     } catch (error) {
@@ -2608,6 +2625,55 @@ export const [AppContext, useApp] = createContextHook(() => {
           }));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload: any) => {
+          // Handle message updates (including deletions)
+          const isSender = payload.new.sender_id === userId;
+          const isReceiver = payload.new.receiver_id === userId;
+          const deletedForMe = (isSender && payload.new.deleted_for_sender) || (isReceiver && payload.new.deleted_for_receiver);
+          
+          if (deletedForMe) {
+            // Remove deleted message from state
+            setMessages(prev => {
+              const updated = { ...prev };
+              const conversationId = payload.new.conversation_id;
+              if (updated[conversationId]) {
+                updated[conversationId] = updated[conversationId].filter(m => m.id !== payload.new.id);
+              }
+              return updated;
+            });
+          } else {
+            // Update message in state
+            const updatedMessage: Message = {
+              id: payload.new.id,
+              conversationId: payload.new.conversation_id,
+              senderId: payload.new.sender_id,
+              receiverId: payload.new.receiver_id,
+              content: payload.new.content,
+              mediaUrl: payload.new.media_url,
+              documentUrl: payload.new.document_url,
+              documentName: payload.new.document_name,
+              messageType: (payload.new.message_type || 'text') as 'text' | 'image' | 'document',
+              deletedForSender: payload.new.deleted_for_sender || false,
+              deletedForReceiver: payload.new.deleted_for_receiver || false,
+              read: payload.new.read,
+              createdAt: payload.new.created_at,
+            };
+            setMessages(prev => ({
+              ...prev,
+              [updatedMessage.conversationId]: (prev[updatedMessage.conversationId] || []).map(m =>
+                m.id === updatedMessage.id ? updatedMessage : m
+              ),
+            }));
+          }
+        }
+      )
       .subscribe();
     subs.push(messagesChannel);
 
@@ -2742,7 +2808,13 @@ export const [AppContext, useApp] = createContextHook(() => {
                 commentCount: payload.new.comment_count || 0,
                 createdAt: payload.new.created_at,
               };
-              setPosts(prev => [newPost, ...prev.filter(p => p.id !== newPost.id)]);
+              // Add new post at the beginning (newest first) and maintain chronological order
+              setPosts(prev => {
+                const filtered = prev.filter(p => p.id !== newPost.id);
+                return [newPost, ...filtered].sort((a, b) => 
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+              });
             }
           } else if (payload.eventType === 'UPDATE') {
             if (payload.new.moderation_status === 'approved') {
@@ -2775,7 +2847,13 @@ export const [AppContext, useApp] = createContextHook(() => {
                   commentCount: postsData.comment_count,
                   createdAt: postsData.created_at,
                 };
-                setPosts(prev => [updatedPost, ...prev.filter(p => p.id !== updatedPost.id)]);
+                // Maintain chronological order when updating post
+                setPosts(prev => {
+                  const filtered = prev.filter(p => p.id !== updatedPost.id);
+                  return [updatedPost, ...filtered].sort((a, b) => 
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                  );
+                });
               }
             } else {
               // Remove if rejected
@@ -3483,10 +3561,15 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser) return false;
     
     try {
-      await supabase
+      const { error } = await supabase
         .from('notifications')
         .delete()
         .eq('user_id', currentUser.id);
+
+      if (error) {
+        console.error('Clear all notifications error:', error);
+        return false;
+      }
 
       setNotifications([]);
       return true;
@@ -3652,7 +3735,13 @@ export const [AppContext, useApp] = createContextHook(() => {
           ? { ...p, content, mediaUrls, mediaType }
           : p
       );
-      setPosts(updatedPosts);
+      
+      // Maintain sort order by createdAt (newest first)
+      const sortedPosts = [...updatedPosts].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setPosts(sortedPosts);
       
       await logActivity('edit_post', 'post', postId);
       return data;
