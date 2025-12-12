@@ -169,6 +169,9 @@ export default function SettingsScreen() {
         if (settings.language) {
           setLanguage(settings.language);
         }
+        if (settings.visual_theme) {
+          setTheme(settings.visual_theme);
+        }
       }
 
       // Load gender and date of birth from users table
@@ -467,7 +470,7 @@ export default function SettingsScreen() {
     try {
       const { data: existingData } = await supabase
         .from('user_settings')
-        .select('notification_settings, theme_preference, language')
+        .select('notification_settings, theme_preference, language, visual_theme')
         .eq('user_id', currentUser.id)
         .limit(1);
 
@@ -508,7 +511,7 @@ export default function SettingsScreen() {
     try {
       const { data: existingData } = await supabase
         .from('user_settings')
-        .select('notification_settings, privacy_settings')
+        .select('notification_settings, privacy_settings, theme_preference, visual_theme')
         .eq('user_id', currentUser.id)
         .limit(1);
 
@@ -518,6 +521,8 @@ export default function SettingsScreen() {
       const existingPrivacy = existingData && existingData.length > 0 
         ? existingData[0].privacy_settings 
         : privacy;
+      // Use current themeMode from ThemeContext (handled separately, but preserve it)
+      const existingThemePreference = themeMode;
 
       const { error } = await supabase
         .from('user_settings')
@@ -525,8 +530,9 @@ export default function SettingsScreen() {
           user_id: currentUser.id,
           notification_settings: existingNotifications,
           privacy_settings: existingPrivacy,
-          theme_preference: isDark ? 'dark' : 'light',
+          theme_preference: existingThemePreference, // Preserve dark mode preference
           language: language,
+          visual_theme: theme,
         }, {
           onConflict: 'user_id'
         });
@@ -1287,7 +1293,9 @@ export default function SettingsScreen() {
                   <Text style={styles.settingLabel}>Theme</Text>
                 </View>
                 <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>{theme}</Text>
+                  <Text style={styles.settingValue}>
+                    {theme === 'default' ? 'Default' : theme === 'colorful' ? 'Colorful' : theme === 'minimal' ? 'Minimal' : theme}
+                  </Text>
                   <ChevronRight size={20} color={colors.text.tertiary} />
                 </View>
               </TouchableOpacity>
