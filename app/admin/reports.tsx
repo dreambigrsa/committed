@@ -105,7 +105,8 @@ export default function AdminReportsScreen() {
             try {
               const tableName = report.contentType === 'post' ? 'posts' : 
                                report.contentType === 'reel' ? 'reels' :
-                               report.contentType === 'comment' ? 'comments' : null;
+                               report.contentType === 'comment' ? 'comments' :
+                               report.contentType === 'message' ? 'messages' : null;
 
               if (tableName) {
                 const { error } = await supabase
