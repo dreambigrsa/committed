@@ -13,6 +13,7 @@ import { Stack } from 'expo-router';
 import { Heart, CheckCircle, XCircle, Calendar } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
+import { trpc } from '@/lib/trpc';
 import colors from '@/constants/colors';
 import { Relationship } from '@/types';
 
@@ -20,6 +21,7 @@ export default function AdminRelationshipsScreen() {
   const { currentUser } = useApp();
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const deleteRelationshipMutation = trpc.admin.deleteRelationship.useMutation();
 
   useEffect(() => {
     loadRelationships();
@@ -127,15 +129,15 @@ export default function AdminRelationshipsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await supabase
-                .from('relationships')
-                .delete()
-                .eq('id', relationshipId);
-
+              await deleteRelationshipMutation.mutateAsync({ relationshipId });
               Alert.alert('Success', 'Relationship deleted');
               loadRelationships();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete relationship');
+            } catch (error: any) {
+              console.error('Delete relationship error:', error);
+              Alert.alert(
+                'Error', 
+                error?.message || 'Failed to delete relationship'
+              );
             }
           },
         },
@@ -249,15 +251,16 @@ export default function AdminRelationshipsScreen() {
                       </TouchableOpacity>
                     </>
                   )}
-                  {currentUser.role === 'super_admin' && (
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDeleteRelationship(relationship.id)}
-                    >
-                      <Text style={styles.actionButtonText}>Delete</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
+                {(currentUser.role === 'admin' || currentUser.role === 'super_admin') && (
+                  <TouchableOpacity
+                    style={styles.deleteButtonFull}
+                    onPress={() => handleDeleteRelationship(relationship.id)}
+                    disabled={deleteRelationshipMutation.isPending}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
 
@@ -413,6 +416,20 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#8B0000',
+  },
+  deleteButtonFull: {
+    width: '100%',
+    backgroundColor: '#8B0000',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
   actionButtonText: {
     fontSize: 14,
