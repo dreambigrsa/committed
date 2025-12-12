@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useColorScheme, Appearance } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import createContextHook from '@nkzw/create-context-hook';
@@ -185,7 +185,34 @@ export const [ThemeContext, useTheme] = createContextHook(() => {
     }
   }, []);
 
-  const colors = isDark ? darkColors : lightColors;
+  // Apply visual theme to base colors
+  // This ensures components using useTheme() get the correct themed colors
+  const colors = useMemo(() => {
+    const baseColors = isDark ? darkColors : lightColors;
+    
+    // Apply visual theme modifications
+    if (visualTheme === 'default') {
+      return { ...baseColors };
+    }
+    
+    const themed = { ...baseColors };
+    
+    if (visualTheme === 'colorful') {
+      // More vibrant, colorful theme
+      themed.primary = '#E91E63'; // Pink
+      themed.secondary = '#00BCD4'; // Cyan
+      themed.accent = '#FFC107'; // Amber
+      themed.danger = '#F44336'; // Red
+    } else if (visualTheme === 'minimal') {
+      // Muted, minimal theme
+      themed.primary = '#6C757D'; // Gray
+      themed.secondary = '#495057'; // Dark Gray
+      themed.accent = '#868E96'; // Light Gray
+      themed.danger = '#DC3545'; // Red (unchanged)
+    }
+    
+    return themed;
+  }, [isDark, visualTheme]);
 
   return {
     colors,
