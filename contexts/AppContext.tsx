@@ -1146,6 +1146,15 @@ export const [AppContext, useApp] = createContextHook(() => {
           });
 
         if (requestError) throw requestError;
+
+        // Send notification to the partner about the relationship request
+        await createNotification(
+          partnerData.id,
+          'relationship_request',
+          'New Relationship Request',
+          `${currentUser.fullName} sent you a ${type} relationship request`,
+          { relationshipId: relationshipData.id, fromUserId: currentUser.id }
+        );
       }
 
       const newRelationship: Relationship = {
@@ -1208,6 +1217,15 @@ export const [AppContext, useApp] = createContextHook(() => {
             partner_user_id: currentUser.id,
           })
           .eq('user_id', request.from_user_id);
+
+        // Send notification to the requester that the relationship was verified
+        await createNotification(
+          request.from_user_id,
+          'relationship_verified',
+          'Relationship Verified',
+          `${currentUser.fullName} accepted your ${request.relationship_type} relationship request`,
+          { relationshipId: request.id }
+        );
       }
 
       // Refresh relationships to get updated status
@@ -1215,7 +1233,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Accept relationship request error:', error);
     }
-  }, [currentUser, refreshRelationships]);
+  }, [currentUser, refreshRelationships, createNotification]);
 
   const rejectRelationshipRequest = useCallback(async (requestId: string) => {
     try {
@@ -3489,6 +3507,29 @@ export const [AppContext, useApp] = createContextHook(() => {
         })
         .eq('id', dispute.relationship_id);
 
+      // Get the other partner to send notification
+      const { data: relationship } = await supabase
+        .from('relationships')
+        .select('user_id, partner_user_id')
+        .eq('id', dispute.relationship_id)
+        .single();
+
+      if (relationship) {
+        const otherPartnerId = relationship.user_id === currentUser.id 
+          ? relationship.partner_user_id 
+          : relationship.user_id;
+        
+        if (otherPartnerId) {
+          await createNotification(
+            otherPartnerId,
+            'relationship_ended',
+            'Relationship Ended',
+            `Your relationship has been ended`,
+            { relationshipId: dispute.relationship_id }
+          );
+        }
+      }
+
       await logActivity('end_relationship_confirmed', 'relationship', dispute.relationship_id);
 
       const updatedRelationships = relationships.filter(r => r.id !== dispute.relationship_id);
@@ -3496,7 +3537,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     } catch (error) {
       console.error('Confirm end relationship error:', error);
     }
-  }, [currentUser, relationships, logActivity]);
+  }, [currentUser, relationships, createNotification, logActivity]);
 
   const editPost = useCallback(async (postId: string, content: string, mediaUrls: string[], mediaType: Post['mediaType']) => {
     if (!currentUser) return null;
