@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -56,7 +56,7 @@ export default function SettingsScreen() {
   const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference, visualTheme, loadVisualTheme, saveVisualTheme } = useTheme();
   const { language, setLanguage: setLanguageContext, loadLanguagePreference, saveLanguagePreference, t } = useLanguage();
   const relationship = getCurrentUserRelationship();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [editMode, setEditMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
