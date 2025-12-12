@@ -2716,7 +2716,7 @@ export const [AppContext, useApp] = createContextHook(() => {
             .select('*')
             .eq('user_id', pollUserId)
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(20); // Check more notifications
           
           if (error) {
             console.error('Error polling notifications:', error);
@@ -2749,10 +2749,50 @@ export const [AppContext, useApp] = createContextHook(() => {
         } catch (error) {
           console.error('Error in notification polling:', error);
         }
-      }, 5000); // Poll every 5 seconds
+      }, 2000); // Poll every 2 seconds for faster updates
+      
+      // Poll immediately when starting
+      (async () => {
+        try {
+          const { data: newNotifications, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', pollUserId)
+            .order('created_at', { ascending: false })
+            .limit(20);
+          
+          if (!error && newNotifications && newNotifications.length > 0) {
+            setNotifications(prev => {
+              const existingIds = new Set(prev.map(n => n.id));
+              const formatted = newNotifications
+                .filter((n: any) => !existingIds.has(n.id))
+                .map((n: any) => ({
+                  id: n.id,
+                  userId: n.user_id,
+                  type: n.type,
+                  title: n.title,
+                  message: n.message,
+                  data: n.data,
+                  read: n.read,
+                  createdAt: n.created_at,
+                }));
+              
+              if (formatted.length > 0) {
+                console.log(`📬 Immediate poll found ${formatted.length} new notification(s)`);
+                return [...formatted, ...prev];
+              }
+              return prev;
+            });
+          }
+        } catch (error) {
+          console.error('Error in immediate notification poll:', error);
+        }
+      })();
     };
     
     const setupNotificationsChannel = () => {
+      // Use a simpler approach: subscribe to all notification inserts and filter in handler
+      // This avoids the binding mismatch error
       const notificationsChannel = supabase
         .channel(`notifications_${userId}`)
         .on(
@@ -2761,21 +2801,19 @@ export const [AppContext, useApp] = createContextHook(() => {
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${userId}`,
           },
           (payload: any) => {
+            // Filter in handler to avoid binding mismatch
+            if (payload.new.user_id !== userId) {
+              return; // Not for this user, ignore
+            }
+            
             console.log('📬 Real-time notification received:', {
               notificationId: payload.new.id,
               userId: payload.new.user_id,
               type: payload.new.type,
               currentUserId: userId
             });
-            
-            // Double-check: only add notifications that belong to the current user
-            if (payload.new.user_id !== userId) {
-              console.log(`⚠️ Skipping notification: user_id mismatch (notification for ${payload.new.user_id}, current user ${userId})`);
-              return;
-            }
             
             // Check if notification already exists (avoid duplicates)
             setNotifications(prev => {
