@@ -15,11 +15,11 @@ import { AlertTriangle, X } from 'lucide-react-native';
 interface ReportContentModalProps {
   visible: boolean;
   onClose: () => void;
-  contentType: 'post' | 'reel' | 'comment' | 'profile';
+  contentType: 'post' | 'reel' | 'comment' | 'message' | 'profile';
   contentId?: string;
   reportedUserId?: string;
   onReport: (
-    contentType: 'post' | 'reel' | 'comment' | 'profile',
+    contentType: 'post' | 'reel' | 'comment' | 'message' | 'profile',
     contentId: string | undefined,
     reportedUserId: string | undefined,
     reason: string,
