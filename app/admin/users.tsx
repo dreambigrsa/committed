@@ -33,13 +33,39 @@ export default function AdminUsersScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, banned_at, banned_by, ban_reason')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (data) {
-        const formattedUsers: User[] = data.map((u: any) => ({
+        // Check ban status from Supabase Auth for each user
+        const usersWithBanStatus = await Promise.all(
+          data.map(async (u: any) => {
+            let isBanned = false;
+            try {
+              const { data: authUser, error } = await supabase.auth.admin.getUserById(u.id);
+              if (!error && authUser?.user) {
+                // Check ban status from auth metadata
+                const userMetadata = authUser.user as any;
+                isBanned = userMetadata?.ban_duration === 'infinity' || !!userMetadata?.banned_until || !!u.banned_at;
+              } else {
+                // Use database field as fallback
+                isBanned = !!u.banned_at;
+              }
+            } catch (err) {
+              // If we can't check auth, use database field as fallback
+              isBanned = !!u.banned_at;
+            }
+            
+            return {
+              ...u,
+              isBanned,
+            };
+          })
+        );
+
+        const formattedUsers: (User & { isBanned?: boolean; bannedAt?: string; bannedBy?: string; banReason?: string })[] = usersWithBanStatus.map((u: any) => ({
           id: u.id || '',
           fullName: u.full_name || 'Unknown',
           email: u.email || '',
@@ -52,8 +78,12 @@ export default function AdminUsersScreen() {
             id: u.id_verified || false,
           },
           createdAt: u.created_at || new Date().toISOString(),
+          isBanned: u.isBanned || false,
+          bannedAt: u.banned_at || undefined,
+          bannedBy: u.banned_by || undefined,
+          banReason: u.ban_reason || undefined,
         }));
-        setUsers(formattedUsers);
+        setUsers(formattedUsers as any);
       }
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -63,27 +93,72 @@ export default function AdminUsersScreen() {
     }
   };
 
-  const handleBanUser = async (userId: string) => {
-    Alert.alert(
-      'Ban User',
-      'Are you sure you want to ban this user?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Ban',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await supabase.auth.admin.updateUserById(userId, { ban_duration: 'infinity' });
-              Alert.alert('Success', 'User has been banned');
-              loadUsers();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to ban user');
-            }
+  const handleBanUser = async (userId: string, isCurrentlyBanned: boolean) => {
+    if (isCurrentlyBanned) {
+      // Unban user
+      Alert.alert(
+        'Unban User',
+        'Are you sure you want to unban this user?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Unban',
+            style: 'default',
+            onPress: async () => {
+              try {
+                await supabase.auth.admin.updateUserById(userId, { ban_duration: null as any });
+                // Update database
+                await supabase
+                  .from('users')
+                  .update({ 
+                    banned_at: null as any,
+                    banned_by: null as any,
+                    ban_reason: null as any,
+                  })
+                  .eq('id', userId);
+                Alert.alert('Success', 'User has been unbanned');
+                loadUsers();
+              } catch (error: any) {
+                console.error('Unban error:', error);
+                Alert.alert('Error', error?.message || 'Failed to unban user');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    } else {
+      // Ban user
+      Alert.alert(
+        'Ban User',
+        'Are you sure you want to ban this user?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Ban',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await supabase.auth.admin.updateUserById(userId, { ban_duration: 'infinity' });
+                // Update database
+                await supabase
+                  .from('users')
+                  .update({ 
+                    banned_at: new Date().toISOString(),
+                    banned_by: currentUser?.id,
+                    ban_reason: 'Banned by admin',
+                  })
+                  .eq('id', userId);
+                Alert.alert('Success', 'User has been banned');
+                loadUsers();
+              } catch (error: any) {
+                console.error('Ban error:', error);
+                Alert.alert('Error', error?.message || 'Failed to ban user');
+              }
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -316,11 +391,16 @@ export default function AdminUsersScreen() {
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.banButton]}
-                      onPress={() => handleBanUser(user.id)}
+                      style={[
+                        styles.actionButton, 
+                        (user as any).isBanned ? styles.unbanButton : styles.banButton
+                      ]}
+                      onPress={() => handleBanUser(user.id, (user as any).isBanned || false)}
                     >
                       <Ban size={16} color={colors.text.white} />
-                      <Text style={styles.actionButtonText}>Ban</Text>
+                      <Text style={styles.actionButtonText}>
+                        {(user as any).isBanned ? 'Unban' : 'Ban'}
+                      </Text>
                     </TouchableOpacity>
                     {currentUser.role === 'super_admin' && (
                       <TouchableOpacity
@@ -500,6 +580,9 @@ const styles = StyleSheet.create({
   },
   banButton: {
     backgroundColor: colors.danger,
+  },
+  unbanButton: {
+    backgroundColor: colors.secondary,
   },
   deleteButton: {
     backgroundColor: '#8B0000',

@@ -148,6 +148,7 @@ export default function AdminReportsScreen() {
     };
 
     const defaultFeature = featureMap[report.contentType] || 'all';
+    const featureDisplayName = defaultFeature === 'all' ? 'All Features' : defaultFeature.charAt(0).toUpperCase() + defaultFeature.slice(1);
 
     Alert.alert(
       'Ban User',
@@ -155,7 +156,7 @@ export default function AdminReportsScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Ban from ' + (defaultFeature === 'all' ? 'All Features' : defaultFeature),
+          text: `Ban from ${featureDisplayName}`,
           style: 'destructive',
           onPress: async () => {
             try {
@@ -176,8 +177,8 @@ export default function AdminReportsScreen() {
                 return;
               }
 
-              await handleReviewReport(report.id, 'resolved', `User banned from ${defaultFeature}`);
-              Alert.alert('Success', `User has been banned from ${defaultFeature}`);
+              await handleReviewReport(report.id, 'resolved', `User banned from ${featureDisplayName}`);
+              Alert.alert('Success', `User has been banned from ${featureDisplayName}`);
             } catch (error: any) {
               console.error('Ban user error:', error);
               Alert.alert('Error', error?.message || 'Failed to ban user');
@@ -185,7 +186,7 @@ export default function AdminReportsScreen() {
           },
         },
         {
-          text: 'Ban from All Features',
+          text: 'Ban from All Features (Full Ban)',
           style: 'destructive',
           onPress: async () => {
             try {
