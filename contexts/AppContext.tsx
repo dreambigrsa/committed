@@ -947,7 +947,13 @@ export const [AppContext, useApp] = createContextHook(() => {
         .single();
 
       if (notificationError) {
-        console.error('Failed to create notification:', notificationError);
+        console.error('Failed to create notification:', JSON.stringify(notificationError, null, 2));
+        console.error('Error details:', {
+          code: notificationError.code,
+          message: notificationError.message,
+          details: notificationError.details,
+          hint: notificationError.hint
+        });
         throw notificationError;
       }
 
