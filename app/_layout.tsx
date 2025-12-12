@@ -3,16 +3,19 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { AppContext } from "@/contexts/AppContext";
+import { AppContext, useApp } from "@/contexts/AppContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { trpc, trpcClient } from "@/lib/trpc";
 import NotificationToast from "@/components/NotificationToast";
+import BanMessageModal from "@/components/BanMessageModal";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { banModalVisible, banModalData, setBanModalVisible, currentUser } = useApp();
+
   return (
     <>
       <Stack screenOptions={{ headerBackTitle: "Back" }}>
@@ -32,6 +35,18 @@ function RootLayoutNav() {
         <Stack.Screen name="+not-found" />
       </Stack>
       <NotificationToast />
+      
+      {banModalVisible && banModalData && currentUser && (
+        <BanMessageModal
+          visible={banModalVisible}
+          onClose={() => setBanModalVisible(false)}
+          banReason={banModalData.reason}
+          restrictionType={banModalData.restrictionType}
+          restrictedFeature={banModalData.restrictedFeature}
+          restrictionId={banModalData.restrictionId}
+          userId={currentUser.id}
+        />
+      )}
     </>
   );
 }
