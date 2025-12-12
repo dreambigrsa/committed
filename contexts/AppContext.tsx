@@ -2790,8 +2790,8 @@ export const [AppContext, useApp] = createContextHook(() => {
       })();
     };
     
-    // Setup notifications channel - simplified pattern matching working messages subscription
-    // Remove filter to avoid binding mismatch errors, filter in handler instead
+    // Setup notifications channel - single postgres_changes subscription without filter
+    // Subscribing to ALL inserts and filtering in handler to avoid binding mismatch errors
     const notificationsChannel = supabase
       .channel(`notifications_${userId}`)
       .on(
@@ -2800,12 +2800,12 @@ export const [AppContext, useApp] = createContextHook(() => {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          // No filter - this avoids "mismatch between server and client bindings" error
-          // We'll filter in the handler instead
+          // NO FILTER - this is the key to avoiding binding mismatch errors
+          // We filter in the handler instead
         },
         (payload: any) => {
-          // Filter in handler - only process notifications for this user
-          if (payload.new.user_id !== userId) {
+          // Only process notifications for this user (filter in handler)
+          if (!payload.new || payload.new.user_id !== userId) {
             return; // Not for this user, ignore silently
           }
           
@@ -2842,20 +2842,29 @@ export const [AppContext, useApp] = createContextHook(() => {
         console.log('📡 Notifications subscription status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('✅ Notifications real-time subscription active');
-          notificationRetryCount = 0; // Reset retry count on success
+          notificationRetryCount = 0;
           // Stop polling if real-time is working
           if (notificationPollInterval) {
             clearInterval(notificationPollInterval);
             notificationPollInterval = null;
             console.log('🛑 Stopped notification polling (real-time is working)');
           }
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.error('❌ Notifications channel error:', status, err);
-          
-          // Don't retry - the error suggests real-time isn't properly configured
-          // Just use polling fallback immediately
+        } else if (status === 'CHANNEL_ERROR') {
+          // Only log if it's a binding error - don't fail completely
+          if (err && err.message && err.message.includes('mismatch')) {
+            console.warn('⚠️ Notifications binding mismatch - using polling fallback:', err.message);
+          } else {
+            console.error('❌ Notifications channel error:', status, err);
+          }
+          // Always start polling as fallback
           if (!notificationPollInterval) {
-            console.warn('⚠️ Notifications real-time failed. Using polling fallback (every 2 seconds).');
+            console.warn('⚠️ Starting notification polling fallback (every 2 seconds)');
+            startNotificationPolling(userId);
+          }
+        } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.error('❌ Notifications subscription:', status, err);
+          if (!notificationPollInterval) {
+            console.warn('⚠️ Starting notification polling fallback (every 2 seconds)');
             startNotificationPolling(userId);
           }
         }
