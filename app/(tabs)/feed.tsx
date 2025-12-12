@@ -58,15 +58,18 @@ export default function FeedScreen() {
     }).start();
   }, [fadeAnim]);
 
-  // Load personalized feed and smart ads
+  // Load feed sorted by date/time (newest first) - like Facebook
   useEffect(() => {
     if (posts.length > 0) {
-      const personalized = getPersonalizedFeed(posts, 50);
-      setPersonalizedPosts(personalized);
+      // Sort posts by createdAt (newest first) - simple chronological order
+      const sortedPosts = [...posts].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setPersonalizedPosts(sortedPosts);
     } else {
       setPersonalizedPosts([]);
     }
-  }, [posts, getPersonalizedFeed]);
+  }, [posts]);
 
   useEffect(() => {
     const loadSmartAds = async () => {
