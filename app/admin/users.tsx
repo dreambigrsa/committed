@@ -23,6 +23,8 @@ export default function AdminUsersScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [restrictions, setRestrictions] = useState<any[]>([]);
 
   useEffect(() => {
     loadUsers();
@@ -39,23 +41,24 @@ export default function AdminUsersScreen() {
       if (error) throw error;
 
       if (data) {
-        // Check ban status from Supabase Auth for each user
+        // Check ban status - use database field as primary source since it's more reliable
+        // Also check for active restrictions
         const usersWithBanStatus = await Promise.all(
           data.map(async (u: any) => {
-            let isBanned = false;
-            try {
-              const { data: authUser, error } = await supabase.auth.admin.getUserById(u.id);
-              if (!error && authUser?.user) {
-                // Check ban status from auth metadata
-                const userMetadata = authUser.user as any;
-                isBanned = userMetadata?.ban_duration === 'infinity' || !!userMetadata?.banned_until || !!u.banned_at;
-              } else {
-                // Use database field as fallback
-                isBanned = !!u.banned_at;
+            let isBanned = !!u.banned_at;
+            
+            // Also check Supabase Auth if database field is not set
+            if (!isBanned) {
+              try {
+                const { data: authUser, error } = await supabase.auth.admin.getUserById(u.id);
+                if (!error && authUser?.user) {
+                  const userMetadata = authUser.user as any;
+                  isBanned = userMetadata?.ban_duration === 'infinity' || !!userMetadata?.banned_until;
+                }
+              } catch (err) {
+                // If we can't check auth, rely on database field
+                console.log('Could not check auth ban status for user:', u.id);
               }
-            } catch (err) {
-              // If we can't check auth, use database field as fallback
-              isBanned = !!u.banned_at;
             }
             
             return {
@@ -106,9 +109,8 @@ export default function AdminUsersScreen() {
             style: 'default',
             onPress: async () => {
               try {
-                await supabase.auth.admin.updateUserById(userId, { ban_duration: null as any });
-                // Update database
-                await supabase
+                // Update database first
+                const { error: dbError } = await supabase
                   .from('users')
                   .update({ 
                     banned_at: null as any,
@@ -116,8 +118,30 @@ export default function AdminUsersScreen() {
                     ban_reason: null as any,
                   })
                   .eq('id', userId);
+                
+                if (dbError) {
+                  console.error('DB update error:', dbError);
+                  throw dbError;
+                }
+                
+                // Then update Supabase Auth
+                const { error: unbanError } = await supabase.auth.admin.updateUserById(userId, { ban_duration: null as any });
+                if (unbanError) {
+                  console.error('Auth unban error:', unbanError);
+                  // Don't throw - database update succeeded
+                }
+                
+                // Also remove all active restrictions (optional - admin can choose to keep restrictions)
+                // Commented out so restrictions remain unless manually removed
+                // await supabase
+                //   .from('user_restrictions')
+                //   .update({ is_active: false })
+                //   .eq('user_id', userId)
+                //   .eq('is_active', true);
+                
                 Alert.alert('Success', 'User has been unbanned');
-                loadUsers();
+                // Force reload users to update button state
+                await loadUsers();
               } catch (error: any) {
                 console.error('Unban error:', error);
                 Alert.alert('Error', error?.message || 'Failed to unban user');
@@ -138,9 +162,8 @@ export default function AdminUsersScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                await supabase.auth.admin.updateUserById(userId, { ban_duration: 'infinity' });
-                // Update database
-                await supabase
+                // Update database first (more reliable)
+                const { error: dbError } = await supabase
                   .from('users')
                   .update({ 
                     banned_at: new Date().toISOString(),
@@ -148,8 +171,22 @@ export default function AdminUsersScreen() {
                     ban_reason: 'Banned by admin',
                   })
                   .eq('id', userId);
+                
+                if (dbError) {
+                  console.error('DB update error:', dbError);
+                  throw dbError;
+                }
+                
+                // Then update Supabase Auth
+                const { error: banError } = await supabase.auth.admin.updateUserById(userId, { ban_duration: 'infinity' });
+                if (banError) {
+                  console.error('Auth ban error:', banError);
+                  // Don't throw - database update succeeded, so we can continue
+                }
+                
                 Alert.alert('Success', 'User has been banned');
-                loadUsers();
+                // Force reload users to update button state
+                await loadUsers();
               } catch (error: any) {
                 console.error('Ban error:', error);
                 Alert.alert('Error', error?.message || 'Failed to ban user');
@@ -204,6 +241,61 @@ export default function AdminUsersScreen() {
     } catch (error) {
       Alert.alert('Error', 'Failed to verify user');
     }
+  };
+
+  const loadUserRestrictions = async (userId: string) => {
+    // Toggle restrictions view
+    if (selectedUserId === userId) {
+      setSelectedUserId(null);
+      setRestrictions([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_restrictions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('restricted_at', { ascending: false });
+
+      if (error) throw error;
+      setRestrictions(data || []);
+      setSelectedUserId(userId);
+    } catch (error) {
+      console.error('Failed to load restrictions:', error);
+      Alert.alert('Error', 'Failed to load user restrictions');
+    }
+  };
+
+  const handleRemoveRestriction = async (restrictionId: string, userId: string) => {
+    Alert.alert(
+      'Remove Restriction',
+      'Are you sure you want to remove this restriction?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('user_restrictions')
+                .update({ is_active: false })
+                .eq('id', restrictionId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Restriction removed');
+              loadUserRestrictions(userId);
+            } catch (error: any) {
+              console.error('Remove restriction error:', error);
+              Alert.alert('Error', error?.message || 'Failed to remove restriction');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleChangeRole = async (userId: string, currentRole: string) => {
@@ -380,38 +472,81 @@ export default function AdminUsersScreen() {
                 </View>
 
                 {user.id !== currentUser.id && (
-                  <View style={styles.userActions}>
-                    {currentUser.role === 'super_admin' && (
+                  <>
+                    <View style={styles.userActions}>
+                      {currentUser.role === 'super_admin' && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.editButton]}
+                          onPress={() => handleChangeRole(user.id, user.role)}
+                        >
+                          <Edit2 size={16} color={colors.text.white} />
+                          <Text style={styles.actionButtonText}>Role</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.editButton]}
-                        onPress={() => handleChangeRole(user.id, user.role)}
+                        style={[
+                          styles.actionButton, 
+                          (user as any).isBanned ? styles.unbanButton : styles.banButton
+                        ]}
+                        onPress={() => handleBanUser(user.id, (user as any).isBanned || false)}
                       >
-                        <Edit2 size={16} color={colors.text.white} />
-                        <Text style={styles.actionButtonText}>Role</Text>
+                        <Ban size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>
+                          {(user as any).isBanned ? 'Unban' : 'Ban'}
+                        </Text>
                       </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={[
-                        styles.actionButton, 
-                        (user as any).isBanned ? styles.unbanButton : styles.banButton
-                      ]}
-                      onPress={() => handleBanUser(user.id, (user as any).isBanned || false)}
-                    >
-                      <Ban size={16} color={colors.text.white} />
-                      <Text style={styles.actionButtonText}>
-                        {(user as any).isBanned ? 'Unban' : 'Ban'}
-                      </Text>
-                    </TouchableOpacity>
-                    {currentUser.role === 'super_admin' && (
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => handleDeleteUser(user.id)}
+                        style={[styles.actionButton, styles.restrictionsButton]}
+                        onPress={() => loadUserRestrictions(user.id)}
                       >
-                        <Trash2 size={16} color={colors.text.white} />
-                        <Text style={styles.actionButtonText}>Delete</Text>
+                        <Shield size={16} color={colors.text.white} />
+                        <Text style={styles.actionButtonText}>Restrictions</Text>
                       </TouchableOpacity>
+                      {currentUser.role === 'super_admin' && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteButton]}
+                          onPress={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 size={16} color={colors.text.white} />
+                          <Text style={styles.actionButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    
+                    {selectedUserId === user.id && restrictions.length > 0 && (
+                      <View style={styles.restrictionsContainer}>
+                        <Text style={styles.restrictionsTitle}>Active Restrictions:</Text>
+                        {restrictions.map((restriction) => (
+                          <View key={restriction.id} style={styles.restrictionItem}>
+                            <View style={styles.restrictionInfo}>
+                              <Text style={styles.restrictionFeature}>
+                                {restriction.restricted_feature.charAt(0).toUpperCase() + restriction.restricted_feature.slice(1)}
+                              </Text>
+                              {restriction.reason && (
+                                <Text style={styles.restrictionReason}>{restriction.reason}</Text>
+                              )}
+                              <Text style={styles.restrictionDate}>
+                                Since: {new Date(restriction.restricted_at).toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.removeRestrictionButton}
+                              onPress={() => handleRemoveRestriction(restriction.id, user.id)}
+                            >
+                              <XCircle size={16} color={colors.danger} />
+                              <Text style={styles.removeRestrictionText}>Remove</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
                     )}
-                  </View>
+                    
+                    {selectedUserId === user.id && restrictions.length === 0 && (
+                      <View style={styles.restrictionsContainer}>
+                        <Text style={styles.noRestrictionsText}>No active restrictions</Text>
+                      </View>
+                    )}
+                  </>
                 )}
               </View>
             ))}
@@ -584,8 +719,68 @@ const styles = StyleSheet.create({
   unbanButton: {
     backgroundColor: colors.secondary,
   },
+  restrictionsButton: {
+    backgroundColor: colors.primary,
+  },
   deleteButton: {
     backgroundColor: '#8B0000',
+  },
+  restrictionsContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: colors.background.secondary,
+    borderRadius: 8,
+  },
+  restrictionsTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  restrictionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  restrictionInfo: {
+    flex: 1,
+  },
+  restrictionFeature: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  restrictionReason: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    marginBottom: 2,
+  },
+  restrictionDate: {
+    fontSize: 11,
+    color: colors.text.tertiary,
+  },
+  removeRestrictionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: colors.danger + '20',
+  },
+  removeRestrictionText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.danger,
+  },
+  noRestrictionsText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
   },
   actionButtonText: {
     fontSize: 14,
