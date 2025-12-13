@@ -112,7 +112,7 @@ export interface Comment {
   replies?: Comment[];
 }
 
-export type MessageType = 'text' | 'image' | 'document';
+export type MessageType = 'text' | 'image' | 'document' | 'sticker';
 
 export interface Message {
   id: string;
@@ -123,6 +123,7 @@ export interface Message {
   mediaUrl?: string;
   documentUrl?: string;
   documentName?: string;
+  stickerId?: string;
   messageType: MessageType;
   deletedForSender?: boolean;
   deletedForReceiver?: boolean;
@@ -342,4 +343,28 @@ export interface UserLegalAcceptance {
   ipAddress?: string;
   userAgent?: string;
   createdAt: string;
+}
+
+export interface StickerPack {
+  id: string;
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  isActive: boolean;
+  isFeatured: boolean;
+  displayOrder: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Sticker {
+  id: string;
+  packId: string;
+  name: string;
+  imageUrl: string;
+  isAnimated: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
