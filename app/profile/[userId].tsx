@@ -74,9 +74,19 @@ export default function UserProfileScreen() {
     loadUserStatus();
   }, [userId, getUserStatus, userStatuses]);
 
-  // Subscribe to real-time status updates
+  // Subscribe to real-time status updates and refresh periodically
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !getUserStatus) return;
+
+    // Load status immediately
+    const refreshStatus = async () => {
+      const status = await getUserStatus(userId);
+      setUserStatus(status);
+    };
+    refreshStatus();
+
+    // Refresh status every 30 seconds to recalculate based on last_active_at
+    const refreshInterval = setInterval(refreshStatus, 30 * 1000);
 
     const channel = supabase
       .channel(`user_status:${userId}`)
@@ -89,15 +99,14 @@ export default function UserProfileScreen() {
           filter: `user_id=eq.${userId}`,
         },
         async (payload) => {
-          if (getUserStatus) {
-            const status = await getUserStatus(userId);
-            setUserStatus(status);
-          }
+          const status = await getUserStatus(userId);
+          setUserStatus(status);
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(refreshInterval);
       supabase.removeChannel(channel);
     };
   }, [userId, getUserStatus]);
