@@ -25,13 +25,14 @@ import ReportContentModal from '@/components/ReportContentModal';
 import { Reel, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 import { ExternalLink } from 'lucide-react-native';
+import StatusIndicator from '@/components/StatusIndicator';
 
 const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick, getUserStatus, userStatuses } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentReelId, setCurrentReelId] = useState<string | null>(null);
@@ -1039,18 +1040,27 @@ export default function ReelsScreen() {
                   onPress={() => router.push(`/profile/${reel.userId}` as any)}
                   activeOpacity={0.7}
                 >
-                  {reel.userAvatar ? (
-                    <Image
-                      source={{ uri: reel.userAvatar }}
-                      style={styles.avatar}
-                    />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarPlaceholderText}>
-                        {reel.userName.charAt(0)}
-                      </Text>
-                    </View>
-                  )}
+                  <View style={styles.avatarContainer}>
+                    {reel.userAvatar ? (
+                      <Image
+                        source={{ uri: reel.userAvatar }}
+                        style={styles.avatar}
+                      />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarPlaceholderText}>
+                          {reel.userName.charAt(0)}
+                        </Text>
+                      </View>
+                    )}
+                    {userStatuses[reel.userId] && (
+                      <StatusIndicator 
+                        status={userStatuses[reel.userId].statusType} 
+                        size="small" 
+                        showBorder={true}
+                      />
+                    )}
+                  </View>
                 </TouchableOpacity>
                 <View style={styles.userNameContainer}>
                   <View style={styles.userNameRow}>
@@ -1390,6 +1400,11 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
     alignItems: 'center',
     gap: 8,
     marginBottom: 4,
+  },
+  avatarContainer: {
+    position: 'relative',
+    width: 48,
+    height: 48,
   },
   avatar: {
     width: 48,
