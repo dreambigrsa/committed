@@ -18,10 +18,11 @@ import { useTheme } from '@/contexts/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { LegalDocument } from '@/types';
+import StatusIndicator from '@/components/StatusIndicator';
 
 export default function SearchScreen() {
   const router = useRouter();
-  const { searchUsers, getUserRelationship, searchByFace } = useApp();
+  const { searchUsers, getUserRelationship, searchByFace, getUserStatus, userStatuses } = useApp();
   const { colors } = useTheme();
   const [query, setQuery] = useState<string>('');
 
@@ -170,16 +171,25 @@ export default function SearchScreen() {
         disabled={!item.id}
       >
         <View style={styles.userLeft}>
-          {(item.profilePicture || (isFaceSearchResult && item.facePhotoUrl)) ? (
-            <Image 
-              source={{ uri: item.profilePicture || (isFaceSearchResult ? item.facePhotoUrl : '') }} 
-              style={styles.userAvatar} 
-            />
-          ) : (
-            <View style={styles.userAvatarPlaceholder}>
-              <Text style={styles.userAvatarText}>{item.fullName?.charAt(0) || '?'}</Text>
-            </View>
-          )}
+          <View style={styles.userAvatarContainer}>
+            {(item.profilePicture || (isFaceSearchResult && item.facePhotoUrl)) ? (
+              <Image 
+                source={{ uri: item.profilePicture || (isFaceSearchResult ? item.facePhotoUrl : '') }} 
+                style={styles.userAvatar} 
+              />
+            ) : (
+              <View style={styles.userAvatarPlaceholder}>
+                <Text style={styles.userAvatarText}>{item.fullName?.charAt(0) || '?'}</Text>
+              </View>
+            )}
+            {item.id && userStatuses[item.id] && (
+              <StatusIndicator 
+                status={userStatuses[item.id].statusType} 
+                size="small" 
+                showBorder={true}
+              />
+            )}
+          </View>
 
           <View style={styles.userInfo}>
             <View style={styles.userNameRow}>
@@ -516,6 +526,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     gap: 12,
+  },
+  userAvatarContainer: {
+    position: 'relative',
+    width: 56,
+    height: 56,
   },
   userAvatar: {
     width: 56,
