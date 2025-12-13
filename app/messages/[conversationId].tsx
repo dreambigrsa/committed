@@ -64,7 +64,7 @@ export default function ConversationDetailScreen() {
   
   // Animation for attachment buttons
   const attachmentButtonsOpacity = useRef(new Animated.Value(1)).current;
-  const attachmentButtonsHeight = useRef(new Animated.Value(1)).current;
+  const attachmentButtonsWidth = useRef(new Animated.Value(1)).current;
 
   // Keyboard listeners
   useEffect(() => {
@@ -72,6 +72,7 @@ export default function ConversationDetailScreen() {
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       () => {
         setIsKeyboardVisible(true);
+        setShowAttachments(false);
         // Animate out attachment buttons when keyboard shows
         Animated.parallel([
           Animated.timing(attachmentButtonsOpacity, {
@@ -79,14 +80,12 @@ export default function ConversationDetailScreen() {
             duration: 200,
             useNativeDriver: true,
           }),
-          Animated.timing(attachmentButtonsHeight, {
+          Animated.timing(attachmentButtonsWidth, {
             toValue: 0,
             duration: 200,
             useNativeDriver: false,
           }),
-        ]).start(() => {
-          setShowAttachments(false);
-        });
+        ]).start();
       }
     );
 
@@ -94,7 +93,7 @@ export default function ConversationDetailScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         setIsKeyboardVisible(false);
-        // Reset to show attachments when keyboard hides (unless user manually toggled)
+        // Reset to show attachments when keyboard hides
         setShowAttachments(true);
         Animated.parallel([
           Animated.timing(attachmentButtonsOpacity, {
@@ -102,7 +101,7 @@ export default function ConversationDetailScreen() {
             duration: 200,
             useNativeDriver: true,
           }),
-          Animated.timing(attachmentButtonsHeight, {
+          Animated.timing(attachmentButtonsWidth, {
             toValue: 1,
             duration: 200,
             useNativeDriver: false,
@@ -1276,7 +1275,7 @@ export default function ConversationDetailScreen() {
                         duration: 200,
                         useNativeDriver: true,
                       }),
-                      Animated.timing(attachmentButtonsHeight, {
+                      Animated.timing(attachmentButtonsWidth, {
                         toValue: 1,
                         duration: 200,
                         useNativeDriver: false,
@@ -1289,7 +1288,7 @@ export default function ConversationDetailScreen() {
                         duration: 200,
                         useNativeDriver: true,
                       }),
-                      Animated.timing(attachmentButtonsHeight, {
+                      Animated.timing(attachmentButtonsWidth, {
                         toValue: 0,
                         duration: 200,
                         useNativeDriver: false,
@@ -1313,9 +1312,9 @@ export default function ConversationDetailScreen() {
                 styles.attachmentButtonsContainer,
                 {
                   opacity: attachmentButtonsOpacity,
-                  height: attachmentButtonsHeight.interpolate({
+                  width: attachmentButtonsWidth.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [0, 44], // Height of attachment buttons
+                    outputRange: [0, 136], // 3 buttons (40px each) + 2 gaps (8px each) = 136px
                   }),
                   overflow: 'hidden',
                 },
@@ -1344,13 +1343,10 @@ export default function ConversationDetailScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Text Input - Expanded when keyboard is visible */}
+            {/* Text Input - Always flex: 1 to fill available space */}
             <TextInput
               ref={inputRef}
-              style={[
-                styles.input,
-                isKeyboardVisible && !showAttachments && styles.inputExpanded,
-              ]}
+              style={styles.input}
               placeholder="Type a message..."
               placeholderTextColor={colors.text.tertiary}
               value={messageText}
@@ -1358,20 +1354,7 @@ export default function ConversationDetailScreen() {
               multiline
               maxLength={1000}
               onFocus={() => {
-                setIsKeyboardVisible(true);
-                setShowAttachments(false);
-                Animated.parallel([
-                  Animated.timing(attachmentButtonsOpacity, {
-                    toValue: 0,
-                    duration: 200,
-                    useNativeDriver: true,
-                  }),
-                  Animated.timing(attachmentButtonsHeight, {
-                    toValue: 0,
-                    duration: 200,
-                    useNativeDriver: false,
-                  }),
-                ]).start();
+                // Keyboard listener will handle the animation
               }}
             />
             
@@ -1613,6 +1596,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginRight: 0,
   },
   attachmentButton: {
     width: 40,
@@ -1632,9 +1616,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: colors.text.primary,
-  },
-  inputExpanded: {
-    marginLeft: 0,
+    marginHorizontal: 0,
   },
   sendButton: {
     width: 40,
