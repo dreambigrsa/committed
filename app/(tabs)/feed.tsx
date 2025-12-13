@@ -22,6 +22,7 @@ import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Post, Advertisement } from '@/types';
+import StatusIndicator from '@/components/StatusIndicator';
 import * as WebBrowser from 'expo-web-browser';
 import ReportContentModal from '@/components/ReportContentModal';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,7 +34,7 @@ const { width } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editComment, deleteComment, toggleCommentLike, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost, reportContent } = useApp();
+  const { currentUser, posts, toggleLike, getComments, getActiveAds, getPersonalizedFeed, getSmartAds, recordAdImpression, recordAdClick, addComment, editComment, deleteComment, toggleCommentLike, editPost, deletePost, sharePost, adminDeletePost, adminRejectPost, reportContent, getUserStatus, userStatuses } = useApp();
   const { colors } = useTheme();
   const [showComments, setShowComments] = useState<string | null>(null);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
@@ -49,6 +50,7 @@ export default function FeedScreen() {
   const postScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [reportingPost, setReportingPost] = useState<{ id: string; userId: string } | null>(null);
+  const [postStatuses, setPostStatuses] = useState<Record<string, any>>({});
   const recordedImpressions = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -72,10 +74,27 @@ export default function FeedScreen() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setPersonalizedPosts(sortedPosts);
+      
+      // Load statuses for all post authors
+      const loadPostStatuses = async () => {
+        const statusMap: Record<string, any> = {};
+        for (const post of sortedPosts) {
+          if (post.userId && getUserStatus && !postStatuses[post.userId]) {
+            const status = await getUserStatus(post.userId);
+            if (status) {
+              statusMap[post.userId] = status;
+            }
+          } else if (postStatuses[post.userId]) {
+            statusMap[post.userId] = postStatuses[post.userId];
+          }
+        }
+        setPostStatuses(prev => ({ ...prev, ...statusMap }));
+      };
+      loadPostStatuses();
     } else {
       setPersonalizedPosts([]);
     }
-  }, [posts]);
+  }, [posts, getUserStatus]);
 
   useEffect(() => {
     const loadSmartAds = async () => {
@@ -164,6 +183,11 @@ export default function FeedScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
+    },
+    postAvatarContainer: {
+      position: 'relative',
+      width: 44,
+      height: 44,
     },
     postAvatar: {
       width: 44,
@@ -1265,18 +1289,27 @@ export default function FeedScreen() {
             style={styles.postUserInfo}
             onPress={() => router.push(`/profile/${post.userId}` as any)}
           >
-            {post.userAvatar ? (
-              <Image
-                source={{ uri: post.userAvatar }}
-                style={styles.postAvatar}
-              />
-            ) : (
-              <View style={styles.postAvatarPlaceholder}>
-                <Text style={styles.postAvatarPlaceholderText}>
-                  {post.userName.charAt(0)}
-                </Text>
-              </View>
-            )}
+            <View style={styles.postAvatarContainer}>
+              {post.userAvatar ? (
+                <Image
+                  source={{ uri: post.userAvatar }}
+                  style={styles.postAvatar}
+                />
+              ) : (
+                <View style={styles.postAvatarPlaceholder}>
+                  <Text style={styles.postAvatarPlaceholderText}>
+                    {post.userName.charAt(0)}
+                  </Text>
+                </View>
+              )}
+              {postStatuses[post.userId] && (
+                <StatusIndicator 
+                  status={postStatuses[post.userId].statusType} 
+                  size="small" 
+                  showBorder={true}
+                />
+              )}
+            </View>
             <View>
               <Text style={styles.postUserName}>{post.userName}</Text>
               <Text style={styles.postTime}>{formatTimeAgo(post.createdAt)}</Text>
