@@ -808,15 +808,16 @@ export default function ConversationDetailScreen() {
       // Fallback: find by matching participant ID with names/avatars
       // This handles cases where arrays might be misaligned
       const currentUserIndex = conversation.participants.indexOf(currentUser.id);
-      if (currentUserIndex === 0) {
+      if (currentUserIndex === 0 && conversation.participantNames.length > 1) {
         // Current user is first, other is second
         name = conversation.participantNames[1] || 'Unknown';
         avatar = conversation.participantAvatars[1];
-      } else {
+      } else if (conversation.participantNames.length > 0) {
         // Current user is second, other is first
         name = conversation.participantNames[0] || 'Unknown';
         avatar = conversation.participantAvatars[0];
       }
+      // If arrays are empty, name and avatar remain 'Unknown' and undefined
     }
     
     return {
@@ -1550,7 +1551,7 @@ export default function ConversationDetailScreen() {
                   ) : (
                     <View style={styles.headerAvatarPlaceholder}>
                       <Text style={styles.headerAvatarPlaceholderText}>
-                        {otherParticipant.name.charAt(0)}
+                        {otherParticipant.name?.charAt(0) || '?'}
                       </Text>
                     </View>
                   )}
