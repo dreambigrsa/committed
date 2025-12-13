@@ -50,11 +50,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { LegalDocument } from '@/types';
+import { LegalDocument, UserStatusType, StatusVisibility } from '@/types';
+import StatusIndicator from '@/components/StatusIndicator';
+import StatusBadge from '@/components/StatusBadge';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { currentUser, deleteAccount, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
+  const { currentUser, deleteAccount, getCurrentUserRelationship, endRelationship, updateUserProfile, getUserStatus, updateUserStatus, updateStatusPrivacy, userStatuses } = useApp();
   const [legalDocuments, setLegalDocuments] = useState<LegalDocument[]>([]);
   const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference, visualTheme, loadVisualTheme, saveVisualTheme } = useTheme();
   const { language, setLanguage: setLanguageContext, loadLanguagePreference, saveLanguagePreference, t } = useLanguage();
@@ -97,6 +99,14 @@ export default function SettingsScreen() {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  
+  // Status settings
+  const [currentStatus, setCurrentStatus] = useState<UserStatusType>('offline');
+  const [customStatusText, setCustomStatusText] = useState<string>('');
+  const [statusVisibility, setStatusVisibility] = useState<StatusVisibility>('contacts');
+  const [lastSeenVisibility, setLastSeenVisibility] = useState<StatusVisibility>('contacts');
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showStatusPrivacyModal, setShowStatusPrivacyModal] = useState(false);
   
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -675,6 +685,37 @@ export default function SettingsScreen() {
     return relationship?.status === 'verified';
   };
 
+  const handleStatusChange = async (newStatus: UserStatusType) => {
+    const success = await updateUserStatus(newStatus, customStatusText);
+    if (success) {
+      setCurrentStatus(newStatus);
+      setShowStatusModal(false);
+      Alert.alert('Success', 'Status updated successfully');
+    } else {
+      Alert.alert('Error', 'Failed to update status');
+    }
+  };
+
+  const handleSaveCustomStatus = async () => {
+    const success = await updateUserStatus(currentStatus, customStatusText);
+    if (success) {
+      setShowStatusModal(false);
+      Alert.alert('Success', 'Custom status updated successfully');
+    } else {
+      Alert.alert('Error', 'Failed to update custom status');
+    }
+  };
+
+  const handleStatusPrivacyChange = async () => {
+    const success = await updateStatusPrivacy(statusVisibility, lastSeenVisibility);
+    if (success) {
+      setShowStatusPrivacyModal(false);
+      Alert.alert('Success', 'Privacy settings updated successfully');
+    } else {
+      Alert.alert('Error', 'Failed to update privacy settings');
+    }
+  };
+
   return (
     <>
       <Stack.Screen
@@ -931,6 +972,48 @@ export default function SettingsScreen() {
                 <Shield size={18} color={colors.primary} />
                 <Text style={styles.reverifyButtonText}>Re-verify Identity</Text>
                 <ChevronRight size={18} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Status & Privacy */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Globe size={20} color={colors.primary} />
+              <Text style={styles.sectionTitle}>Status & Privacy</Text>
+            </View>
+
+            <View style={styles.settingsList}>
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setShowStatusModal(true)}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={styles.statusIndicatorContainer}>
+                    <StatusIndicator status={currentStatus} size="small" />
+                  </View>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingLabel}>Current Status</Text>
+                    <StatusBadge status={currentStatus} customStatusText={customStatusText} />
+                  </View>
+                </View>
+                <ChevronRight size={20} color={colors.text.tertiary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setShowStatusPrivacyModal(true)}
+              >
+                <View style={styles.settingLeft}>
+                  <Eye size={20} color={colors.text.secondary} />
+                  <Text style={styles.settingLabel}>Status Privacy</Text>
+                </View>
+                <View style={styles.settingRight}>
+                  <Text style={styles.settingValue}>
+                    {statusVisibility === 'everyone' ? 'Everyone' : statusVisibility === 'contacts' ? 'Contacts' : 'Nobody'}
+                  </Text>
+                  <ChevronRight size={20} color={colors.text.tertiary} />
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -1567,6 +1650,147 @@ export default function SettingsScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Status Selection Modal */}
+        <Modal
+          visible={showStatusModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowStatusModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.statusModalContent}>
+              <View style={styles.statusModalHeader}>
+                <Text style={styles.statusModalTitle}>Set Your Status</Text>
+                <TouchableOpacity onPress={() => setShowStatusModal(false)}>
+                  <X size={24} color={colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.statusModalBody} showsVerticalScrollIndicator={false}>
+                <View style={styles.statusOptions}>
+                  {(['online', 'away', 'busy', 'offline'] as UserStatusType[]).map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusOption,
+                        currentStatus === status && styles.statusOptionSelected,
+                      ]}
+                      onPress={() => handleStatusChange(status)}
+                    >
+                      <View style={styles.statusOptionLeft}>
+                        <StatusIndicator status={status} size="medium" />
+                        <Text style={[
+                          styles.statusOptionText,
+                          currentStatus === status && styles.statusOptionTextSelected,
+                        ]}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Text>
+                      </View>
+                      {currentStatus === status && (
+                        <CheckCircle2 size={20} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.customStatusSection}>
+                  <Text style={styles.customStatusLabel}>Custom Status (Optional)</Text>
+                  <TextInput
+                    style={styles.customStatusInput}
+                    placeholder="e.g., At work, With family..."
+                    placeholderTextColor={colors.text.tertiary}
+                    value={customStatusText}
+                    onChangeText={setCustomStatusText}
+                    maxLength={50}
+                  />
+                  <TouchableOpacity
+                    style={styles.saveCustomStatusButton}
+                    onPress={handleSaveCustomStatus}
+                  >
+                    <Text style={styles.saveCustomStatusButtonText}>Save Custom Status</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Status Privacy Modal */}
+        <Modal
+          visible={showStatusPrivacyModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowStatusPrivacyModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.statusModalContent}>
+              <View style={styles.statusModalHeader}>
+                <Text style={styles.statusModalTitle}>Status Privacy</Text>
+                <TouchableOpacity onPress={() => setShowStatusPrivacyModal(false)}>
+                  <X size={24} color={colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.statusModalBody} showsVerticalScrollIndicator={false}>
+                <View style={styles.privacySection}>
+                  <Text style={styles.privacySectionTitle}>Who can see your status?</Text>
+                  {(['everyone', 'contacts', 'nobody'] as StatusVisibility[]).map((visibility) => (
+                    <TouchableOpacity
+                      key={visibility}
+                      style={[
+                        styles.privacyOption,
+                        statusVisibility === visibility && styles.privacyOptionSelected,
+                      ]}
+                      onPress={() => setStatusVisibility(visibility)}
+                    >
+                      <Text style={[
+                        styles.privacyOptionText,
+                        statusVisibility === visibility && styles.privacyOptionTextSelected,
+                      ]}>
+                        {visibility === 'everyone' ? 'Everyone' : visibility === 'contacts' ? 'Contacts Only' : 'Nobody'}
+                      </Text>
+                      {statusVisibility === visibility && (
+                        <CheckCircle2 size={20} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.privacySection}>
+                  <Text style={styles.privacySectionTitle}>Who can see your last seen?</Text>
+                  {(['everyone', 'contacts', 'nobody'] as StatusVisibility[]).map((visibility) => (
+                    <TouchableOpacity
+                      key={visibility}
+                      style={[
+                        styles.privacyOption,
+                        lastSeenVisibility === visibility && styles.privacyOptionSelected,
+                      ]}
+                      onPress={() => setLastSeenVisibility(visibility)}
+                    >
+                      <Text style={[
+                        styles.privacyOptionText,
+                        lastSeenVisibility === visibility && styles.privacyOptionTextSelected,
+                      ]}>
+                        {visibility === 'everyone' ? 'Everyone' : visibility === 'contacts' ? 'Contacts Only' : 'Nobody'}
+                      </Text>
+                      {lastSeenVisibility === visibility && (
+                        <CheckCircle2 size={20} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.savePrivacyButton}
+                  onPress={handleStatusPrivacyChange}
+                >
+                  <Text style={styles.savePrivacyButtonText}>Save Privacy Settings</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -2117,5 +2341,149 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.danger,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  // Status styles
+  statusIndicatorContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginRight: 12,
+  },
+  settingInfo: {
+    flex: 1,
+  },
+  statusModalContent: {
+    backgroundColor: colors.background.primary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    width: '100%',
+  },
+  statusModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  statusModalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  statusModalBody: {
+    padding: 20,
+  },
+  statusOptions: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  statusOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  statusOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusOptionText: {
+    fontSize: 16,
+    fontWeight: '500' as const,
+    color: colors.text.primary,
+  },
+  statusOptionTextSelected: {
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+  customStatusSection: {
+    marginTop: 8,
+  },
+  customStatusLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  customStatusInput: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    marginBottom: 12,
+  },
+  saveCustomStatusButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  saveCustomStatusButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  privacySection: {
+    marginBottom: 24,
+  },
+  privacySectionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 12,
+  },
+  privacyOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    marginBottom: 8,
+  },
+  privacyOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  privacyOptionText: {
+    fontSize: 15,
+    fontWeight: '500' as const,
+    color: colors.text.primary,
+  },
+  privacyOptionTextSelected: {
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+  savePrivacyButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  savePrivacyButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.white,
   },
 });
