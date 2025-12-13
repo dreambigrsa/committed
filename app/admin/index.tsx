@@ -286,8 +286,9 @@ export default function AdminDashboardScreen() {
         options={{ 
           title: 'Admin Dashboard', 
           headerShown: true,
-          headerStyle: { backgroundColor: themeColors.primary },
-          headerTintColor: themeColors.text.white,
+          headerStyle: { backgroundColor: themeColors.background.primary },
+          headerTintColor: themeColors.text.primary,
+          headerTitleStyle: { fontWeight: '700' },
         }} 
       />
       
@@ -295,20 +296,22 @@ export default function AdminDashboardScreen() {
         {/* Welcome Header */}
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           <View style={styles.headerContent}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerIconContainer}>
-                <LayoutDashboard size={28} color={themeColors.primary} />
+            <View style={styles.headerTop}>
+              <View style={styles.headerLeft}>
+                <View style={styles.headerIconContainer}>
+                  <LayoutDashboard size={32} color={themeColors.primary} />
+                </View>
+                <View style={styles.headerTextContainer}>
+                  <Text style={styles.welcomeText}>Welcome back</Text>
+                  <Text style={styles.userName}>{currentUser.fullName}</Text>
+                </View>
               </View>
-              <View style={styles.headerTextContainer}>
-                <Text style={styles.welcomeText}>Welcome back,</Text>
-                <Text style={styles.userName}>{currentUser.fullName}</Text>
+              <View style={[styles.roleBadge, { backgroundColor: themeColors.primary }]}>
+                <Shield size={18} color={themeColors.text.white} />
+                <Text style={styles.roleText}>
+                  {currentUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                </Text>
               </View>
-            </View>
-            <View style={[styles.roleBadge, { backgroundColor: themeColors.primary }]}>
-              <Shield size={16} color={themeColors.text.white} />
-              <Text style={styles.roleText}>
-                {currentUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
-              </Text>
             </View>
           </View>
         </Animated.View>
@@ -317,11 +320,7 @@ export default function AdminDashboardScreen() {
         <Animated.View style={[styles.sectionsContainer, { opacity: fadeAnim }]}>
           {visibleSections.map((category, categoryIndex) => (
             <View key={category.category} style={styles.categorySection}>
-              <View style={styles.categoryHeader}>
-                <View style={styles.categoryHeaderLine} />
-                <Text style={styles.categoryTitle}>{category.category}</Text>
-                <View style={styles.categoryHeaderLine} />
-              </View>
+              <Text style={styles.categoryTitle}>{category.category.toUpperCase()}</Text>
               
               <View style={styles.cardsGrid}>
                 {category.items.map((item, itemIndex) => {
@@ -331,21 +330,19 @@ export default function AdminDashboardScreen() {
                       key={item.route}
                       style={styles.sectionCard}
                       onPress={() => router.push(item.route as any)}
-                      activeOpacity={0.8}
+                      activeOpacity={0.7}
                     >
-                      <View style={[styles.cardGradient, { backgroundColor: item.gradient[0] + '15' }]}>
-                        <View style={[styles.iconContainer, { backgroundColor: item.gradient[0] + '20' }]}>
-                          <Icon size={28} color={item.gradient[0]} />
+                      <View style={[styles.cardContent, { borderLeftColor: item.gradient[0] }]}>
+                        <View style={[styles.iconContainer, { backgroundColor: item.gradient[0] + '15' }]}>
+                          <Icon size={24} color={item.gradient[0]} />
                         </View>
-                        <View style={styles.cardContent}>
+                        <View style={styles.cardTextContainer}>
                           <Text style={styles.sectionTitle} numberOfLines={1}>{item.title}</Text>
-                          <Text style={styles.sectionDescription} numberOfLines={2}>
+                          <Text style={styles.sectionDescription} numberOfLines={1}>
                             {item.description}
                           </Text>
                         </View>
-                        <View style={styles.cardFooter}>
-                          <ChevronRight size={18} color={item.gradient[0]} />
-                        </View>
+                        <ChevronRight size={20} color={themeColors.text.tertiary} />
                       </View>
                     </TouchableOpacity>
                   );
@@ -386,138 +383,128 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   header: {
-    marginHorizontal: 16,
-    marginTop: 16,
+    marginHorizontal: 20,
+    marginTop: 20,
     marginBottom: 24,
   },
   headerContent: {
     backgroundColor: colors.background.primary,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    flex: 1,
   },
   headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.primary + '15',
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.primary + '12',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   headerTextContainer: {
     flex: 1,
   },
   welcomeText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.text.secondary,
     marginBottom: 4,
+    letterSpacing: 0.3,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700' as const,
     color: colors.text.primary,
+    letterSpacing: -0.3,
   },
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
   roleText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700' as const,
     color: colors.text.white,
+    letterSpacing: 0.3,
   },
   sectionsContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 32,
   },
   categorySection: {
-    marginBottom: 32,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  categoryHeaderLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border.light,
+    marginBottom: 28,
   },
   categoryTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700' as const,
-    color: colors.text.primary,
-    paddingHorizontal: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: colors.text.secondary,
+    marginBottom: 14,
+    letterSpacing: 1.2,
   },
   cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   sectionCard: {
-    width: CARD_WIDTH,
-    marginBottom: 12,
-  },
-  cardGradient: {
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 140,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    borderRadius: 14,
+    padding: 16,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  cardTextContainer: {
     flex: 1,
-    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 6,
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   sectionDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text.secondary,
-    lineHeight: 16,
-  },
-  cardFooter: {
-    alignItems: 'flex-end',
-    marginTop: 8,
+    lineHeight: 18,
   },
 });
