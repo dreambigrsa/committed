@@ -26,12 +26,18 @@ import {
   CheckCircle2,
   XCircle,
   Users,
+  Tag,
+  Calendar,
+  MapPin,
+  Shield,
+  AlertCircle,
+  Search,
+  Filter,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { LegalDocument } from '@/types';
-import colors from '@/constants/colors';
 
 export default function AdminLegalPoliciesScreen() {
   const router = useRouter();
@@ -40,11 +46,14 @@ export default function AdminLegalPoliciesScreen() {
   const styles = createStyles(themeColors);
 
   const [documents, setDocuments] = useState<LegalDocument[]>([]);
+  const [filteredDocuments, setFilteredDocuments] = useState<LegalDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editingDoc, setEditingDoc] = useState<LegalDocument | null>(null);
   const [acceptanceStats, setAcceptanceStats] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -62,6 +71,31 @@ export default function AdminLegalPoliciesScreen() {
       loadAcceptanceStats();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    filterDocuments();
+  }, [documents, searchQuery, filterActive]);
+
+  const filterDocuments = () => {
+    let filtered = [...documents];
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(doc =>
+        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doc.slug.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply status filter
+    if (filterActive === 'active') {
+      filtered = filtered.filter(doc => doc.isActive);
+    } else if (filterActive === 'inactive') {
+      filtered = filtered.filter(doc => !doc.isActive);
+    }
+
+    setFilteredDocuments(filtered);
+  };
 
   const loadDocuments = async () => {
     try {
@@ -164,7 +198,6 @@ export default function AdminLegalPoliciesScreen() {
       };
 
       if (editingDoc) {
-        // Update existing
         const { error } = await supabase
           .from('legal_documents')
           .update(updateData)
@@ -173,7 +206,6 @@ export default function AdminLegalPoliciesScreen() {
         if (error) throw error;
         Alert.alert('Success', 'Document updated successfully');
       } else {
-        // Create new
         updateData.created_by = currentUser?.id;
         const { error } = await supabase
           .from('legal_documents')
@@ -256,17 +288,39 @@ export default function AdminLegalPoliciesScreen() {
     }
   };
 
+  const getLocationIcon = (location: string) => {
+    switch (location) {
+      case 'signup': return '👤';
+      case 'settings': return '⚙️';
+      case 'search': return '🔍';
+      case 'relationship': return '❤️';
+      default: return '📍';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin')) {
     return (
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'Legal & Policies', headerShown: true }} />
         <View style={styles.errorContainer}>
+          <Shield size={64} color={themeColors.danger} />
           <Text style={styles.errorText}>Access Denied</Text>
           <Text style={styles.errorSubtext}>You don't have admin permissions</Text>
         </View>
       </SafeAreaView>
     );
   }
+
+  const activeCount = documents.filter(d => d.isActive).length;
+  const inactiveCount = documents.filter(d => !d.isActive).length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -275,16 +329,75 @@ export default function AdminLegalPoliciesScreen() {
           title: 'Legal & Policies',
           headerShown: true,
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
               <ArrowLeft size={24} color={themeColors.text.primary} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <View style={styles.header}>
+      {/* Stats Header */}
+      <View style={styles.statsHeader}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{documents.length}</Text>
+          <Text style={styles.statLabel}>Total Documents</Text>
+        </View>
+        <View style={[styles.statCard, styles.statCardActive]}>
+          <Text style={[styles.statNumber, styles.statNumberActive]}>{activeCount}</Text>
+          <Text style={styles.statLabel}>Active</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{inactiveCount}</Text>
+          <Text style={styles.statLabel}>Inactive</Text>
+        </View>
+      </View>
+
+      {/* Search and Filter */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Search size={20} color={themeColors.text.tertiary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search documents..."
+            placeholderTextColor={themeColors.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={18} color={themeColors.text.tertiary} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.filterContainer}>
+          {(['all', 'active', 'inactive'] as const).map((filter) => (
+            <TouchableOpacity
+              key={filter}
+              style={[
+                styles.filterButton,
+                filterActive === filter && styles.filterButtonActive,
+              ]}
+              onPress={() => setFilterActive(filter)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  filterActive === filter && styles.filterButtonTextActive,
+                ]}
+              >
+                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Create Button */}
+      <View style={styles.createButtonContainer}>
         <TouchableOpacity style={styles.createButton} onPress={handleCreateNew}>
-          <Plus size={20} color={themeColors.text.white} />
+          <View style={styles.createButtonIcon}>
+            <Plus size={22} color={themeColors.text.white} />
+          </View>
           <Text style={styles.createButtonText}>Create New Document</Text>
         </TouchableOpacity>
       </View>
@@ -292,95 +405,169 @@ export default function AdminLegalPoliciesScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={themeColors.primary} />
+          <Text style={styles.loadingText}>Loading documents...</Text>
+        </View>
+      ) : filteredDocuments.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <FileText size={64} color={themeColors.text.tertiary} />
+          <Text style={styles.emptyTitle}>
+            {searchQuery ? 'No documents found' : 'No documents yet'}
+          </Text>
+          <Text style={styles.emptyText}>
+            {searchQuery
+              ? 'Try adjusting your search or filters'
+              : 'Create your first legal document to get started'}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={documents}
+          data={filteredDocuments}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <View style={styles.documentCard}>
-              <View style={styles.documentHeader}>
-                <View style={styles.documentTitleRow}>
-                  <FileText size={20} color={themeColors.primary} />
-                  <Text style={styles.documentTitle}>{item.title}</Text>
-                  {item.isActive ? (
-                    <CheckCircle2 size={18} color={themeColors.secondary} />
-                  ) : (
-                    <XCircle size={18} color={themeColors.text.tertiary} />
-                  )}
-                </View>
-                <View style={styles.documentMeta}>
-                  <Text style={styles.documentMetaText}>v{item.version}</Text>
-                  {acceptanceStats[item.id] && (
-                    <View style={styles.acceptanceBadge}>
-                      <Users size={12} color={themeColors.primary} />
-                      <Text style={styles.acceptanceCount}>
-                        {acceptanceStats[item.id]} acceptances
+            <View style={[
+              styles.documentCard,
+              !item.isActive && styles.documentCardInactive,
+            ]}>
+              {/* Card Header */}
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderLeft}>
+                  <View style={[
+                    styles.statusIndicator,
+                    item.isActive ? styles.statusIndicatorActive : styles.statusIndicatorInactive,
+                  ]} />
+                  <View style={styles.titleContainer}>
+                    <View style={styles.titleRow}>
+                      <FileText 
+                        size={20} 
+                        color={item.isActive ? themeColors.primary : themeColors.text.tertiary} 
+                      />
+                      <Text style={[
+                        styles.documentTitle,
+                        !item.isActive && styles.documentTitleInactive,
+                      ]}>
+                        {item.title}
                       </Text>
                     </View>
-                  )}
+                    <View style={styles.badgeRow}>
+                      <View style={styles.versionBadge}>
+                        <Tag size={12} color={themeColors.primary} />
+                        <Text style={styles.versionText}>v{item.version}</Text>
+                      </View>
+                      {item.isRequired && (
+                        <View style={styles.requiredBadge}>
+                          <AlertCircle size={12} color={themeColors.danger} />
+                          <Text style={styles.requiredBadgeText}>Required</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.documentInfo}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Required:</Text>
-                  <Text style={styles.infoValue}>{item.isRequired ? 'Yes' : 'No'}</Text>
+              {/* Stats Row */}
+              {acceptanceStats[item.id] && (
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <Users size={14} color={themeColors.primary} />
+                    <Text style={styles.statItemText}>
+                      {acceptanceStats[item.id]} acceptances
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Display Locations:</Text>
+              )}
+
+              {/* Info Grid */}
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Status</Text>
+                  <View style={styles.infoValueContainer}>
+                    {item.isActive ? (
+                      <>
+                        <CheckCircle2 size={14} color={themeColors.secondary} />
+                        <Text style={[styles.infoValue, styles.infoValueActive]}>Active</Text>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle size={14} color={themeColors.text.tertiary} />
+                        <Text style={styles.infoValue}>Inactive</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Required</Text>
                   <Text style={styles.infoValue}>
-                    {item.displayLocation.length > 0
-                      ? item.displayLocation.join(', ')
-                      : 'None'}
+                    {item.isRequired ? 'Yes' : 'No'}
                   </Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Last Updated:</Text>
-                  <Text style={styles.infoValue}>
-                    {new Date(item.updatedAt).toLocaleDateString()}
-                  </Text>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Updated</Text>
+                  <View style={styles.infoValueContainer}>
+                    <Calendar size={14} color={themeColors.text.secondary} />
+                    <Text style={styles.infoValue}>{formatDate(item.updatedAt)}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.documentActions}>
+              {/* Display Locations */}
+              {item.displayLocation.length > 0 && (
+                <View style={styles.locationsContainer}>
+                  <Text style={styles.locationsLabel}>Display Locations:</Text>
+                  <View style={styles.locationsRow}>
+                    {item.displayLocation.map((location) => (
+                      <View key={location} style={styles.locationTag}>
+                        <Text style={styles.locationTagEmoji}>
+                          {getLocationIcon(location)}
+                        </Text>
+                        <Text style={styles.locationTagText}>
+                          {location.charAt(0).toUpperCase() + location.slice(1)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Actions */}
+              <View style={styles.actionsContainer}>
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={[styles.actionButton, styles.actionButtonPrimary]}
                   onPress={() => router.push(`/legal/${item.slug}` as any)}
                 >
-                  <Eye size={18} color={themeColors.primary} />
-                  <Text style={styles.actionButtonText}>View</Text>
+                  <Eye size={16} color={themeColors.primary} />
+                  <Text style={styles.actionButtonTextPrimary}>View</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={[styles.actionButton, styles.actionButtonSecondary]}
                   onPress={() => handleEdit(item)}
                 >
-                  <Edit size={18} color={themeColors.primary} />
-                  <Text style={styles.actionButtonText}>Edit</Text>
+                  <Edit size={16} color={themeColors.primary} />
+                  <Text style={styles.actionButtonTextSecondary}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={[styles.actionButton, styles.actionButtonTertiary]}
                   onPress={() => handleToggleActive(item)}
                 >
                   {item.isActive ? (
                     <>
-                      <XCircle size={18} color={themeColors.danger} />
-                      <Text style={[styles.actionButtonText, styles.dangerText]}>Deactivate</Text>
+                      <XCircle size={16} color={themeColors.danger} />
+                      <Text style={styles.actionButtonTextDanger}>Deactivate</Text>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={18} color={themeColors.secondary} />
-                      <Text style={[styles.actionButtonText, styles.successText]}>Activate</Text>
+                      <CheckCircle2 size={16} color={themeColors.secondary} />
+                      <Text style={styles.actionButtonTextSuccess}>Activate</Text>
                     </>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.dangerButton]}
+                  style={[styles.actionButton, styles.actionButtonDanger]}
                   onPress={() => handleDelete(item)}
                 >
-                  <Trash2 size={18} color={themeColors.danger} />
-                  <Text style={[styles.actionButtonText, styles.dangerText]}>Delete</Text>
+                  <Trash2 size={16} color={themeColors.danger} />
+                  <Text style={styles.actionButtonTextDanger}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -397,116 +584,168 @@ export default function AdminLegalPoliciesScreen() {
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {editingDoc ? 'Edit Document' : 'Create New Document'}
-            </Text>
-            <TouchableOpacity onPress={() => setShowEditor(false)}>
+            <View style={styles.modalHeaderLeft}>
+              <View style={styles.modalIconContainer}>
+                <FileText size={24} color={themeColors.primary} />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {editingDoc ? 'Edit Document' : 'Create New Document'}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {editingDoc ? 'Update document details' : 'Add a new legal document'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowEditor(false)}
+              style={styles.modalCloseButton}
+            >
               <X size={24} color={themeColors.text.primary} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Title *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.title}
-                onChangeText={(text) => setFormData({ ...formData, title: text })}
-                placeholder="e.g., Terms of Service"
-                placeholderTextColor={themeColors.text.tertiary}
-              />
-            </View>
+          <ScrollView 
+            style={styles.modalContent} 
+            contentContainerStyle={styles.modalContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formSection}>
+              <Text style={styles.formSectionTitle}>Basic Information</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Title *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.title}
+                  onChangeText={(text) => setFormData({ ...formData, title: text })}
+                  placeholder="e.g., Terms of Service"
+                  placeholderTextColor={themeColors.text.tertiary}
+                />
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Slug * (URL-friendly)</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.slug}
-                onChangeText={(text) => setFormData({ ...formData, slug: text.toLowerCase().replace(/\s+/g, '-') })}
-                placeholder="e.g., terms-of-service"
-                placeholderTextColor={themeColors.text.tertiary}
-                autoCapitalize="none"
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Slug * (URL-friendly)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.slug}
+                  onChangeText={(text) => setFormData({ ...formData, slug: text.toLowerCase().replace(/\s+/g, '-') })}
+                  placeholder="e.g., terms-of-service"
+                  placeholderTextColor={themeColors.text.tertiary}
+                  autoCapitalize="none"
+                />
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Version *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={formData.version}
-                onChangeText={(text) => setFormData({ ...formData, version: text })}
-                placeholder="e.g., 1.0.0"
-                placeholderTextColor={themeColors.text.tertiary}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Content * (HTML/Markdown supported)</Text>
-              <TextInput
-                style={[styles.formInput, styles.formTextArea]}
-                value={formData.content}
-                onChangeText={(text) => setFormData({ ...formData, content: text })}
-                placeholder="Enter document content..."
-                placeholderTextColor={themeColors.text.tertiary}
-                multiline
-                numberOfLines={10}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <View style={styles.switchRow}>
-                <Text style={styles.formLabel}>Active</Text>
-                <Switch
-                  value={formData.isActive}
-                  onValueChange={(value) => setFormData({ ...formData, isActive: value })}
-                  trackColor={{
-                    false: themeColors.border.light,
-                    true: themeColors.primary + '50',
-                  }}
-                  thumbColor={formData.isActive ? themeColors.primary : themeColors.text.tertiary}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Version *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={formData.version}
+                  onChangeText={(text) => setFormData({ ...formData, version: text })}
+                  placeholder="e.g., 1.0.0"
+                  placeholderTextColor={themeColors.text.tertiary}
                 />
               </View>
             </View>
 
-            <View style={styles.formGroup}>
-              <View style={styles.switchRow}>
-                <Text style={styles.formLabel}>Required</Text>
-                <Switch
-                  value={formData.isRequired}
-                  onValueChange={(value) => setFormData({ ...formData, isRequired: value })}
-                  trackColor={{
-                    false: themeColors.border.light,
-                    true: themeColors.primary + '50',
-                  }}
-                  thumbColor={formData.isRequired ? themeColors.primary : themeColors.text.tertiary}
+            <View style={styles.formSection}>
+              <Text style={styles.formSectionTitle}>Content</Text>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Content * (HTML/Markdown supported)</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextArea]}
+                  value={formData.content}
+                  onChangeText={(text) => setFormData({ ...formData, content: text })}
+                  placeholder="Enter document content..."
+                  placeholderTextColor={themeColors.text.tertiary}
+                  multiline
+                  numberOfLines={12}
+                  textAlignVertical="top"
                 />
+                <Text style={styles.formHint}>
+                  Supports HTML tags and Markdown formatting
+                </Text>
               </View>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Display Locations</Text>
-              {['signup', 'settings', 'search', 'relationship'].map((location) => (
-                <TouchableOpacity
-                  key={location}
-                  style={styles.checkboxRow}
-                  onPress={() => toggleDisplayLocation(location)}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      formData.displayLocation.includes(location) && styles.checkboxChecked,
-                    ]}
-                  >
-                    {formData.displayLocation.includes(location) && (
-                      <CheckCircle2 size={16} color={themeColors.text.white} />
-                    )}
+            <View style={styles.formSection}>
+              <Text style={styles.formSectionTitle}>Settings</Text>
+              
+              <View style={styles.switchGroup}>
+                <View style={styles.switchRow}>
+                  <View style={styles.switchLabelContainer}>
+                    <Shield size={18} color={themeColors.primary} />
+                    <View style={styles.switchTextContainer}>
+                      <Text style={styles.switchLabel}>Active</Text>
+                      <Text style={styles.switchDescription}>
+                        Document will be visible to users
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.checkboxLabel}>
-                    {location.charAt(0).toUpperCase() + location.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  <Switch
+                    value={formData.isActive}
+                    onValueChange={(value) => setFormData({ ...formData, isActive: value })}
+                    trackColor={{
+                      false: themeColors.border.light,
+                      true: themeColors.primary + '50',
+                    }}
+                    thumbColor={formData.isActive ? themeColors.primary : themeColors.text.tertiary}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={styles.switchLabelContainer}>
+                    <AlertCircle size={18} color={themeColors.danger} />
+                    <View style={styles.switchTextContainer}>
+                      <Text style={styles.switchLabel}>Required</Text>
+                      <Text style={styles.switchDescription}>
+                        Users must accept this document
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={formData.isRequired}
+                    onValueChange={(value) => setFormData({ ...formData, isRequired: value })}
+                    trackColor={{
+                      false: themeColors.border.light,
+                      true: themeColors.danger + '50',
+                    }}
+                    thumbColor={formData.isRequired ? themeColors.danger : themeColors.text.tertiary}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formSectionTitle}>Display Locations</Text>
+              <Text style={styles.formSectionDescription}>
+                Select where this document should appear in the app
+              </Text>
+              <View style={styles.locationsGrid}>
+                {['signup', 'settings', 'search', 'relationship'].map((location) => (
+                  <TouchableOpacity
+                    key={location}
+                    style={[
+                      styles.locationOption,
+                      formData.displayLocation.includes(location) && styles.locationOptionActive,
+                    ]}
+                    onPress={() => toggleDisplayLocation(location)}
+                  >
+                    <Text style={styles.locationOptionEmoji}>
+                      {getLocationIcon(location)}
+                    </Text>
+                    <Text style={[
+                      styles.locationOptionText,
+                      formData.displayLocation.includes(location) && styles.locationOptionTextActive,
+                    ]}>
+                      {location.charAt(0).toUpperCase() + location.slice(1)}
+                    </Text>
+                    {formData.displayLocation.includes(location) && (
+                      <CheckCircle2 size={16} color={themeColors.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </ScrollView>
 
@@ -527,7 +766,7 @@ export default function AdminLegalPoliciesScreen() {
               ) : (
                 <>
                   <Save size={18} color={themeColors.text.white} />
-                  <Text style={styles.saveButtonText}>Save</Text>
+                  <Text style={styles.saveButtonText}>Save Document</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -543,37 +782,143 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.secondary,
   },
+  headerBackButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    gap: 16,
   },
   errorText: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 8,
   },
   errorSubtext: {
     fontSize: 16,
     color: colors.text.secondary,
+    textAlign: 'center',
   },
-  header: {
-    padding: 20,
+  statsHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
     backgroundColor: colors.background.primary,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statCardActive: {
+    backgroundColor: colors.primary + '10',
+    borderWidth: 2,
+    borderColor: colors.primary + '30',
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  statNumberActive: {
+    color: colors.primary,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.text.primary,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: colors.background.primary,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  filterButtonTextActive: {
+    color: colors.text.white,
+  },
+  createButtonContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
     backgroundColor: colors.primary,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  createButtonIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.text.white + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   createButtonText: {
     fontSize: 16,
@@ -584,47 +929,95 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   listContent: {
     padding: 20,
+    paddingTop: 0,
     gap: 16,
   },
   documentCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  documentHeader: {
+  documentCardInactive: {
+    opacity: 0.7,
+    borderColor: colors.border.light,
+  },
+  cardHeader: {
     marginBottom: 16,
   },
-  documentTitleRow: {
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statusIndicator: {
+    width: 4,
+    borderRadius: 2,
+    alignSelf: 'stretch',
+  },
+  statusIndicatorActive: {
+    backgroundColor: colors.secondary,
+  },
+  statusIndicatorInactive: {
+    backgroundColor: colors.text.tertiary,
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginBottom: 8,
   },
   documentTitle: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
+    lineHeight: 26,
   },
-  documentMeta: {
+  documentTitleInactive: {
+    color: colors.text.tertiary,
+  },
+  badgeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  documentMetaText: {
-    fontSize: 13,
-    color: colors.text.secondary,
-  },
-  acceptanceBadge: {
+  versionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -633,35 +1026,116 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  acceptanceCount: {
+  versionText: {
     fontSize: 12,
-    color: colors.primary,
     fontWeight: '600' as const,
+    color: colors.primary,
   },
-  documentInfo: {
+  requiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.danger + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  requiredBadgeText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.danger,
+  },
+  statsRow: {
+    backgroundColor: colors.primary + '08',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statItemText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 16,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
-    gap: 8,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  infoItem: {
+    flex: 1,
+    minWidth: '45%',
   },
   infoLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.text.tertiary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  infoValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600' as const,
     color: colors.text.primary,
   },
-  documentActions: {
+  infoValueActive: {
+    color: colors.secondary,
+  },
+  locationsContainer: {
+    marginBottom: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  locationsLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.text.tertiary,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  locationsRow: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  locationTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  locationTagEmoji: {
+    fontSize: 14,
+  },
+  locationTagText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
@@ -672,26 +1146,45 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
     borderWidth: 1,
+  },
+  actionButtonPrimary: {
+    backgroundColor: colors.primary + '10',
+    borderColor: colors.primary + '30',
+  },
+  actionButtonSecondary: {
+    backgroundColor: colors.background.secondary,
     borderColor: colors.border.light,
   },
-  dangerButton: {
-    backgroundColor: colors.danger + '15',
+  actionButtonTertiary: {
+    backgroundColor: colors.background.secondary,
+    borderColor: colors.border.light,
+  },
+  actionButtonDanger: {
+    backgroundColor: colors.danger + '10',
     borderColor: colors.danger + '30',
   },
-  actionButtonText: {
+  actionButtonTextPrimary: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: colors.primary,
   },
-  dangerText: {
+  actionButtonTextSecondary: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  actionButtonTextDanger: {
+    fontSize: 13,
+    fontWeight: '600' as const,
     color: colors.danger,
   },
-  successText: {
+  actionButtonTextSuccess: {
+    fontSize: 13,
+    fontWeight: '600' as const,
     color: colors.secondary,
   },
   modalContainer: {
@@ -707,14 +1200,53 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  modalIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
+    marginBottom: 2,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  modalCloseButton: {
+    padding: 8,
   },
   modalContent: {
     flex: 1,
+  },
+  modalContentContainer: {
     padding: 20,
+  },
+  formSection: {
+    marginBottom: 32,
+  },
+  formSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 16,
+  },
+  formSectionDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    marginBottom: 16,
+    lineHeight: 20,
   },
   formGroup: {
     marginBottom: 20,
@@ -729,7 +1261,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.background.primary,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text.primary,
     borderWidth: 1,
@@ -737,36 +1269,82 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   formTextArea: {
     minHeight: 200,
-    paddingTop: 12,
+    paddingTop: 14,
+    textAlignVertical: 'top',
+  },
+  formHint: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  switchGroup: {
+    gap: 20,
   },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
-  checkboxRow: {
+  switchLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
+    flex: 1,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: colors.border.medium,
-    backgroundColor: colors.background.primary,
+  switchTextContainer: {
+    flex: 1,
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  switchDescription: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
+  locationsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  locationOption: {
+    flex: 1,
+    minWidth: '45%',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.background.primary,
+    borderWidth: 2,
+    borderColor: colors.border.light,
   },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
+  locationOptionActive: {
+    backgroundColor: colors.primary + '10',
     borderColor: colors.primary,
   },
-  checkboxLabel: {
+  locationOptionEmoji: {
+    fontSize: 20,
+  },
+  locationOptionText: {
+    flex: 1,
     fontSize: 15,
+    fontWeight: '600' as const,
     color: colors.text.primary,
+  },
+  locationOptionTextActive: {
+    color: colors.primary,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -775,11 +1353,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.background.primary,
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 5,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     backgroundColor: colors.background.secondary,
     alignItems: 'center',
     borderWidth: 1,
@@ -796,9 +1379,14 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -809,4 +1397,3 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.text.white,
   },
 });
-
