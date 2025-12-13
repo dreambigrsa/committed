@@ -952,15 +952,32 @@ export default function ConversationDetailScreen() {
     const diffDays = Math.floor(diffHours / 24);
     const diffSeconds = Math.floor(diffMs / 1000);
 
-    // If user is offline and just logged out (within last 2 minutes), show "Just now"
+    // If user is online, show "Online"
+    if (statusType === 'online') {
+      return 'Online';
+    }
+
+    // If user is away, show "Away"
+    if (statusType === 'away') {
+      return 'Away';
+    }
+
+    // If user is busy, show "Busy"
+    if (statusType === 'busy') {
+      return 'Busy';
+    }
+
+    // For offline users, show last seen time
+    // If just went offline (within last 2 minutes), show "Just now"
     if (statusType === 'offline' && diffSeconds < 120) {
       return 'Just now';
     }
 
-    if (diffMins < 1) return 'Active now';
-    if (diffMins < 60) return `Active ${diffMins}m ago`;
-    if (diffHours < 24) return `Active ${diffHours}h ago`;
-    if (diffDays < 7) return `Active ${diffDays}d ago`;
+    // Show relative time
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `Last seen ${diffMins}m ago`;
+    if (diffHours < 24) return `Last seen ${diffHours}h ago`;
+    if (diffDays < 7) return `Last seen ${diffDays}d ago`;
     return `Last seen ${lastActive.toLocaleDateString()}`;
   };
 
