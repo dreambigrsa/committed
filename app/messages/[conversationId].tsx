@@ -1308,12 +1308,13 @@ export default function ConversationDetailScreen() {
 
             {/* Attachment Buttons - Animated */}
             <Animated.View
+              pointerEvents={(!isKeyboardVisible || showAttachments) ? 'auto' : 'none'}
               style={[
                 styles.attachmentButtonsContainer,
                 {
                   opacity: attachmentButtonsOpacity,
                   transform: [{ scaleX: attachmentButtonsScale }],
-                  width: (!isKeyboardVisible || showAttachments) ? 136 : 0, // Non-animated width based on state
+                  width: (!isKeyboardVisible || showAttachments) ? 136 : 0,
                   overflow: 'hidden',
                 },
               ]}
@@ -1322,6 +1323,7 @@ export default function ConversationDetailScreen() {
                 style={styles.attachmentButton}
                 onPress={handlePickImage}
                 activeOpacity={0.7}
+                disabled={isKeyboardVisible && !showAttachments}
               >
                 <ImageIcon size={22} color={colors.primary} />
               </TouchableOpacity>
@@ -1329,6 +1331,7 @@ export default function ConversationDetailScreen() {
                 style={styles.attachmentButton}
                 onPress={handlePickDocument}
                 activeOpacity={0.7}
+                disabled={isKeyboardVisible && !showAttachments}
               >
                 <FileText size={22} color={colors.primary} />
               </TouchableOpacity>
@@ -1336,6 +1339,7 @@ export default function ConversationDetailScreen() {
                 style={styles.attachmentButton}
                 onPress={() => setShowStickerPicker(true)}
                 activeOpacity={0.7}
+                disabled={isKeyboardVisible && !showAttachments}
               >
                 <Smile size={22} color={colors.primary} />
               </TouchableOpacity>
@@ -1595,6 +1599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginRight: 0,
+    minWidth: 0, // Allow container to shrink below content size
   },
   attachmentButton: {
     width: 40,
