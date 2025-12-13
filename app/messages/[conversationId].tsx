@@ -62,6 +62,7 @@ export default function ConversationDetailScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showAttachments, setShowAttachments] = useState(true);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const conversation = getConversation(conversationId);
@@ -80,9 +81,13 @@ export default function ConversationDetailScreen() {
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => {
+      (event) => {
         setIsKeyboardVisible(true);
         setShowAttachments(false);
+        // Track keyboard height for Android
+        if (Platform.OS === 'android') {
+          setKeyboardHeight(event.endCoordinates.height);
+        }
         // Animate out attachment buttons when keyboard shows
         Animated.parallel([
           Animated.timing(attachmentButtonsOpacity, {
@@ -103,6 +108,7 @@ export default function ConversationDetailScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         setIsKeyboardVisible(false);
+        setKeyboardHeight(0);
         // Reset to show attachments when keyboard hides
         setShowAttachments(true);
         Animated.parallel([
@@ -1371,10 +1377,10 @@ export default function ConversationDetailScreen() {
       <SafeAreaView style={[styles.container, getBackgroundStyle()]}>
         {renderBackgroundImage()}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardAvoid}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : -10}
-          enabled={true}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+          enabled={Platform.OS === 'ios'}
         >
           <FlatList
             ref={flatListRef}
@@ -1434,14 +1440,15 @@ export default function ConversationDetailScreen() {
             </View>
           )}
 
-          <View style={[
-            styles.inputContainer,
-            {
-              paddingBottom: Platform.OS === 'android' && isKeyboardVisible
-                ? Math.max(insets.bottom, 4)
-                : Math.max(insets.bottom, 12),
-            },
-          ]}>
+          <Animated.View
+            style={[
+              styles.inputContainer,
+              {
+                paddingBottom: Math.max(insets.bottom, 12),
+                marginBottom: Platform.OS === 'android' && keyboardHeight > 0 ? keyboardHeight : 0,
+              },
+            ]}
+          >
             {/* Attachment Toggle Button - Only show when keyboard is visible */}
             {isKeyboardVisible && (
               <TouchableOpacity
@@ -1551,7 +1558,7 @@ export default function ConversationDetailScreen() {
                 color={(messageText.trim() || selectedImage || selectedDocument || selectedSticker) ? colors.text.white : colors.text.tertiary}
               />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </SafeAreaView>
       {renderBackgroundModal()}
