@@ -189,6 +189,14 @@ export default function AdminDashboardScreen() {
       color: '#E74C3C',
       visible: currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator',
     },
+    {
+      title: 'Legal & Policies',
+      icon: FileText,
+      description: 'Manage legal documents and policies',
+      route: '/admin/legal-policies',
+      color: '#6C5CE7',
+      visible: currentUser.role === 'super_admin',
+    },
   ];
 
   return (
