@@ -2,6 +2,19 @@ export type RelationshipType = 'married' | 'engaged' | 'serious' | 'dating';
 
 export type RelationshipStatus = 'pending' | 'verified' | 'ended';
 
+export type UserStatusType = 'online' | 'away' | 'busy' | 'offline';
+export type StatusVisibility = 'everyone' | 'contacts' | 'nobody';
+
+export interface UserStatus {
+  userId: string;
+  statusType: UserStatusType;
+  customStatusText?: string;
+  lastActiveAt: string;
+  statusVisibility: StatusVisibility;
+  lastSeenVisibility: StatusVisibility;
+  updatedAt: string;
+}
+
 export interface User {
   id: string;
   fullName: string;
@@ -15,6 +28,7 @@ export interface User {
     email: boolean;
     id: boolean;
   };
+  status?: UserStatus; // Optional status info
   createdAt: string;
 }
 
