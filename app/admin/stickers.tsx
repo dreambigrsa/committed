@@ -468,7 +468,7 @@ export default function AdminStickersScreen() {
     setPackFormData({
       name: pack.name,
       description: pack.description || '',
-      iconUrl: pack.iconUrl,
+      iconUrl: pack.iconUrl || '',
       isActive: pack.isActive,
       isFeatured: pack.isFeatured,
       displayOrder: pack.displayOrder,
