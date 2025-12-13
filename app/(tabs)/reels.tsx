@@ -22,14 +22,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import ReportContentModal from '@/components/ReportContentModal';
-import { Reel } from '@/types';
+import { Reel, Advertisement } from '@/types';
+import * as WebBrowser from 'expo-web-browser';
+import { ExternalLink } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function ReelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike, reportContent } = useApp();
+  const { currentUser, reels, toggleReelLike, editReel, deleteReel, shareReel, adminDeleteReel, adminRejectReel, followUser, unfollowUser, isFollowing: checkIsFollowing, addReelComment, getReelComments, editReelComment, deleteReelComment, toggleReelCommentLike, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick } = useApp();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentReelId, setCurrentReelId] = useState<string | null>(null);
@@ -41,9 +43,20 @@ export default function ReelsScreen() {
   const [showComments, setShowComments] = useState<string | null>(null);
   const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
   const [reportingReel, setReportingReel] = useState<{ id: string; userId: string } | null>(null);
+  const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
+  const [activeVideoAd, setActiveVideoAd] = useState<{ reelId: string; ad: Advertisement; canSkip: boolean } | null>(null);
+  const [videoAdPlaybackTime, setVideoAdPlaybackTime] = useState<number>(0);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
+  const adVideoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const skipButtonOpacity = useRef(new Animated.Value(0)).current;
+  const recordedImpressions = useRef<Set<string>>(new Set());
+
+  // Reset recorded impressions when ads change
+  useEffect(() => {
+    recordedImpressions.current.clear();
+  }, [smartAds]);
 
   // Calculate tab bar height: base height (64) + safe area bottom inset
   const tabBarHeight = 64 + insets.bottom;
@@ -59,6 +72,68 @@ export default function ReelsScreen() {
       useNativeDriver: true,
     }).start();
   }, [fadeAnim]);
+
+  // Load advertisements for reels
+  useEffect(() => {
+    const loadSmartAds = async () => {
+      try {
+        const ads = await getSmartAds('reels', [], 10);
+        setSmartAds(ads);
+      } catch (error) {
+        console.error('Error loading smart ads for reels:', error);
+        // Fallback to regular ads
+        const fallbackAds = getActiveAds('reels');
+        setSmartAds(fallbackAds.slice(0, 10));
+      }
+    };
+    if (currentUser) {
+      loadSmartAds();
+    }
+  }, [getSmartAds, getActiveAds, currentUser]);
+
+  // Reload ads periodically to ensure rotation
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (currentUser && smartAds.length > 0) {
+        try {
+          const ads = await getSmartAds('reels', [], 10);
+          setSmartAds(ads);
+        } catch (error) {
+          console.error('Error refreshing smart ads for reels:', error);
+        }
+      }
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentUser, getSmartAds, smartAds.length]);
+
+  // Handle video ad display when scrolling to a reel with an ad
+  useEffect(() => {
+    if (reels.length > 0 && currentIndex >= 0 && currentReelId) {
+      const reel = reels[currentIndex];
+      if (reel) {
+        // Check if this reel should show a video ad
+        const shouldShowAdAfter = (currentIndex + 1) % 5 === 0 && smartAds.length > 0;
+        if (shouldShowAdAfter) {
+          const adIndex = Math.floor((currentIndex + 1) / 5 - 1) % smartAds.length;
+          const ad = smartAds[adIndex];
+          
+          // If it's a video ad and not already showing, trigger it
+          if (ad && ad.type === 'video' && (!activeVideoAd || activeVideoAd.reelId !== reel.id)) {
+            // Pause the reel video
+            const reelVideoRef = videoRefs.current[reel.id];
+            if (reelVideoRef) {
+              reelVideoRef.pauseAsync().catch(() => {});
+            }
+            // Show ad overlay
+            setActiveVideoAd({ reelId: reel.id, ad, canSkip: false });
+            setVideoAdPlaybackTime(0);
+            skipButtonOpacity.setValue(0);
+          }
+        }
+      }
+    }
+  }, [currentIndex, currentReelId, reels, smartAds]);
 
   // Stop all videos when component unmounts or loses focus
   useFocusEffect(
@@ -354,10 +429,239 @@ export default function ReelsScreen() {
     }
   };
 
+  const handleAdPress = async (ad: Advertisement) => {
+    await recordAdClick(ad.id);
+    if (ad.linkUrl) {
+      await WebBrowser.openBrowserAsync(ad.linkUrl);
+    }
+  };
+
+  const handleSkipAd = () => {
+    if (activeVideoAd) {
+      // Pause ad video
+      const adVideoRef = adVideoRefs.current[activeVideoAd.ad.id];
+      if (adVideoRef) {
+        adVideoRef.pauseAsync().catch(() => {});
+      }
+      // Resume reel video
+      const reelVideoRef = videoRefs.current[activeVideoAd.reelId];
+      if (reelVideoRef) {
+        reelVideoRef.playAsync().catch(() => {});
+      }
+      setActiveVideoAd(null);
+      setVideoAdPlaybackTime(0);
+    }
+  };
+
+  const handleVideoAdEnd = () => {
+    if (activeVideoAd) {
+      // Resume reel video when ad ends
+      const reelVideoRef = videoRefs.current[activeVideoAd.reelId];
+      if (reelVideoRef) {
+        reelVideoRef.playAsync().catch(() => {});
+      }
+      setActiveVideoAd(null);
+      setVideoAdPlaybackTime(0);
+    }
+  };
+
+  // Render different ad types
+  const renderBannerAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-banner-${ad.id}`} style={styles.bannerAdContainer}>
+        <TouchableOpacity
+          style={styles.bannerAd}
+          onPress={() => handleAdPress(ad)}
+          activeOpacity={0.9}
+        >
+          <View style={styles.adBadge}>
+            <Text style={styles.adBadgeText}>Sponsored</Text>
+          </View>
+          <Image 
+            source={{ uri: ad.imageUrl }} 
+            style={styles.bannerAdImage} 
+            contentFit="cover"
+            onError={() => console.error('Failed to load banner ad image:', ad.id)}
+          />
+          <View style={styles.bannerAdContent}>
+            <Text style={styles.bannerAdTitle}>{ad.title}</Text>
+            {ad.linkUrl && (
+              <View style={styles.bannerAdLinkButton}>
+                <Text style={styles.bannerAdLinkText}>Learn More</Text>
+                <ExternalLink size={14} color={colors.primary} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderCardAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-card-${ad.id}`} style={styles.adContainer}>
+        <TouchableOpacity
+          style={styles.adCard}
+          onPress={() => handleAdPress(ad)}
+          activeOpacity={0.9}
+        >
+          <View style={styles.adBadge}>
+            <Text style={styles.adBadgeText}>Sponsored</Text>
+          </View>
+          <Image 
+            source={{ uri: ad.imageUrl }} 
+            style={styles.adImage} 
+            contentFit="cover"
+            onError={() => console.error('Failed to load card ad image:', ad.id)}
+          />
+          <View style={styles.adContent}>
+            <Text style={styles.adTitle}>{ad.title}</Text>
+            <Text style={styles.adDescription} numberOfLines={2}>
+              {ad.description}
+            </Text>
+            {ad.linkUrl && (
+              <View style={styles.adLinkButton}>
+                <Text style={styles.adLinkText}>Learn More</Text>
+                <ExternalLink size={16} color={colors.text.white} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderVideoAdOverlay = (reelId: string, ad: Advertisement) => {
+    if (!activeVideoAd || activeVideoAd.reelId !== reelId || activeVideoAd.ad.id !== ad.id) {
+      return null;
+    }
+
+    // Record impression for video ad when overlay is shown
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+
+    return (
+      <View style={styles.videoAdOverlay}>
+        <View style={styles.videoAdContainer}>
+          <View style={styles.videoAdHeader}>
+            <View style={styles.adBadge}>
+              <Text style={styles.adBadgeText}>Ad</Text>
+            </View>
+            <Animated.View style={[styles.skipButtonContainer, { opacity: skipButtonOpacity }]}>
+              <TouchableOpacity
+                style={styles.skipButton}
+                onPress={handleSkipAd}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.skipButtonText}>Skip Ad</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+          
+          <TouchableOpacity
+            style={styles.videoAdContent}
+            onPress={() => handleAdPress(ad)}
+            activeOpacity={0.9}
+          >
+            <Video
+              ref={(ref) => {
+                adVideoRefs.current[ad.id] = ref;
+              }}
+              source={{ uri: ad.imageUrl }}
+              style={styles.videoAdVideo}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={true}
+              isMuted={false}
+              onError={(error) => {
+                console.error('Failed to load video ad:', ad.id, error);
+                Alert.alert('Error', 'Failed to load video advertisement. Skipping ad.');
+                handleSkipAd();
+              }}
+              onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                if (status.isLoaded) {
+                  const currentTime = status.positionMillis || 0;
+                  const duration = status.durationMillis || 0;
+                  setVideoAdPlaybackTime(currentTime);
+                  
+                  // Show skip button after 5 seconds
+                  if (currentTime >= 5000 && !activeVideoAd.canSkip) {
+                    setActiveVideoAd(prev => prev ? { ...prev, canSkip: true } : null);
+                    Animated.timing(skipButtonOpacity, {
+                      toValue: 1,
+                      duration: 300,
+                      useNativeDriver: true,
+                    }).start();
+                  }
+                  
+                  // Auto-close when video ends
+                  if (status.didJustFinish) {
+                    handleVideoAdEnd();
+                  }
+                }
+              }}
+            />
+            <View style={styles.videoAdInfo}>
+              <Text style={styles.videoAdTitle}>{ad.title}</Text>
+              <Text style={styles.videoAdDescription} numberOfLines={1}>
+                {ad.description}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderAd = (ad: Advertisement, reelId?: string) => {
+    // For video ads in reels, show as overlay instead of separate item
+    if (ad.type === 'video' && reelId) {
+      // Trigger video ad overlay
+      if (!activeVideoAd || activeVideoAd.reelId !== reelId) {
+        // Pause the reel video
+        const reelVideoRef = videoRefs.current[reelId];
+        if (reelVideoRef) {
+          reelVideoRef.pauseAsync().catch(() => {});
+        }
+        // Show ad overlay
+        setActiveVideoAd({ reelId, ad, canSkip: false });
+        setVideoAdPlaybackTime(0);
+        skipButtonOpacity.setValue(0);
+      }
+      return null; // Video ads are rendered as overlay, not as separate items
+    }
+    
+    // For other ad types or when not in reels context
+    switch (ad.type) {
+      case 'banner':
+        return renderBannerAd(ad);
+      case 'video':
+        return renderCardAd(ad); // Fallback to card for video ads outside reels
+      case 'card':
+      default:
+        return renderCardAd(ad);
+    }
+  };
+
   const renderReel = (reel: Reel, index: number) => {
     const isLiked = reel.likes.includes(currentUser.id);
     const isOwner = reel.userId === currentUser.id;
     const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'moderator';
+    
+    // Check if there's a video ad for this reel
+    const hasVideoAd = activeVideoAd?.reelId === reel.id;
+    const shouldPlayReel = isScreenFocused && index === currentIndex && reel.id === currentReelId && !hasVideoAd;
 
     return (
       <View key={reel.id} style={styles.reelContainer}>
@@ -374,7 +678,7 @@ export default function ReelsScreen() {
             style={styles.video}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay={isScreenFocused && index === currentIndex && reel.id === currentReelId}
+            shouldPlay={shouldPlayReel}
             isMuted={isMuted}
             onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
               if (status.isLoaded) {
@@ -385,17 +689,19 @@ export default function ReelsScreen() {
                   return;
                 }
                 
-                // Only auto-play if screen is focused, this is the current reel and it's not playing
-                if (isScreenFocused && index === currentIndex && reel.id === currentReelId && !status.isPlaying) {
+                // Only auto-play if screen is focused, this is the current reel, not playing, and no video ad
+                if (shouldPlayReel && !status.isPlaying) {
                   videoRefs.current[reel.id]?.playAsync().catch(() => {});
                 }
-                // Pause if this is not the current reel or screen is not focused
-                if ((reel.id !== currentReelId || !isScreenFocused) && status.isPlaying) {
+                // Pause if this is not the current reel, screen is not focused, or video ad is showing
+                if ((reel.id !== currentReelId || !isScreenFocused || hasVideoAd) && status.isPlaying) {
                   videoRefs.current[reel.id]?.pauseAsync().catch(() => {});
                 }
               }
             }}
           />
+          {/* Video Ad Overlay */}
+          {hasVideoAd && activeVideoAd && renderVideoAdOverlay(reel.id, activeVideoAd.ad)}
         </TouchableOpacity>
 
         <View style={styles.overlay}>
@@ -656,7 +962,22 @@ export default function ReelsScreen() {
             scrollEventThrottle={16}
             style={styles.scrollView}
           >
-            {reels.map((reel, index) => renderReel(reel, index))}
+            {reels.map((reel, index) => {
+              // Show ad every 5 reels (after the 4th, 9th, 14th, etc.)
+              const shouldShowAdAfter = (index + 1) % 5 === 0 && smartAds.length > 0;
+              let adToShow: Advertisement | null = null;
+              if (shouldShowAdAfter) {
+                const adIndex = Math.floor((index + 1) / 5 - 1) % smartAds.length;
+                adToShow = smartAds[adIndex] || null;
+              }
+              
+              return (
+                <React.Fragment key={`fragment-${reel.id}`}>
+                  {renderReel(reel, index)}
+                  {adToShow && adToShow.type !== 'video' && renderAd(adToShow)}
+                </React.Fragment>
+              );
+            })}
           </ScrollView>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Reels</Text>
@@ -1248,6 +1569,178 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
   },
   sendButtonTextDisabled: {
     color: colors.text.tertiary,
+  },
+  adContainer: {
+    width,
+    height,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+  },
+  adCard: {
+    width: width * 0.9,
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  adBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  adBadgeText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  adImage: {
+    width: '100%',
+    height: 200,
+  },
+  adContent: {
+    padding: 16,
+  },
+  adTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  adDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  adLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  adLinkText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text.white,
+  },
+  bannerAdContainer: {
+    width,
+    height,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+    paddingHorizontal: 16,
+  },
+  bannerAd: {
+    width: '100%',
+    backgroundColor: colors.background.primary,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  bannerAdImage: {
+    width: '100%',
+    height: 120,
+  },
+  bannerAdContent: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bannerAdTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  bannerAdLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.primary + '20',
+    borderRadius: 6,
+  },
+  bannerAdLinkText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  videoAdOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  videoAdContainer: {
+    width: width * 0.9,
+    maxHeight: height * 0.7,
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoAdHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  videoAdContent: {
+    width: '100%',
+  },
+  videoAdVideo: {
+    width: '100%',
+    height: (height * 0.7) - 100,
+    backgroundColor: '#000',
+  },
+  videoAdInfo: {
+    padding: 16,
+    backgroundColor: colors.background.primary,
+  },
+  videoAdTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  videoAdDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  skipButtonContainer: {
+    marginLeft: 'auto',
+  },
+  skipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  skipButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.text.white,
   },
 });
 
