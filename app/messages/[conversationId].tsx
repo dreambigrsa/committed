@@ -943,13 +943,19 @@ export default function ConversationDetailScreen() {
     }
   };
 
-  const getLastSeenText = (lastActiveAt: string) => {
+  const getLastSeenText = (lastActiveAt: string, statusType?: string) => {
     const lastActive = new Date(lastActiveAt);
     const now = new Date();
     const diffMs = now.getTime() - lastActive.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
+    const diffSeconds = Math.floor(diffMs / 1000);
+
+    // If user is offline and just logged out (within last 2 minutes), show "Just now"
+    if (statusType === 'offline' && diffSeconds < 120) {
+      return 'Just now';
+    }
 
     if (diffMins < 1) return 'Active now';
     if (diffMins < 60) return `Active ${diffMins}m ago`;
@@ -1513,7 +1519,7 @@ export default function ConversationDetailScreen() {
                         ? 'Away'
                         : otherParticipantStatus.statusType === 'busy'
                         ? 'Busy'
-                        : getLastSeenText(otherParticipantStatus.lastActiveAt))
+                        : getLastSeenText(otherParticipantStatus.lastActiveAt, otherParticipantStatus.statusType))
                     : 'Loading...'}
                 </Text>
               </View>
