@@ -16,6 +16,8 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+// @ts-ignore - legacy path works at runtime
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   Plus,
   Edit2,
@@ -248,26 +250,45 @@ export default function AdminStickersScreen() {
       const contentType = isGif ? 'image/gif' : 'image/jpeg';
       const filename = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
       
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Check if it's a local file URI
+      let fileData: Uint8Array;
+      
+      if (uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('content://')) {
+        // Read local file using FileSystem
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        // Convert base64 to Uint8Array
+        const binaryString = atob(base64);
+        fileData = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          fileData[i] = binaryString.charCodeAt(i);
+        }
+      } else {
+        // Remote URL - fetch and convert to Uint8Array
+        const response = await fetch(uri);
+        const arrayBuffer = await response.arrayBuffer();
+        fileData = new Uint8Array(arrayBuffer);
+      }
 
       const { data, error } = await supabase.storage
         .from('stickers')
-        .upload(filename, blob, {
+        .upload(filename, fileData, {
           contentType: contentType,
           upsert: false,
         });
 
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('stickers')
-        .getPublicUrl(filename);
+        .getPublicUrl(data.path);
 
-      return urlData.publicUrl;
+      return publicUrl;
     } catch (error) {
       console.error('Failed to upload image:', error);
-      Alert.alert('Error', 'Failed to upload image');
+      Alert.alert('Error', `Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return null;
     }
   };
