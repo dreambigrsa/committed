@@ -15,9 +15,11 @@ import {
   Image as RNImage,
   Linking,
   ImageBackground,
+  Keyboard,
+  Animated,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical, Smile } from 'lucide-react-native';
+import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical, Smile, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -54,8 +56,66 @@ export default function ConversationDetailScreen() {
   const [warnings, setWarnings] = useState<any[]>([]);
   const [warningTemplates, setWarningTemplates] = useState<any[]>([]);
   const [reportingMessage, setReportingMessage] = useState<{ id: string; senderId: string } | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(true);
   const flatListRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
   const conversation = getConversation(conversationId);
+  
+  // Animation for attachment buttons
+  const attachmentButtonsOpacity = useRef(new Animated.Value(1)).current;
+  const attachmentButtonsHeight = useRef(new Animated.Value(1)).current;
+
+  // Keyboard listeners
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+        // Animate out attachment buttons when keyboard shows
+        Animated.parallel([
+          Animated.timing(attachmentButtonsOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(attachmentButtonsHeight, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+          }),
+        ]).start(() => {
+          setShowAttachments(false);
+        });
+      }
+    );
+
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        // Reset to show attachments when keyboard hides (unless user manually toggled)
+        setShowAttachments(true);
+        Animated.parallel([
+          Animated.timing(attachmentButtonsOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(attachmentButtonsHeight, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: false,
+          }),
+        ]).start();
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (conversationId && currentUser) {
@@ -1146,9 +1206,9 @@ export default function ConversationDetailScreen() {
       <SafeAreaView style={[styles.container, getBackgroundStyle()]}>
         {renderBackgroundImage()}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <FlatList
             ref={flatListRef}
@@ -1202,33 +1262,119 @@ export default function ConversationDetailScreen() {
           )}
 
           <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <TouchableOpacity
-              style={styles.attachmentButton}
-              onPress={handlePickImage}
+            {/* Attachment Toggle Button - Only show when keyboard is visible */}
+            {isKeyboardVisible && (
+              <TouchableOpacity
+                style={styles.attachmentToggleButton}
+                onPress={() => {
+                  const newShowState = !showAttachments;
+                  setShowAttachments(newShowState);
+                  if (newShowState) {
+                    Animated.parallel([
+                      Animated.timing(attachmentButtonsOpacity, {
+                        toValue: 1,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }),
+                      Animated.timing(attachmentButtonsHeight, {
+                        toValue: 1,
+                        duration: 200,
+                        useNativeDriver: false,
+                      }),
+                    ]).start();
+                  } else {
+                    Animated.parallel([
+                      Animated.timing(attachmentButtonsOpacity, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }),
+                      Animated.timing(attachmentButtonsHeight, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: false,
+                      }),
+                    ]).start();
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                {showAttachments ? (
+                  <ChevronDown size={20} color={colors.primary} />
+                ) : (
+                  <ChevronUp size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Attachment Buttons - Animated */}
+            <Animated.View
+              style={[
+                styles.attachmentButtonsContainer,
+                {
+                  opacity: attachmentButtonsOpacity,
+                  height: attachmentButtonsHeight.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 44], // Height of attachment buttons
+                  }),
+                  overflow: 'hidden',
+                },
+              ]}
             >
-              <ImageIcon size={22} color={colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.attachmentButton}
-              onPress={handlePickDocument}
-            >
-              <FileText size={22} color={colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.attachmentButton}
-              onPress={() => setShowStickerPicker(true)}
-            >
-              <Smile size={22} color={colors.primary} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachmentButton}
+                onPress={handlePickImage}
+                activeOpacity={0.7}
+              >
+                <ImageIcon size={22} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachmentButton}
+                onPress={handlePickDocument}
+                activeOpacity={0.7}
+              >
+                <FileText size={22} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachmentButton}
+                onPress={() => setShowStickerPicker(true)}
+                activeOpacity={0.7}
+              >
+                <Smile size={22} color={colors.primary} />
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* Text Input - Expanded when keyboard is visible */}
             <TextInput
-              style={styles.input}
+              ref={inputRef}
+              style={[
+                styles.input,
+                isKeyboardVisible && !showAttachments && styles.inputExpanded,
+              ]}
               placeholder="Type a message..."
               placeholderTextColor={colors.text.tertiary}
               value={messageText}
               onChangeText={setMessageText}
               multiline
               maxLength={1000}
+              onFocus={() => {
+                setIsKeyboardVisible(true);
+                setShowAttachments(false);
+                Animated.parallel([
+                  Animated.timing(attachmentButtonsOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                  }),
+                  Animated.timing(attachmentButtonsHeight, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: false,
+                  }),
+                ]).start();
+              }}
             />
+            
             <TouchableOpacity
               style={[styles.sendButton, (!messageText.trim() && !selectedImage && !selectedDocument && !selectedSticker) && styles.sendButtonDisabled]}
               onPress={handleSend}
@@ -1455,18 +1601,40 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
   },
+  attachmentToggleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   attachmentButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
     backgroundColor: colors.background.secondary,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
     color: colors.text.primary,
-    maxHeight: 100,
+  },
+  inputExpanded: {
+    marginLeft: 0,
   },
   sendButton: {
     width: 40,
