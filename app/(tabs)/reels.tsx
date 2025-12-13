@@ -45,18 +45,25 @@ export default function ReelsScreen() {
   const [reportingReel, setReportingReel] = useState<{ id: string; userId: string } | null>(null);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
   const [activeVideoAd, setActiveVideoAd] = useState<{ reelId: string; ad: Advertisement; canSkip: boolean; skipDelay: number } | null>(null);
+  const [activeBannerCardAd, setActiveBannerCardAd] = useState<{ reelId: string; ad: Advertisement; canSkip: boolean; skipDelay: number } | null>(null);
   const [videoAdPlaybackTime, setVideoAdPlaybackTime] = useState<number>(0);
   const [skipCountdown, setSkipCountdown] = useState<number>(0);
+  const [bannerCardSkipCountdown, setBannerCardSkipCountdown] = useState<number>(0);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const adVideoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const skipButtonOpacity = useRef(new Animated.Value(0)).current;
+  const bannerCardAdSlideAnim = useRef(new Animated.Value(200)).current; // Start off-screen
+  const bannerCardSkipButtonOpacity = useRef(new Animated.Value(0)).current;
   const recordedImpressions = useRef<Set<string>>(new Set());
   const skipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const bannerCardSkipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const bannerCardAutoDismissTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Configurable skip delay (5-10 seconds, default 5)
   const SKIP_DELAY_SECONDS = 5;
+  const BANNER_CARD_AUTO_DISMISS_SECONDS = 15; // Auto-dismiss after 15 seconds if not interacted
 
   // Reset recorded impressions when ads change
   useEffect(() => {
@@ -112,34 +119,71 @@ export default function ReelsScreen() {
     return () => clearInterval(interval);
   }, [currentUser, getSmartAds, smartAds.length]);
 
-  // Handle video ad display when scrolling to a reel with an ad
+  // Handle ad display when scrolling to a reel with an ad
   useEffect(() => {
     if (reels.length > 0 && currentIndex >= 0 && currentReelId) {
       const reel = reels[currentIndex];
       if (reel) {
-        // Check if this reel should show a video ad
+        // Check if this reel should show an ad
         const shouldShowAdAfter = (currentIndex + 1) % 5 === 0 && smartAds.length > 0;
         if (shouldShowAdAfter) {
           const adIndex = Math.floor((currentIndex + 1) / 5 - 1) % smartAds.length;
           const ad = smartAds[adIndex];
           
-          // If it's a video ad and not already showing, trigger it
-          if (ad && ad.type === 'video' && (!activeVideoAd || activeVideoAd.reelId !== reel.id)) {
-            // Pause the reel video
-            const reelVideoRef = videoRefs.current[reel.id];
-            if (reelVideoRef) {
-              reelVideoRef.pauseAsync().catch(() => {});
+          if (ad) {
+            // Video ads: Full overlay, pause video
+            if (ad.type === 'video' && (!activeVideoAd || activeVideoAd.reelId !== reel.id)) {
+              // Pause the reel video
+              const reelVideoRef = videoRefs.current[reel.id];
+              if (reelVideoRef) {
+                reelVideoRef.pauseAsync().catch(() => {});
+              }
+              // Show video ad overlay
+              setActiveVideoAd({ 
+                reelId: reel.id, 
+                ad, 
+                canSkip: false,
+                skipDelay: SKIP_DELAY_SECONDS 
+              });
+              setVideoAdPlaybackTime(0);
+              setSkipCountdown(SKIP_DELAY_SECONDS);
+              skipButtonOpacity.setValue(0);
             }
-            // Show ad overlay with skip delay
-            setActiveVideoAd({ 
-              reelId: reel.id, 
-              ad, 
-              canSkip: false,
-              skipDelay: SKIP_DELAY_SECONDS 
-            });
-            setVideoAdPlaybackTime(0);
-            setSkipCountdown(SKIP_DELAY_SECONDS);
-            skipButtonOpacity.setValue(0);
+            // Banner/Card ads: Bottom overlay, video continues
+            else if ((ad.type === 'banner' || ad.type === 'card') && 
+                     (!activeBannerCardAd || activeBannerCardAd.reelId !== reel.id)) {
+              // Don't pause the video - it continues playing
+              // Show banner/card ad overlay at bottom
+              setActiveBannerCardAd({ 
+                reelId: reel.id, 
+                ad, 
+                canSkip: false,
+                skipDelay: SKIP_DELAY_SECONDS 
+              });
+              setBannerCardSkipCountdown(SKIP_DELAY_SECONDS);
+              bannerCardSkipButtonOpacity.setValue(0);
+              
+              // Slide up animation
+              Animated.spring(bannerCardAdSlideAnim, {
+                toValue: 0,
+                damping: 15,
+                stiffness: 100,
+                useNativeDriver: true,
+              }).start();
+              
+              // Auto-dismiss after 15 seconds
+              if (bannerCardAutoDismissTimeout.current) {
+                clearTimeout(bannerCardAutoDismissTimeout.current);
+              }
+              bannerCardAutoDismissTimeout.current = setTimeout(() => {
+                handleDismissBannerCardAd();
+              }, BANNER_CARD_AUTO_DISMISS_SECONDS * 1000);
+            }
+          }
+        } else {
+          // No ad for this reel, dismiss any active banner/card ads
+          if (activeBannerCardAd && activeBannerCardAd.reelId === reel.id) {
+            handleDismissBannerCardAd();
           }
         }
       }
@@ -490,6 +534,37 @@ export default function ReelsScreen() {
     }
   };
 
+  const handleDismissBannerCardAd = () => {
+    if (activeBannerCardAd) {
+      // Clear intervals and timeouts
+      if (bannerCardSkipCountdownInterval.current) {
+        clearInterval(bannerCardSkipCountdownInterval.current);
+        bannerCardSkipCountdownInterval.current = null;
+      }
+      if (bannerCardAutoDismissTimeout.current) {
+        clearTimeout(bannerCardAutoDismissTimeout.current);
+        bannerCardAutoDismissTimeout.current = null;
+      }
+      
+      // Slide down animation
+      Animated.timing(bannerCardAdSlideAnim, {
+        toValue: 200,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setActiveBannerCardAd(null);
+        setBannerCardSkipCountdown(0);
+        bannerCardAdSlideAnim.setValue(200); // Reset for next time
+      });
+    }
+  };
+
+  const handleSkipBannerCardAd = () => {
+    if (activeBannerCardAd && activeBannerCardAd.canSkip) {
+      handleDismissBannerCardAd();
+    }
+  };
+
   // Start countdown timer when video ad is shown
   useEffect(() => {
     if (activeVideoAd && !activeVideoAd.canSkip) {
@@ -528,6 +603,45 @@ export default function ReelsScreen() {
       };
     }
   }, [activeVideoAd?.reelId, activeVideoAd?.ad.id]);
+
+  // Start countdown timer when banner/card ad is shown
+  useEffect(() => {
+    if (activeBannerCardAd && !activeBannerCardAd.canSkip) {
+      // Reset countdown
+      setBannerCardSkipCountdown(activeBannerCardAd.skipDelay);
+      
+      // Start countdown interval
+      bannerCardSkipCountdownInterval.current = setInterval(() => {
+        setBannerCardSkipCountdown((prev) => {
+          if (prev <= 1) {
+            // Countdown finished, enable skip
+            if (bannerCardSkipCountdownInterval.current) {
+              clearInterval(bannerCardSkipCountdownInterval.current);
+              bannerCardSkipCountdownInterval.current = null;
+            }
+            setActiveBannerCardAd((prevAd) => 
+              prevAd ? { ...prevAd, canSkip: true } : null
+            );
+            // Fade in skip button
+            Animated.timing(bannerCardSkipButtonOpacity, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => {
+        if (bannerCardSkipCountdownInterval.current) {
+          clearInterval(bannerCardSkipCountdownInterval.current);
+          bannerCardSkipCountdownInterval.current = null;
+        }
+      };
+    }
+  }, [activeBannerCardAd?.reelId, activeBannerCardAd?.ad.id]);
 
   // Render different ad types
   const renderBannerAd = (ad: Advertisement) => {
@@ -602,6 +716,111 @@ export default function ReelsScreen() {
           </View>
         </TouchableOpacity>
       </View>
+    );
+  };
+
+  const renderBannerCardAdOverlay = (reelId: string, ad: Advertisement) => {
+    if (!activeBannerCardAd || activeBannerCardAd.reelId !== reelId || activeBannerCardAd.ad.id !== ad.id) {
+      return null;
+    }
+
+    // Record impression for banner/card ad when overlay is shown
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+
+    const isBanner = ad.type === 'banner';
+
+    return (
+      <Animated.View 
+        style={[
+          styles.bannerCardAdOverlay,
+          { transform: [{ translateY: bannerCardAdSlideAnim }] }
+        ]}
+      >
+        <View style={[styles.bannerCardAdContainer, isBanner && styles.bannerCardAdBanner]}>
+          {/* Ad Badge */}
+          <View style={styles.bannerCardAdBadge}>
+            <Text style={styles.bannerCardAdBadgeText}>Ad</Text>
+          </View>
+
+          {/* Skip Button */}
+          <Animated.View 
+            style={[
+              styles.bannerCardSkipButtonContainer,
+              { opacity: bannerCardSkipButtonOpacity }
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.bannerCardSkipButton,
+                !activeBannerCardAd.canSkip && styles.bannerCardSkipButtonDisabled
+              ]}
+              onPress={handleSkipBannerCardAd}
+              activeOpacity={activeBannerCardAd.canSkip ? 0.8 : 1}
+              disabled={!activeBannerCardAd.canSkip}
+            >
+              <Text style={styles.bannerCardSkipButtonText}>
+                {activeBannerCardAd.canSkip 
+                  ? 'Skip' 
+                  : `Skip in ${bannerCardSkipCountdown}s`
+                }
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Ad Content */}
+          <TouchableOpacity
+            style={styles.bannerCardAdContent}
+            onPress={() => handleAdPress(ad)}
+            activeOpacity={0.9}
+          >
+            {isBanner ? (
+              // Banner Ad Layout
+              <>
+                <Image 
+                  source={{ uri: ad.imageUrl }} 
+                  style={styles.bannerCardAdImage} 
+                  contentFit="cover"
+                  onError={() => console.error('Failed to load banner ad image:', ad.id)}
+                />
+                <View style={styles.bannerCardAdTextContainer}>
+                  <Text style={styles.bannerCardAdTitle} numberOfLines={1}>{ad.title}</Text>
+                  {ad.linkUrl && (
+                    <View style={styles.bannerCardAdLinkButton}>
+                      <Text style={styles.bannerCardAdLinkText}>Learn More</Text>
+                      <ExternalLink size={14} color={colors.primary} />
+                    </View>
+                  )}
+                </View>
+              </>
+            ) : (
+              // Card Ad Layout
+              <>
+                <Image 
+                  source={{ uri: ad.imageUrl }} 
+                  style={styles.bannerCardAdCardImage} 
+                  contentFit="cover"
+                  onError={() => console.error('Failed to load card ad image:', ad.id)}
+                />
+                <View style={styles.bannerCardAdCardTextContainer}>
+                  <Text style={styles.bannerCardAdTitle} numberOfLines={1}>{ad.title}</Text>
+                  <Text style={styles.bannerCardAdDescription} numberOfLines={2}>
+                    {ad.description}
+                  </Text>
+                  {ad.linkUrl && (
+                    <View style={styles.bannerCardAdLinkButton}>
+                      <Text style={styles.bannerCardAdLinkText}>Learn More</Text>
+                      <ExternalLink size={14} color={colors.primary} />
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     );
   };
 
@@ -691,7 +910,7 @@ export default function ReelsScreen() {
   };
 
   const renderAd = (ad: Advertisement, reelId?: string) => {
-    // For video ads in reels, show as overlay instead of separate item
+    // For video ads in reels, show as full overlay (pauses video)
     if (ad.type === 'video' && reelId) {
       // Trigger video ad overlay
       if (!activeVideoAd || activeVideoAd.reelId !== reelId) {
@@ -714,7 +933,14 @@ export default function ReelsScreen() {
       return null; // Video ads are rendered as overlay, not as separate items
     }
     
-    // For other ad types or when not in reels context
+    // For banner/card ads in reels, show as bottom overlay (video continues)
+    if ((ad.type === 'banner' || ad.type === 'card') && reelId) {
+      // Banner/card ads are handled by useEffect and rendered as overlay
+      // Don't render as separate items
+      return null;
+    }
+    
+    // For other ad types or when not in reels context (fallback)
     switch (ad.type) {
       case 'banner':
         return renderBannerAd(ad);
@@ -774,6 +1000,10 @@ export default function ReelsScreen() {
           />
           {/* Video Ad Overlay */}
           {hasVideoAd && activeVideoAd && renderVideoAdOverlay(reel.id, activeVideoAd.ad)}
+          
+          {/* Banner/Card Ad Overlay - Bottom of video, doesn't pause */}
+          {activeBannerCardAd && activeBannerCardAd.reelId === reel.id && 
+           renderBannerCardAdOverlay(reel.id, activeBannerCardAd.ad)}
         </TouchableOpacity>
 
         <View style={styles.overlay}>
@@ -1821,6 +2051,121 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
     fontWeight: '700' as const,
     color: colors.text.white,
     letterSpacing: 0.3,
+  },
+  // Banner/Card Ad Overlay Styles
+  bannerCardAdOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    paddingHorizontal: 12,
+    paddingBottom: 20,
+  },
+  bannerCardAdContainer: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    position: 'relative',
+  },
+  bannerCardAdBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bannerCardAdBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 2,
+  },
+  bannerCardAdBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+    letterSpacing: 0.5,
+  },
+  bannerCardSkipButtonContainer: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 2,
+  },
+  bannerCardSkipButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  bannerCardSkipButtonDisabled: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    opacity: 0.8,
+  },
+  bannerCardSkipButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+    letterSpacing: 0.3,
+  },
+  bannerCardAdContent: {
+    width: '100%',
+  },
+  bannerCardAdImage: {
+    width: '100%',
+    height: 100,
+  },
+  bannerCardAdCardImage: {
+    width: '100%',
+    height: 150,
+  },
+  bannerCardAdTextContainer: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bannerCardAdCardTextContainer: {
+    padding: 12,
+  },
+  bannerCardAdTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  bannerCardAdDescription: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  bannerCardAdLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.primary + '20',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  bannerCardAdLinkText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
 });
 
