@@ -5159,7 +5159,7 @@ export const [AppContext, useApp] = createContextHook(() => {
     
     if (!status) return null;
 
-    // Calculate actual status based on last_active_at (not just stored status_type)
+    // Calculate actual status based on last_active_at
     const now = new Date();
     const lastActive = new Date(status.lastActiveAt);
     const diffMs = now.getTime() - lastActive.getTime();
@@ -5168,11 +5168,22 @@ export const [AppContext, useApp] = createContextHook(() => {
     // Determine actual status based on activity
     let actualStatusType: UserStatusType = status.statusType;
     
-    // If status is manually set to 'busy', preserve it
+    // If status is manually set to 'busy', always preserve it
     if (status.statusType === 'busy') {
-      actualStatusType = status.statusType;
-    } else {
-      // Calculate based on last activity
+      actualStatusType = 'busy';
+    } 
+    // If stored status is 'online' and last_active_at is recent (< 10 minutes), trust it
+    // This prevents overriding online status when user is actively using the app
+    // We use 10 minutes to account for network delays and update intervals
+    else if (status.statusType === 'online' && diffMins < 10) {
+      actualStatusType = 'online';
+    }
+    // If stored status is 'away' and last_active_at is recent (< 15 minutes), trust it
+    else if (status.statusType === 'away' && diffMins < 15) {
+      actualStatusType = 'away';
+    }
+    // Otherwise, calculate based on last activity
+    else {
       if (diffMins < 2) {
         // Active in last 2 minutes = Online
         actualStatusType = 'online';
@@ -5361,19 +5372,14 @@ export const [AppContext, useApp] = createContextHook(() => {
           schema: 'public',
           table: 'user_status',
         },
-        (payload) => {
+        async (payload) => {
           const statusData = payload.new as any;
           if (statusData && conversationUserIds.has(statusData.user_id)) {
-            const status: UserStatus = {
-              userId: statusData.user_id,
-              statusType: statusData.status_type,
-              customStatusText: statusData.custom_status_text,
-              lastActiveAt: statusData.last_active_at,
-              statusVisibility: statusData.status_visibility,
-              lastSeenVisibility: statusData.last_seen_visibility,
-              updatedAt: statusData.updated_at,
-            };
-            setUserStatuses(prev => ({ ...prev, [statusData.user_id]: status }));
+            // Use getUserStatus to get properly calculated status
+            const calculatedStatus = await getUserStatus(statusData.user_id);
+            if (calculatedStatus) {
+              setUserStatuses(prev => ({ ...prev, [statusData.user_id]: calculatedStatus }));
+            }
           }
         }
       )
