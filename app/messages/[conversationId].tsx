@@ -37,11 +37,13 @@ import StickerPicker from '@/components/StickerPicker';
 import { Sticker, Advertisement } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 import { ExternalLink } from 'lucide-react-native';
+import StatusIndicator from '@/components/StatusIndicator';
+import { UserStatus } from '@/types';
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick } = useApp();
+  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick, getUserStatus } = useApp();
   const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -62,6 +64,7 @@ export default function ConversationDetailScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showAttachments, setShowAttachments] = useState(true);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
+  const [otherParticipantStatus, setOtherParticipantStatus] = useState<UserStatus | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -317,6 +320,72 @@ export default function ConversationDetailScreen() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUser]);
+
+  // Load other participant's status
+  useEffect(() => {
+    const loadOtherParticipantStatus = async () => {
+      const other = getOtherParticipant();
+      if (other?.id && currentUser && getUserStatus) {
+        try {
+          const status = await getUserStatus(other.id);
+          if (status) {
+            setOtherParticipantStatus(status);
+          } else {
+            // If no status exists, create a default offline status
+            setOtherParticipantStatus({
+              userId: other.id,
+              statusType: 'offline',
+              lastActiveAt: new Date().toISOString(),
+              statusVisibility: 'contacts',
+              lastSeenVisibility: 'contacts',
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (error) {
+          console.error('Failed to load participant status:', error);
+          // Set default offline status on error
+          setOtherParticipantStatus({
+            userId: other.id,
+            statusType: 'offline',
+            lastActiveAt: new Date().toISOString(),
+            statusVisibility: 'contacts',
+            lastSeenVisibility: 'contacts',
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+    };
+    if (conversationId && currentUser && conversation) {
+      loadOtherParticipantStatus();
+    }
+  }, [conversationId, currentUser, conversation, getUserStatus]);
+
+  // Subscribe to status updates for other participant
+  useEffect(() => {
+    const other = getOtherParticipant();
+    if (!other?.id || !getUserStatus) return;
+
+    const channel = supabase
+      .channel(`user_status:${other.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_status',
+          filter: `user_id=eq.${other.id}`,
+        },
+        async (payload) => {
+          const status = await getUserStatus(other.id);
+          setOtherParticipantStatus(status);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, conversation, getUserStatus]);
 
   const loadMessages = async () => {
     try {
@@ -690,12 +759,15 @@ export default function ConversationDetailScreen() {
   };
 
   const getOtherParticipant = () => {
-    if (!conversation) return null;
-    const index = conversation.participants.indexOf(currentUser!.id);
-    const otherIndex = index === 0 ? 1 : 0;
+    if (!conversation || !currentUser) return null;
+    // Find the other participant (not the current user)
+    const otherParticipantId = conversation.participants.find(id => id !== currentUser.id);
+    if (!otherParticipantId) return null;
+    
+    const otherIndex = conversation.participants.indexOf(otherParticipantId);
     return {
-      id: conversation.participants[otherIndex],
-      name: conversation.participantNames[otherIndex],
+      id: otherParticipantId,
+      name: conversation.participantNames[otherIndex] || 'Unknown',
       avatar: conversation.participantAvatars[otherIndex],
     };
   };
@@ -834,6 +906,21 @@ export default function ConversationDetailScreen() {
     if (!result.canceled && result.assets[0]) {
       setSelectedBackgroundImage(result.assets[0].uri);
     }
+  };
+
+  const getLastSeenText = (lastActiveAt: string) => {
+    const lastActive = new Date(lastActiveAt);
+    const now = new Date();
+    const diffMs = now.getTime() - lastActive.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Active now';
+    if (diffMins < 60) return `Active ${diffMins}m ago`;
+    if (diffHours < 24) return `Active ${diffHours}h ago`;
+    if (diffDays < 7) return `Active ${diffDays}d ago`;
+    return `Last seen ${lastActive.toLocaleDateString()}`;
   };
 
   const handleAdPress = async (ad: Advertisement) => {
@@ -1361,20 +1448,40 @@ export default function ConversationDetailScreen() {
                 style={styles.headerProfileButton}
                 activeOpacity={0.7}
               >
-                {otherParticipant.avatar ? (
-                  <Image
-                    source={{ uri: otherParticipant.avatar }}
-                    style={styles.headerAvatar}
+                <View style={styles.headerAvatarContainer}>
+                  {otherParticipant.avatar ? (
+                    <Image
+                      source={{ uri: otherParticipant.avatar }}
+                      style={styles.headerAvatar}
+                    />
+                  ) : (
+                    <View style={styles.headerAvatarPlaceholder}>
+                      <Text style={styles.headerAvatarPlaceholderText}>
+                        {otherParticipant.name.charAt(0)}
+                      </Text>
+                    </View>
+                  )}
+                  <StatusIndicator 
+                    status={otherParticipantStatus?.statusType || 'offline'} 
+                    size="small" 
+                    showBorder={true}
                   />
-                ) : (
-                  <View style={styles.headerAvatarPlaceholder}>
-                    <Text style={styles.headerAvatarPlaceholderText}>
-                      {otherParticipant.name.charAt(0)}
-                    </Text>
-                  </View>
-                )}
+                </View>
               </TouchableOpacity>
-              <Text style={styles.headerName}>{otherParticipant.name}</Text>
+              <View style={styles.headerNameContainer}>
+                <Text style={styles.headerName}>{otherParticipant.name}</Text>
+                <Text style={styles.headerStatus}>
+                  {otherParticipantStatus 
+                    ? (otherParticipantStatus.statusType === 'online' 
+                        ? 'Online' 
+                        : otherParticipantStatus.statusType === 'away'
+                        ? 'Away'
+                        : otherParticipantStatus.statusType === 'busy'
+                        ? 'Busy'
+                        : getLastSeenText(otherParticipantStatus.lastActiveAt))
+                    : 'Loading...'}
+                </Text>
+              </View>
             </View>
           ),
           headerRight: () => (
@@ -1623,6 +1730,9 @@ const styles = StyleSheet.create({
   headerRight: {
     padding: 4,
   },
+  headerAvatarContainer: {
+    position: 'relative',
+  },
   headerAvatar: {
     width: 32,
     height: 32,
@@ -1641,10 +1751,18 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.text.white,
   },
+  headerNameContainer: {
+    flex: 1,
+  },
   headerName: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: colors.text.primary,
+  },
+  headerStatus: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    marginTop: 2,
   },
   messagesList: {
     paddingHorizontal: 16,
