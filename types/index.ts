@@ -316,3 +316,30 @@ export interface UserRestriction {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface LegalDocument {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  version: string;
+  isActive: boolean;
+  isRequired: boolean;
+  displayLocation: ('signup' | 'settings' | 'search' | 'relationship')[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  lastUpdatedBy?: string;
+}
+
+export interface UserLegalAcceptance {
+  id: string;
+  userId: string;
+  documentId: string;
+  documentVersion: string;
+  acceptedAt: string;
+  context: 'signup' | 'relationship_registration' | 'update' | 'manual';
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
