@@ -28,59 +28,61 @@ export default function LegalAcceptanceCheckbox({
   const styles = createStyles(colors, isAccepted);
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={() => onToggle(document.id, !isAccepted)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.checkboxWrapper}>
-        <View style={styles.checkbox}>
-          {isAccepted && (
-            <View style={styles.checkmarkContainer}>
-              <Check size={16} color={colors.text.white} strokeWidth={3} />
-            </View>
-          )}
-        </View>
-      </View>
-      
-      <View style={styles.content}>
-        <View style={styles.headerRow}>
-          <View style={styles.titleRow}>
-            <FileText size={18} color={isAccepted ? colors.primary : colors.text.secondary} />
-            <Text style={styles.title}>
-              {required && <Text style={styles.requiredStar}>* </Text>}
-              {document.title}
-            </Text>
+    <View style={styles.container}>
+      <View style={styles.checkboxRow}>
+        <TouchableOpacity
+          style={styles.checkboxWrapper}
+          onPress={() => onToggle(document.id, !isAccepted)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.checkbox}>
+            {isAccepted && (
+              <View style={styles.checkmarkContainer}>
+                <Check size={16} color={colors.text.white} strokeWidth={3} />
+              </View>
+            )}
           </View>
-          {required && (
-            <View style={styles.requiredBadge}>
-              <Text style={styles.requiredBadgeText}>Required</Text>
-            </View>
-          )}
-        </View>
+        </TouchableOpacity>
         
-        <View style={styles.metaRow}>
-          <Text style={styles.versionText}>Version {document.version}</Text>
-          <TouchableOpacity
-            style={styles.viewLink}
-            onPress={(e) => {
-              e.stopPropagation();
-              onViewDocument(document);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.viewLinkText}>View Full Document</Text>
-            <ExternalLink size={14} color={colors.primary} />
-          </TouchableOpacity>
+        <View style={styles.content}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.titleRow}
+              onPress={() => onViewDocument(document)}
+              activeOpacity={0.7}
+            >
+              <FileText size={18} color={isAccepted ? colors.primary : colors.text.secondary} />
+              <Text style={styles.title}>
+                {required && <Text style={styles.requiredStar}>* </Text>}
+                {document.title}
+              </Text>
+            </TouchableOpacity>
+            {required && (
+              <View style={styles.requiredBadge}>
+                <Text style={styles.requiredBadgeText}>Required</Text>
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.metaRow}>
+            <Text style={styles.versionText}>Version {document.version}</Text>
+            <TouchableOpacity
+              style={styles.viewLink}
+              onPress={() => onViewDocument(document)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewLinkText}>View Full Document</Text>
+              <ExternalLink size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
 const createStyles = (colors: any, isAccepted: boolean) => StyleSheet.create({
   container: {
-    flexDirection: 'row',
     backgroundColor: colors.background.primary,
     borderRadius: 16,
     padding: 16,
@@ -92,6 +94,9 @@ const createStyles = (colors: any, isAccepted: boolean) => StyleSheet.create({
     shadowOpacity: isAccepted ? 0.08 : 0.04,
     shadowRadius: 4,
     elevation: isAccepted ? 3 : 1,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
   },
   checkboxWrapper: {
     marginRight: 16,
