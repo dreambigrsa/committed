@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Search as SearchIcon, CheckCircle2, X, Camera, Image as ImageIcon } from 'lucide-react-native';
+import { Search as SearchIcon, CheckCircle2, X, Camera, Image as ImageIcon, AlertCircle, ChevronRight } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
+import { LegalDocument } from '@/types';
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -28,6 +30,46 @@ export default function SearchScreen() {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchMode, setSearchMode] = useState<'text' | 'face'>('text');
   const [searchPhoto, setSearchPhoto] = useState<string | null>(null);
+  const [disclaimerDoc, setDisclaimerDoc] = useState<LegalDocument | null>(null);
+
+  useEffect(() => {
+    loadDisclaimerDocument();
+  }, []);
+
+  const loadDisclaimerDocument = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('legal_documents')
+        .select('*')
+        .eq('is_active', true)
+        .eq('slug', 'public-registry-disclaimer')
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Failed to load disclaimer document:', error);
+        return;
+      }
+
+      if (data) {
+        setDisclaimerDoc({
+          id: data.id,
+          title: data.title,
+          slug: data.slug,
+          content: data.content,
+          version: data.version,
+          isActive: data.is_active,
+          isRequired: data.is_required,
+          displayLocation: data.display_location || [],
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+          createdBy: data.created_by,
+          lastUpdatedBy: data.last_updated_by,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading disclaimer document:', error);
+    }
+  };
 
   const handleSearch = async (text: string) => {
     if (searchMode === 'face') return; // Face search is handled separately
@@ -229,6 +271,20 @@ export default function SearchScreen() {
           Find verified relationship statuses
         </Text>
       </View>
+
+      {disclaimerDoc && (
+        <TouchableOpacity
+          style={styles.disclaimerBanner}
+          onPress={() => router.push(`/legal/${disclaimerDoc.slug}` as any)}
+          activeOpacity={0.7}
+        >
+          <AlertCircle size={18} color={colors.primary} />
+          <Text style={styles.disclaimerText}>
+            Search results are based on user-submitted information and confirmations.
+          </Text>
+          <ChevronRight size={18} color={colors.primary} />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.searchContainer}>
         {/* Search Mode Toggle */}
@@ -642,5 +698,24 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.secondary,
     fontWeight: '600' as const,
     marginTop: 4,
+  },
+  disclaimerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary + '15',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  disclaimerText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text.primary,
+    lineHeight: 18,
   },
 });
