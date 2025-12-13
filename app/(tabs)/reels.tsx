@@ -61,9 +61,9 @@ export default function ReelsScreen() {
   const bannerCardSkipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
   const bannerCardAutoDismissTimeout = useRef<NodeJS.Timeout | null>(null);
   
-  // Configurable skip delay (5-10 seconds, default 5)
-  const SKIP_DELAY_SECONDS = 5;
-  const BANNER_CARD_AUTO_DISMISS_SECONDS = 15; // Auto-dismiss after 15 seconds if not interacted
+  // Configurable skip delay (5-15 seconds, default 15)
+  const SKIP_DELAY_SECONDS = 15;
+  const BANNER_CARD_AUTO_DISMISS_SECONDS = 20; // Auto-dismiss after 20 seconds if not interacted
 
   // Reset recorded impressions when ads change
   useEffect(() => {
@@ -185,7 +185,8 @@ export default function ReelsScreen() {
                 skipDelay: SKIP_DELAY_SECONDS 
               });
               setBannerCardSkipCountdown(SKIP_DELAY_SECONDS);
-              bannerCardSkipButtonOpacity.setValue(0);
+              // Reset skip button opacity (button is always visible now, but we keep this for consistency)
+              bannerCardSkipButtonOpacity.setValue(1);
               
               // Slide up animation
               Animated.spring(bannerCardAdSlideAnim, {
@@ -630,14 +631,21 @@ export default function ReelsScreen() {
 
   // Start countdown timer when banner/card ad is shown
   useEffect(() => {
+    // Clear any existing interval first
+    if (bannerCardSkipCountdownInterval.current) {
+      clearInterval(bannerCardSkipCountdownInterval.current);
+      bannerCardSkipCountdownInterval.current = null;
+    }
+
     if (activeBannerCardAd && !activeBannerCardAd.canSkip) {
-      // Reset countdown
+      // Reset countdown when ad is shown
       setBannerCardSkipCountdown(activeBannerCardAd.skipDelay);
       
-      // Start countdown interval
+      // Start countdown interval immediately
       bannerCardSkipCountdownInterval.current = setInterval(() => {
         setBannerCardSkipCountdown((prev) => {
-          if (prev <= 1) {
+          const newValue = prev - 1;
+          if (newValue <= 0) {
             // Countdown finished, enable skip
             if (bannerCardSkipCountdownInterval.current) {
               clearInterval(bannerCardSkipCountdownInterval.current);
@@ -646,15 +654,9 @@ export default function ReelsScreen() {
             setActiveBannerCardAd((prevAd) => 
               prevAd ? { ...prevAd, canSkip: true } : null
             );
-            // Fade in skip button
-            Animated.timing(bannerCardSkipButtonOpacity, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }).start();
             return 0;
           }
-          return prev - 1;
+          return newValue;
         });
       }, 1000);
       
@@ -664,8 +666,11 @@ export default function ReelsScreen() {
           bannerCardSkipCountdownInterval.current = null;
         }
       };
+    } else if (!activeBannerCardAd) {
+      // Clear countdown when ad is dismissed
+      setBannerCardSkipCountdown(0);
     }
-  }, [activeBannerCardAd?.reelId, activeBannerCardAd?.ad.id]);
+  }, [activeBannerCardAd?.reelId, activeBannerCardAd?.ad.id, activeBannerCardAd?.canSkip]);
 
   // Render different ad types
   const renderBannerAd = (ad: Advertisement) => {
@@ -769,13 +774,8 @@ export default function ReelsScreen() {
             <Text style={styles.bannerCardAdBadgeText}>Ad</Text>
           </View>
 
-          {/* Skip Button */}
-          <Animated.View 
-            style={[
-              styles.bannerCardSkipButtonContainer,
-              { opacity: bannerCardSkipButtonOpacity }
-            ]}
-          >
+          {/* Skip Button - Always visible with countdown */}
+          <View style={styles.bannerCardSkipButtonContainer}>
             <TouchableOpacity
               style={[
                 styles.bannerCardSkipButton,
@@ -792,7 +792,7 @@ export default function ReelsScreen() {
                 }
               </Text>
             </TouchableOpacity>
-          </Animated.View>
+          </View>
 
           {/* Ad Content */}
           <TouchableOpacity
@@ -2079,12 +2079,13 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
   // Banner/Card Ad Overlay Styles
   bannerCardAdOverlay: {
     position: 'absolute',
-    bottom: 0,
+    bottom: overlayBottomPadding + 160, // Position above tab bar + overlay content (description/profile/actions)
     left: 0,
     right: 0,
-    zIndex: 50,
+    zIndex: 60, // Higher than overlay content (which is at default zIndex)
     paddingHorizontal: 12,
-    paddingBottom: 20,
+    maxWidth: width * 0.85, // Don't cover the entire width, leave some space
+    alignSelf: 'center', // Center the ad
   },
   bannerCardAdContainer: {
     backgroundColor: colors.background.primary,
