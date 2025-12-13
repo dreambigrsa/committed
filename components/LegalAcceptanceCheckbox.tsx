@@ -48,7 +48,9 @@ export default function LegalAcceptanceCheckbox({
           <View style={styles.headerRow}>
             <TouchableOpacity
               style={styles.titleRow}
-              onPress={() => onViewDocument(document)}
+              onPress={() => {
+                onViewDocument(document);
+              }}
               activeOpacity={0.7}
             >
               <FileText size={18} color={isAccepted ? colors.primary : colors.text.secondary} />
@@ -68,7 +70,9 @@ export default function LegalAcceptanceCheckbox({
             <Text style={styles.versionText}>Version {document.version}</Text>
             <TouchableOpacity
               style={styles.viewLink}
-              onPress={() => onViewDocument(document)}
+              onPress={() => {
+                onViewDocument(document);
+              }}
               activeOpacity={0.7}
             >
               <Text style={styles.viewLinkText}>View Full Document</Text>
