@@ -5154,14 +5154,48 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser]);
 
   const getUserStatus = useCallback(async (userId: string): Promise<UserStatus | null> => {
-    // Check local cache first
-    if (userStatuses[userId]) {
-      return userStatuses[userId];
+    // Always load fresh from database to get accurate last_active_at
+    const status = await loadUserStatus(userId);
+    
+    if (!status) return null;
+
+    // Calculate actual status based on last_active_at (not just stored status_type)
+    const now = new Date();
+    const lastActive = new Date(status.lastActiveAt);
+    const diffMs = now.getTime() - lastActive.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    // Determine actual status based on activity
+    let actualStatusType: UserStatusType = status.statusType;
+    
+    // If status is manually set to 'busy', preserve it
+    if (status.statusType === 'busy') {
+      actualStatusType = status.statusType;
+    } else {
+      // Calculate based on last activity
+      if (diffMins < 2) {
+        // Active in last 2 minutes = Online
+        actualStatusType = 'online';
+      } else if (diffMins >= 2 && diffMins < 15) {
+        // Inactive 2-15 minutes = Away
+        actualStatusType = 'away';
+      } else {
+        // Inactive 15+ minutes = Offline
+        actualStatusType = 'offline';
+      }
     }
 
-    // Load from database
-    return await loadUserStatus(userId);
-  }, [userStatuses, loadUserStatus]);
+    // Return status with calculated type
+    const calculatedStatus: UserStatus = {
+      ...status,
+      statusType: actualStatusType,
+    };
+
+    // Update cache with calculated status
+    setUserStatuses(prev => ({ ...prev, [userId]: calculatedStatus }));
+    
+    return calculatedStatus;
+  }, [loadUserStatus]);
 
   const startStatusTracking = useCallback(() => {
     if (!currentUser) return;
