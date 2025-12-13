@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
+import { Shield, Heart, ArrowLeft, FileText } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -374,20 +374,35 @@ export default function AuthScreen() {
 
           {isSignUp && !showForgotPassword && legalDocuments.length > 0 && (
             <View style={styles.legalSection}>
-              <Text style={styles.legalSectionTitle}>Legal Documents</Text>
+              <View style={styles.legalSectionHeader}>
+                <View style={styles.legalSectionIconContainer}>
+                  <Shield size={20} color={colors.primary} />
+                </View>
+                <View style={styles.legalSectionHeaderText}>
+                  <Text style={styles.legalSectionTitle}>Legal Documents</Text>
+                  <Text style={styles.legalSectionSubtitle}>
+                    Please review and accept the required documents to create your account
+                  </Text>
+                </View>
+              </View>
               {loadingLegalDocs ? (
-                <ActivityIndicator size="small" color={colors.primary} style={styles.legalLoading} />
+                <View style={styles.legalLoadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.legalLoadingText}>Loading documents...</Text>
+                </View>
               ) : (
-                legalDocuments.map((doc) => (
-                  <LegalAcceptanceCheckbox
-                    key={doc.id}
-                    document={doc}
-                    isAccepted={legalAcceptances[doc.id] || false}
-                    onToggle={handleToggleAcceptance}
-                    onViewDocument={handleViewDocument}
-                    required={doc.isRequired}
-                  />
-                ))
+                <View style={styles.legalDocumentsList}>
+                  {legalDocuments.map((doc) => (
+                    <LegalAcceptanceCheckbox
+                      key={doc.id}
+                      document={doc}
+                      isAccepted={legalAcceptances[doc.id] || false}
+                      onToggle={handleToggleAcceptance}
+                      onViewDocument={handleViewDocument}
+                      required={doc.isRequired}
+                    />
+                  ))}
+                </View>
               )}
             </View>
           )}
@@ -543,18 +558,51 @@ const createStyles = (colors: typeof import('@/constants/colors').default) => St
     marginBottom: 24,
   },
   legalSection: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
+    marginTop: 32,
+    paddingTop: 24,
+    borderTopWidth: 2,
     borderTopColor: colors.border.light,
   },
+  legalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 20,
+  },
+  legalSectionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legalSectionHeaderText: {
+    flex: 1,
+  },
   legalSectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  legalLoading: {
-    paddingVertical: 20,
+  legalSectionSubtitle: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
+  legalDocumentsList: {
+    gap: 12,
+  },
+  legalLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 24,
+  },
+  legalLoadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
   },
 });
