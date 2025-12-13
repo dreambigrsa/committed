@@ -58,11 +58,32 @@ export default function MessagesScreen() {
     const otherParticipantId = conversation.participants.find((id: string) => id !== currentUser.id);
     if (!otherParticipantId) return { id: null, name: 'Unknown', avatar: null };
     
+    // Find the index of the other participant
     const otherIndex = conversation.participants.indexOf(otherParticipantId);
+    const currentUserIndex = conversation.participants.indexOf(currentUser.id);
+    
+    // Ensure we have valid data - if index is out of bounds, try to find by position
+    let name = 'Unknown';
+    let avatar: string | undefined = undefined;
+    
+    if (otherIndex >= 0 && otherIndex < conversation.participantNames.length) {
+      name = conversation.participantNames[otherIndex] || 'Unknown';
+      avatar = conversation.participantAvatars[otherIndex];
+    } else {
+      // Fallback: if current user is first, other is second, and vice versa
+      if (currentUserIndex === 0) {
+        name = conversation.participantNames[1] || 'Unknown';
+        avatar = conversation.participantAvatars[1];
+      } else {
+        name = conversation.participantNames[0] || 'Unknown';
+        avatar = conversation.participantAvatars[0];
+      }
+    }
+    
     return {
       id: otherParticipantId,
-      name: conversation.participantNames[otherIndex] || 'Unknown',
-      avatar: conversation.participantAvatars[otherIndex],
+      name,
+      avatar,
     };
   };
 
