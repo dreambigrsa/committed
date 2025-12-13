@@ -49,6 +49,7 @@ export default function FeedScreen() {
   const postScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [reportingPost, setReportingPost] = useState<{ id: string; userId: string } | null>(null);
+  const recordedImpressions = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -57,6 +58,11 @@ export default function FeedScreen() {
       useNativeDriver: true,
     }).start();
   }, [fadeAnim]);
+
+  // Reset recorded impressions when ads change
+  useEffect(() => {
+    recordedImpressions.current.clear();
+  }, [smartAds]);
 
   // Load feed sorted by date/time (newest first) - like Facebook
   useEffect(() => {
@@ -533,6 +539,69 @@ export default function FeedScreen() {
       fontWeight: '700' as const,
       color: colors.primary,
     },
+    bannerAdCard: {
+      backgroundColor: colors.background.primary,
+      marginBottom: 12,
+      position: 'relative',
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+      borderRadius: 8,
+    },
+    bannerAdImage: {
+      width: '100%',
+      height: 120,
+    },
+    bannerAdContent: {
+      padding: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    bannerAdTitle: {
+      fontSize: 16,
+      fontWeight: '700' as const,
+      color: colors.text.primary,
+      flex: 1,
+      marginRight: 12,
+    },
+    bannerAdDescription: {
+      fontSize: 13,
+      color: colors.text.secondary,
+      flex: 1,
+    },
+    bannerAdLinkButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: colors.primary + '20',
+      borderRadius: 6,
+    },
+    bannerAdLinkText: {
+      fontSize: 13,
+      fontWeight: '600' as const,
+      color: colors.primary,
+    },
+    videoAdCard: {
+      backgroundColor: colors.background.primary,
+      marginBottom: 12,
+      position: 'relative',
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    videoAdImage: {
+      width: '100%',
+      height: 300,
+    },
     emptyState: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -859,14 +928,55 @@ export default function FeedScreen() {
     }
   };
 
-  const renderAd = (ad: Advertisement) => {
-    // Record impression when ad is rendered (for analytics and rotation)
-    // This will be used by getSmartAds to rotate ads naturally
-    recordAdImpression(ad.id);
-
+  const renderBannerAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
     return (
       <TouchableOpacity
-        key={`ad-${ad.id}`}
+        key={`ad-banner-${ad.id}`}
+        style={styles.bannerAdCard}
+        onPress={() => handleAdPress(ad)}
+        activeOpacity={0.9}
+      >
+        <View style={styles.adBadge}>
+          <Text style={styles.adBadgeText}>Sponsored</Text>
+        </View>
+        <Image 
+          source={{ uri: ad.imageUrl }} 
+          style={styles.bannerAdImage} 
+          contentFit="cover"
+          onError={() => console.error('Failed to load banner ad image:', ad.id)}
+        />
+        <View style={styles.bannerAdContent}>
+          <Text style={styles.bannerAdTitle}>{ad.title}</Text>
+          {ad.description && (
+            <Text style={styles.bannerAdDescription} numberOfLines={1}>
+              {ad.description}
+            </Text>
+          )}
+          {ad.linkUrl && (
+            <View style={styles.bannerAdLinkButton}>
+              <Text style={styles.bannerAdLinkText}>Learn More</Text>
+              <ExternalLink size={14} color={colors.primary} />
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCardAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <TouchableOpacity
+        key={`ad-card-${ad.id}`}
         style={styles.adCard}
         onPress={() => handleAdPress(ad)}
         activeOpacity={0.9}
@@ -874,7 +984,12 @@ export default function FeedScreen() {
         <View style={styles.adBadge}>
           <Text style={styles.adBadgeText}>Sponsored</Text>
         </View>
-        <Image source={{ uri: ad.imageUrl }} style={styles.adImage} contentFit="cover" />
+        <Image 
+          source={{ uri: ad.imageUrl }} 
+          style={styles.adImage} 
+          contentFit="cover"
+          onError={() => console.error('Failed to load card ad image:', ad.id)}
+        />
         <View style={styles.adContent}>
           <Text style={styles.adTitle}>{ad.title}</Text>
           <Text style={styles.adDescription} numberOfLines={2}>
@@ -889,6 +1004,63 @@ export default function FeedScreen() {
         </View>
       </TouchableOpacity>
     );
+  };
+
+  const renderVideoAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-video-${ad.id}`} style={styles.videoAdCard}>
+        <View style={styles.adBadge}>
+          <Text style={styles.adBadgeText}>Sponsored</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => handleAdPress(ad)}
+          activeOpacity={0.9}
+        >
+          <Video
+            source={{ uri: ad.imageUrl }}
+            style={styles.videoAdImage}
+            useNativeControls
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={false}
+            onError={(error) => {
+              console.error('Failed to load video ad:', ad.id, error);
+              Alert.alert('Error', 'Failed to load video advertisement');
+            }}
+          />
+        </TouchableOpacity>
+        <View style={styles.adContent}>
+          <Text style={styles.adTitle}>{ad.title}</Text>
+          <Text style={styles.adDescription} numberOfLines={2}>
+            {ad.description}
+          </Text>
+          {ad.linkUrl && (
+            <View style={styles.adLinkButton}>
+              <Text style={styles.adLinkText}>Learn More</Text>
+              <ExternalLink size={16} color={colors.primary} />
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderAd = (ad: Advertisement) => {
+    // Record impression when ad is rendered (for analytics and rotation)
+    // This will be used by getSmartAds to rotate ads naturally
+    switch (ad.type) {
+      case 'banner':
+        return renderBannerAd(ad);
+      case 'video':
+        return renderVideoAd(ad);
+      case 'card':
+      default:
+        return renderCardAd(ad);
+    }
   };
 
   const handleDeletePost = async (postId: string) => {
