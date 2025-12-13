@@ -24,6 +24,7 @@ function RootLayoutNav() {
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
         <Stack.Screen name="verify-email" options={{ headerShown: true, title: 'Verify Email' }} />
+        <Stack.Screen name="legal/[slug]" options={{ headerShown: true, title: 'Legal Document' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="profile/[userId]" options={{ headerShown: true, title: "Profile" }} />
         <Stack.Screen name="relationship/register" options={{ presentation: "modal", title: "Register Relationship" }} />
