@@ -6,14 +6,19 @@ import {
   Modal,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
-  SafeAreaView,
+  Dimensions,
+  Animated,
+  PanResponder,
 } from 'react-native';
-import { X, Smile } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { Smile } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { StickerPack, Sticker } from '@/types';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BOTTOM_SHEET_HEIGHT = SCREEN_HEIGHT * 0.6; // 60% of screen height
 
 interface StickerPickerProps {
   visible: boolean;
@@ -34,10 +39,42 @@ export default function StickerPicker({
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingStickers, setIsLoadingStickers] = useState(false);
+  
+  const translateY = React.useRef(new Animated.Value(BOTTOM_SHEET_HEIGHT)).current;
+  const opacity = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       loadStickerPacks();
+      // Animate in
+      Animated.parallel([
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Animate out
+      Animated.parallel([
+        Animated.spring(translateY, {
+          toValue: BOTTOM_SHEET_HEIGHT,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
   }, [visible]);
 
@@ -122,238 +159,290 @@ export default function StickerPicker({
     onClose();
   };
 
+  const handleClose = () => {
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: BOTTOM_SHEET_HEIGHT,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+    });
+  };
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return gestureState.dy > 5; // Only respond to downward swipes
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > BOTTOM_SHEET_HEIGHT * 0.3) {
+          // Swiped down more than 30% - close
+          handleClose();
+        } else {
+          // Spring back
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 65,
+            friction: 11,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      transparent={true}
+      animationType="none"
+      onRequestClose={handleClose}
     >
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Smile size={24} color={colors.primary} />
-            <Text style={styles.headerTitle}>Stickers</Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color={colors.text.primary} />
-          </TouchableOpacity>
+      {/* Backdrop */}
+      <TouchableOpacity
+        style={styles.backdrop}
+        activeOpacity={1}
+        onPress={handleClose}
+      >
+        <Animated.View
+          style={[
+            styles.backdropAnimated,
+            { opacity },
+          ]}
+        />
+      </TouchableOpacity>
+
+      {/* Bottom Sheet */}
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          {
+            transform: [{ translateY }],
+          },
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {/* Drag Handle */}
+        <View style={styles.dragHandleContainer}>
+          <View style={styles.dragHandle} />
         </View>
 
+        {/* Pack Selector - Horizontal scroll at top */}
+        {packs.length > 0 && (
+          <View style={styles.packSelector}>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={packs}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.packItem,
+                    selectedPack?.id === item.id && styles.packItemSelected,
+                  ]}
+                  onPress={() => setSelectedPack(item)}
+                  activeOpacity={0.7}
+                >
+                  {item.iconUrl ? (
+                    <Image
+                      source={{ uri: item.iconUrl }}
+                      style={styles.packIcon}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={styles.packIconPlaceholder}>
+                      <Smile size={24} color={colors.text.secondary} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.packSelectorContent}
+            />
+          </View>
+        )}
+
+        {/* Stickers Grid */}
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Loading stickers...</Text>
           </View>
-        ) : (
-          <>
-            {/* Pack Selector */}
-            {packs.length > 0 && (
-              <View style={styles.packSelector}>
-                <FlatList
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  data={packs}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.packItem,
-                        selectedPack?.id === item.id && styles.packItemSelected,
-                      ]}
-                      onPress={() => setSelectedPack(item)}
-                    >
-                      {item.iconUrl ? (
-                        <Image
-                          source={{ uri: item.iconUrl }}
-                          style={styles.packIcon}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={styles.packIconPlaceholder}>
-                          <Smile size={20} color={colors.text.secondary} />
-                        </View>
-                      )}
-                      <Text
-                        style={[
-                          styles.packName,
-                          selectedPack?.id === item.id && styles.packNameSelected,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  contentContainerStyle={styles.packSelectorContent}
+        ) : isLoadingStickers ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : stickers.length > 0 ? (
+          <FlatList
+            data={stickers}
+            numColumns={4}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.stickersGrid}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.stickerItem}
+                onPress={() => handleSelectSticker(item)}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={styles.stickerImage}
+                  contentFit="contain"
                 />
-              </View>
+              </TouchableOpacity>
             )}
-
-            {/* Stickers Grid */}
-            {isLoadingStickers ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-              </View>
-            ) : stickers.length > 0 ? (
-              <FlatList
-                data={stickers}
-                numColumns={4}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.stickersGrid}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.stickerItem}
-                    onPress={() => handleSelectSticker(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      style={styles.stickerImage}
-                      contentFit="contain"
-                    />
-                  </TouchableOpacity>
-                )}
-              />
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Smile size={64} color={colors.text.tertiary} />
-                <Text style={styles.emptyText}>No stickers available</Text>
-                <Text style={styles.emptySubtext}>
-                  {selectedPack
-                    ? 'This pack is empty'
-                    : 'No sticker packs found'}
-                </Text>
-              </View>
-            )}
-          </>
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Smile size={48} color={colors.text.tertiary} />
+            <Text style={styles.emptyText}>No stickers</Text>
+            <Text style={styles.emptySubtext}>
+              {selectedPack
+                ? 'This pack is empty'
+                : 'No sticker packs found'}
+            </Text>
+          </View>
         )}
-      </SafeAreaView>
+      </Animated.View>
     </Modal>
   );
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background.secondary,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
+  backdropAnimated: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: BOTTOM_SHEET_HEIGHT,
     backgroundColor: colors.background.primary,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  headerLeft: {
-    flexDirection: 'row',
+  dragHandleContainer: {
     alignItems: 'center',
-    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.text.primary,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.text.secondary,
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border.medium,
   },
   packSelector: {
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background.secondary,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   packSelectorContent: {
     paddingHorizontal: 12,
     gap: 8,
   },
   packItem: {
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    width: 56,
+    height: 56,
     borderRadius: 12,
-    backgroundColor: colors.background.secondary,
     marginRight: 8,
-    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.primary,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   packItemSelected: {
-    backgroundColor: colors.primary + '20',
-    borderWidth: 2,
     borderColor: colors.primary,
+    backgroundColor: colors.primary + '15',
   },
   packIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    marginBottom: 4,
+    width: 48,
+    height: 48,
+    borderRadius: 10,
   },
   packIconPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 10,
     backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
-  },
-  packName: {
-    fontSize: 12,
-    color: colors.text.secondary,
-    fontWeight: '500' as const,
-  },
-  packNameSelected: {
-    color: colors.primary,
-    fontWeight: '700' as const,
   },
   stickersGrid: {
-    padding: 12,
-    gap: 8,
+    padding: 8,
+    paddingBottom: 20,
   },
   stickerItem: {
     flex: 1,
     aspectRatio: 1,
     margin: 4,
-    borderRadius: 12,
-    backgroundColor: colors.background.primary,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.border.light,
+    padding: 4,
   },
   stickerImage: {
     width: '100%',
     height: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    gap: 12,
+    paddingVertical: 60,
+    gap: 8,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text.primary,
-    marginTop: 16,
+    marginTop: 12,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.text.secondary,
     textAlign: 'center',
   },
