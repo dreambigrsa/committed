@@ -1999,7 +1999,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     mediaUrl?: string,
     documentUrl?: string,
     documentName?: string,
-    messageType: 'text' | 'image' | 'document' = 'text'
+    messageType: 'text' | 'image' | 'document' | 'sticker' = 'text',
+    stickerId?: string
   ) => {
     if (!currentUser) return null;
     
@@ -2024,6 +2025,9 @@ export const [AppContext, useApp] = createContextHook(() => {
       if (documentUrl) {
         insertData.document_url = documentUrl;
         insertData.document_name = documentName || 'Document';
+      }
+      if (stickerId) {
+        insertData.sticker_id = stickerId;
       }
 
       const { data, error } = await supabase
