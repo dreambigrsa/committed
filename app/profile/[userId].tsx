@@ -72,7 +72,7 @@ export default function UserProfileScreen() {
 
   useEffect(() => {
     loadUserStatus();
-  }, [userId, getUserStatus, userStatuses]);
+  }, [userId, getUserStatus]);
 
   // Subscribe to real-time status updates and refresh periodically
   useEffect(() => {
