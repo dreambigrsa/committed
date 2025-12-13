@@ -13,14 +13,17 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { MessageCircle, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
+import StatusIndicator from '@/components/StatusIndicator';
+import { UserStatus } from '@/types';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const { currentUser, conversations, deleteConversation } = useApp();
+  const { currentUser, conversations, deleteConversation, getUserStatus, userStatuses } = useApp();
   const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [participantStatuses, setParticipantStatuses] = useState<Record<string, UserStatus>>({});
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -52,13 +55,36 @@ export default function MessagesScreen() {
   };
 
   const getOtherParticipant = (conversation: any) => {
-    const index = conversation.participants.indexOf(currentUser.id);
-    const otherIndex = index === 0 ? 1 : 0;
+    const otherParticipantId = conversation.participants.find((id: string) => id !== currentUser.id);
+    if (!otherParticipantId) return { id: null, name: 'Unknown', avatar: null };
+    
+    const otherIndex = conversation.participants.indexOf(otherParticipantId);
     return {
-      name: conversation.participantNames[otherIndex],
+      id: otherParticipantId,
+      name: conversation.participantNames[otherIndex] || 'Unknown',
       avatar: conversation.participantAvatars[otherIndex],
     };
   };
+
+  // Load statuses for all participants
+  useEffect(() => {
+    const loadStatuses = async () => {
+      const statuses: Record<string, UserStatus> = {};
+      for (const conversation of conversations) {
+        const other = getOtherParticipant(conversation);
+        if (other.id && getUserStatus) {
+          const status = await getUserStatus(other.id);
+          if (status) {
+            statuses[other.id] = status;
+          }
+        }
+      }
+      setParticipantStatuses(statuses);
+    };
+    if (conversations.length > 0) {
+      loadStatuses();
+    }
+  }, [conversations, getUserStatus, userStatuses]);
 
   const handleDeleteConversation = async (conversationId: string) => {
     Alert.alert(
@@ -113,18 +139,27 @@ export default function MessagesScreen() {
                   disabled={isDeleting}
                 >
                   <View style={styles.conversationLeft}>
-                    {otherParticipant.avatar ? (
-                      <Image
-                        source={{ uri: otherParticipant.avatar }}
-                        style={styles.avatar}
+                    <View style={styles.avatarContainer}>
+                      {otherParticipant.avatar ? (
+                        <Image
+                          source={{ uri: otherParticipant.avatar }}
+                          style={styles.avatar}
+                        />
+                      ) : (
+                        <View style={styles.avatarPlaceholder}>
+                          <Text style={styles.avatarPlaceholderText}>
+                            {otherParticipant.name.charAt(0)}
+                          </Text>
+                        </View>
+                      )}
+                      <StatusIndicator 
+                        status={otherParticipant.id && participantStatuses[otherParticipant.id] 
+                          ? participantStatuses[otherParticipant.id].statusType 
+                          : 'offline'} 
+                        size="small" 
+                        showBorder={true}
                       />
-                    ) : (
-                      <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarPlaceholderText}>
-                          {otherParticipant.name.charAt(0)}
-                        </Text>
-                      </View>
-                    )}
+                    </View>
                     {conversation.unreadCount > 0 && (
                       <View style={styles.unreadBadge}>
                         <Text style={styles.unreadBadgeText}>
@@ -238,6 +273,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'center',
   },
   conversationLeft: {
+    position: 'relative',
+  },
+  avatarContainer: {
     position: 'relative',
   },
   avatar: {
