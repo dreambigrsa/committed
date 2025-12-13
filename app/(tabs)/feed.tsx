@@ -1307,7 +1307,7 @@ export default function FeedScreen() {
               ) : (
                 <View style={styles.postAvatarPlaceholder}>
                   <Text style={styles.postAvatarPlaceholderText}>
-                    {post.userName.charAt(0)}
+                    {post.userName?.charAt(0) || '?'}
                   </Text>
                 </View>
               )}
@@ -1747,7 +1747,7 @@ function CommentsModal({
                   ) : (
                     <View style={styles.commentAvatarPlaceholder}>
                       <Text style={styles.commentAvatarPlaceholderText}>
-                        {comment.userName.charAt(0)}
+                        {comment.userName?.charAt(0) || '?'}
                       </Text>
                     </View>
                   )}
@@ -1869,7 +1869,7 @@ function CommentsModal({
                             ) : (
                               <View style={styles.replyAvatarPlaceholder}>
                                 <Text style={styles.replyAvatarPlaceholderText}>
-                                  {reply.userName.charAt(0)}
+                                  {reply.userName?.charAt(0) || '?'}
                                 </Text>
                               </View>
                             )}
