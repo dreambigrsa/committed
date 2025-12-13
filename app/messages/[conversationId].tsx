@@ -155,6 +155,8 @@ export default function ConversationDetailScreen() {
 
   useEffect(() => {
     if (conversationId && currentUser) {
+      let isMounted = true;
+
       loadMessages();
       loadChatBackground();
       loadWarnings();
@@ -170,6 +172,7 @@ export default function ConversationDetailScreen() {
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
+            if (!isMounted) return;
             const newMessage = payload.new;
             const isSender = newMessage.sender_id === currentUser.id;
             const isReceiver = newMessage.receiver_id === currentUser.id;
@@ -307,6 +310,7 @@ export default function ConversationDetailScreen() {
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
+            if (!isMounted) return;
             console.log('Chat background changed:', payload);
             // Reload background when it changes
             loadChatBackground();
@@ -315,6 +319,7 @@ export default function ConversationDetailScreen() {
         .subscribe();
 
       return () => {
+        isMounted = false;
         subscription.unsubscribe();
       };
     }
@@ -366,15 +371,24 @@ export default function ConversationDetailScreen() {
     const other = getOtherParticipant();
     if (!other?.id) return;
 
+    let isMounted = true;
+
     // Load status immediately
     const refreshStatus = async () => {
+      if (!isMounted) return;
       const status = await getUserStatus(other.id);
-      setOtherParticipantStatus(status);
+      if (isMounted) {
+        setOtherParticipantStatus(status);
+      }
     };
     refreshStatus();
 
     // Refresh status every 30 seconds to recalculate based on last_active_at
-    const refreshInterval = setInterval(refreshStatus, 30 * 1000);
+    const refreshInterval = setInterval(() => {
+      if (isMounted) {
+        refreshStatus();
+      }
+    }, 30 * 1000);
 
     const channel = supabase
       .channel(`user_status:${other.id}`)
@@ -387,13 +401,17 @@ export default function ConversationDetailScreen() {
           filter: `user_id=eq.${other.id}`,
         },
         async (payload) => {
+          if (!isMounted) return;
           const status = await getUserStatus(other.id);
-          setOtherParticipantStatus(status);
+          if (isMounted) {
+            setOtherParticipantStatus(status);
+          }
         }
       )
       .subscribe();
 
     return () => {
+      isMounted = false;
       clearInterval(refreshInterval);
       supabase.removeChannel(channel);
     };
@@ -1498,7 +1516,18 @@ export default function ConversationDetailScreen() {
           headerLeft: () => (
             <View style={styles.headerLeft}>
               <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={() => {
+                  try {
+                    if (router.canGoBack()) {
+                      router.back();
+                    } else {
+                      router.replace('/(tabs)/messages' as any);
+                    }
+                  } catch (error) {
+                    // Fallback navigation
+                    router.replace('/(tabs)/messages' as any);
+                  }
+                }}
                 style={styles.backButton}
               >
                 <ArrowLeft size={24} color={colors.text.primary} />
