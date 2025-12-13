@@ -21,6 +21,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical, Smile, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 // @ts-ignore - legacy path works at runtime, TypeScript definitions may not include it
@@ -33,12 +34,14 @@ import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import ReportContentModal from '@/components/ReportContentModal';
 import StickerPicker from '@/components/StickerPicker';
-import { Sticker } from '@/types';
+import { Sticker, Advertisement } from '@/types';
+import * as WebBrowser from 'expo-web-browser';
+import { ExternalLink } from 'lucide-react-native';
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning, reportContent } = useApp();
+  const { currentUser, getConversation, sendMessage, deleteMessage, getChatBackground, setChatBackground, getMessageWarnings, acknowledgeWarning, reportContent, getActiveAds, getSmartAds, recordAdImpression, recordAdClick } = useApp();
   const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState<string>('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -58,13 +61,20 @@ export default function ConversationDetailScreen() {
   const [reportingMessage, setReportingMessage] = useState<{ id: string; senderId: string } | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showAttachments, setShowAttachments] = useState(true);
+  const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const conversation = getConversation(conversationId);
+  const recordedImpressions = useRef<Set<string>>(new Set());
   
   // Animation for attachment buttons
   const attachmentButtonsOpacity = useRef(new Animated.Value(1)).current;
   const attachmentButtonsScale = useRef(new Animated.Value(1)).current;
+
+  // Reset recorded impressions when ads change
+  useEffect(() => {
+    recordedImpressions.current.clear();
+  }, [smartAds]);
 
   // Keyboard listeners
   useEffect(() => {
@@ -115,6 +125,24 @@ export default function ConversationDetailScreen() {
       hideSubscription.remove();
     };
   }, []);
+
+  // Load advertisements for messages
+  useEffect(() => {
+    const loadSmartAds = async () => {
+      try {
+        const ads = await getSmartAds('messages', [], 5);
+        setSmartAds(ads);
+      } catch (error) {
+        console.error('Error loading smart ads for messages:', error);
+        // Fallback to regular ads
+        const fallbackAds = getActiveAds('messages');
+        setSmartAds(fallbackAds.slice(0, 5));
+      }
+    };
+    if (currentUser) {
+      loadSmartAds();
+    }
+  }, [getSmartAds, getActiveAds, currentUser]);
 
   useEffect(() => {
     if (conversationId && currentUser) {
@@ -801,6 +829,144 @@ export default function ConversationDetailScreen() {
     }
   };
 
+  const handleAdPress = async (ad: Advertisement) => {
+    await recordAdClick(ad.id);
+    if (ad.linkUrl) {
+      await WebBrowser.openBrowserAsync(ad.linkUrl);
+    }
+  };
+
+  const renderBannerAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-banner-${ad.id}`} style={styles.bannerAdContainer}>
+        <TouchableOpacity
+          style={styles.bannerAdCard}
+          onPress={() => handleAdPress(ad)}
+          activeOpacity={0.9}
+        >
+          <View style={styles.adBadge}>
+            <Text style={styles.adBadgeText}>Sponsored</Text>
+          </View>
+          <Image 
+            source={{ uri: ad.imageUrl }} 
+            style={styles.bannerAdImage} 
+            contentFit="cover"
+            onError={() => console.error('Failed to load banner ad image:', ad.id)}
+          />
+          <View style={styles.bannerAdContent}>
+            <Text style={styles.bannerAdTitle}>{ad.title}</Text>
+            {ad.linkUrl && (
+              <View style={styles.bannerAdLinkButton}>
+                <Text style={styles.bannerAdLinkText}>Learn More</Text>
+                <ExternalLink size={14} color={colors.primary} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderCardAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-card-${ad.id}`} style={styles.adContainer}>
+        <TouchableOpacity
+          style={styles.adCard}
+          onPress={() => handleAdPress(ad)}
+          activeOpacity={0.9}
+        >
+          <View style={styles.adBadge}>
+            <Text style={styles.adBadgeText}>Sponsored</Text>
+          </View>
+          <Image 
+            source={{ uri: ad.imageUrl }} 
+            style={styles.adImage} 
+            contentFit="cover"
+            onError={() => console.error('Failed to load card ad image:', ad.id)}
+          />
+          <View style={styles.adContent}>
+            <Text style={styles.adTitle}>{ad.title}</Text>
+            <Text style={styles.adDescription} numberOfLines={2}>
+              {ad.description}
+            </Text>
+            {ad.linkUrl && (
+              <View style={styles.adLinkButton}>
+                <Text style={styles.adLinkText}>Learn More</Text>
+                <ExternalLink size={16} color={colors.primary} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderVideoAd = (ad: Advertisement) => {
+    // Prevent duplicate impressions
+    if (!recordedImpressions.current.has(ad.id)) {
+      recordAdImpression(ad.id);
+      recordedImpressions.current.add(ad.id);
+    }
+    return (
+      <View key={`ad-video-${ad.id}`} style={styles.adContainer}>
+        <View style={styles.videoAdCard}>
+          <View style={styles.adBadge}>
+            <Text style={styles.adBadgeText}>Sponsored</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => handleAdPress(ad)}
+            activeOpacity={0.9}
+          >
+          <Video
+            source={{ uri: ad.imageUrl }}
+            style={styles.videoAdImage}
+            useNativeControls
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={false}
+            onError={(error) => {
+              console.error('Failed to load video ad:', ad.id, error);
+            }}
+          />
+          </TouchableOpacity>
+          <View style={styles.adContent}>
+            <Text style={styles.adTitle}>{ad.title}</Text>
+            <Text style={styles.adDescription} numberOfLines={2}>
+              {ad.description}
+            </Text>
+            {ad.linkUrl && (
+              <View style={styles.adLinkButton}>
+                <Text style={styles.adLinkText}>Learn More</Text>
+                <ExternalLink size={16} color={colors.primary} />
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderAd = (ad: Advertisement) => {
+    switch (ad.type) {
+      case 'banner':
+        return renderBannerAd(ad);
+      case 'video':
+        return renderVideoAd(ad);
+      case 'card':
+      default:
+        return renderCardAd(ad);
+    }
+  };
+
   const renderMessage = ({ item }: { item: any }) => {
     if (!item || !item.id) return null;
     
@@ -1218,6 +1384,13 @@ export default function ConversationDetailScreen() {
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListHeaderComponent={
+              smartAds.length > 0 ? (
+                <View style={styles.adHeaderContainer}>
+                  {smartAds.slice(0, 1).map(ad => renderAd(ad))}
+                </View>
+              ) : null
+            }
           />
 
           {(selectedImage || selectedDocument || selectedSticker) && (
@@ -1905,5 +2078,137 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     color: colors.text.white,
+  },
+  adHeaderContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  adContainer: {
+    marginBottom: 8,
+  },
+  adCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  adBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 1,
+  },
+  adBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  adImage: {
+    width: '100%',
+    height: 150,
+  },
+  adContent: {
+    padding: 12,
+  },
+  adTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 6,
+  },
+  adDescription: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  adLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  adLinkText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  bannerAdContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  bannerAdCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  bannerAdImage: {
+    width: '100%',
+    height: 100,
+  },
+  bannerAdContent: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bannerAdTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    flex: 1,
+    marginRight: 12,
+  },
+  bannerAdLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.primary + '20',
+    borderRadius: 6,
+  },
+  bannerAdLinkText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.primary,
+  },
+  videoAdCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  videoAdImage: {
+    width: '100%',
+    height: 200,
   },
 });
