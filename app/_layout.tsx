@@ -30,6 +30,7 @@ function RootLayoutNav() {
         <Stack.Screen name="relationship/register" options={{ presentation: "modal", title: "Register Relationship" }} />
         <Stack.Screen name="messages/[conversationId]" options={{ headerShown: true, title: "Chat" }} />
         <Stack.Screen name="admin/advertisements" options={{ headerShown: true, title: "Advertisements" }} />
+        <Stack.Screen name="admin/stickers" options={{ headerShown: true, title: "Sticker Management" }} />
         <Stack.Screen name="settings" options={{ headerShown: true, title: "Settings" }} />
         <Stack.Screen name="settings/2fa" options={{ headerShown: true, title: "Two-Factor Authentication" }} />
         <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: "Active Sessions" }} />
