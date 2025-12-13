@@ -30,9 +30,7 @@ export default function StatusIndicator({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: getStatusColor() }]}>
-      {showBorder && <View style={styles.border} />}
-    </View>
+    <View style={[styles.container, { backgroundColor: getStatusColor() }]} />
   );
 }
 
@@ -46,21 +44,16 @@ const createStyles = (size: 'small' | 'medium' | 'large', showBorder: boolean) =
       height: dotSize,
       borderRadius: dotSize / 2,
       position: 'absolute',
-      bottom: 0,
-      right: 0,
+      bottom: -1,
+      right: -1,
       borderWidth: showBorder ? borderSize : 0,
       borderColor: '#FFFFFF',
       zIndex: 10,
-    },
-    border: {
-      position: 'absolute',
-      width: dotSize + (borderSize * 2),
-      height: dotSize + (borderSize * 2),
-      borderRadius: (dotSize + (borderSize * 2)) / 2,
-      borderWidth: borderSize,
-      borderColor: '#FFFFFF',
-      top: -borderSize,
-      left: -borderSize,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.3,
+      shadowRadius: 2,
+      elevation: 3,
     },
   });
 };
