@@ -96,6 +96,7 @@ export default function LegalAcceptanceModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
+      transparent={false}
       onRequestClose={() => {
         // Prevent closing modal if required documents not accepted
         if (requiredDocs.length > 0 && !allRequiredAccepted) {
