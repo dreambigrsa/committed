@@ -58,6 +58,7 @@ export default function ConversationDetailScreen() {
   const [reportingMessage, setReportingMessage] = useState<{ id: string; senderId: string } | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showAttachments, setShowAttachments] = useState(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0); // Track keyboard height for Android
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const conversation = getConversation(conversationId);
@@ -70,9 +71,13 @@ export default function ConversationDetailScreen() {
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => {
+      (event) => {
         setIsKeyboardVisible(true);
         setShowAttachments(false);
+        // Set keyboard height for Android manual positioning
+        if (Platform.OS === 'android') {
+          setKeyboardHeight(event.endCoordinates.height);
+        }
         // Animate out attachment buttons when keyboard shows
         Animated.parallel([
           Animated.timing(attachmentButtonsOpacity, {
@@ -93,6 +98,8 @@ export default function ConversationDetailScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         setIsKeyboardVisible(false);
+        // Reset keyboard height
+        setKeyboardHeight(0);
         // Reset to show attachments when keyboard hides
         setShowAttachments(true);
         Animated.parallel([
@@ -1205,9 +1212,10 @@ export default function ConversationDetailScreen() {
       <SafeAreaView style={[styles.container, getBackgroundStyle()]}>
         {renderBackgroundImage()}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
           style={styles.keyboardAvoid}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : insets.top + 60}
+          enabled={true}
         >
           <FlatList
             ref={flatListRef}
@@ -1260,7 +1268,14 @@ export default function ConversationDetailScreen() {
             </View>
           )}
 
-          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={[
+            styles.inputContainer,
+            {
+              paddingBottom: Platform.OS === 'android' && keyboardHeight > 0
+                ? keyboardHeight
+                : Math.max(insets.bottom, 12),
+            },
+          ]}>
             {/* Attachment Toggle Button - Only show when keyboard is visible */}
             {isKeyboardVisible && (
               <TouchableOpacity
@@ -1406,6 +1421,7 @@ const styles = StyleSheet.create({
   },
   keyboardAvoid: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
   headerLeft: {
     flexDirection: 'row',
