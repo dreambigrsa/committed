@@ -85,8 +85,14 @@ export default function UserProfileScreen() {
     };
     refreshStatus();
 
+    let isMounted = true;
+
     // Refresh status every 30 seconds to recalculate based on last_active_at
-    const refreshInterval = setInterval(refreshStatus, 30 * 1000);
+    const refreshInterval = setInterval(() => {
+      if (isMounted) {
+        refreshStatus();
+      }
+    }, 30 * 1000);
 
     const channel = supabase
       .channel(`user_status:${userId}`)
@@ -99,13 +105,17 @@ export default function UserProfileScreen() {
           filter: `user_id=eq.${userId}`,
         },
         async (payload) => {
+          if (!isMounted) return;
           const status = await getUserStatus(userId);
-          setUserStatus(status);
+          if (isMounted) {
+            setUserStatus(status);
+          }
         }
       )
       .subscribe();
 
     return () => {
+      isMounted = false;
       clearInterval(refreshInterval);
       supabase.removeChannel(channel);
     };
