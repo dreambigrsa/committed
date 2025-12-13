@@ -17,7 +17,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Send, Trash2, Image as ImageIcon, FileText, X, Settings, Download, ZoomIn, Flag, MoreVertical, Smile } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -30,6 +30,8 @@ import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import ReportContentModal from '@/components/ReportContentModal';
+import StickerPicker from '@/components/StickerPicker';
+import { Sticker } from '@/types';
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
@@ -42,6 +44,8 @@ export default function ConversationDetailScreen() {
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<{ uri: string; name: string } | null>(null);
+  const [selectedSticker, setSelectedSticker] = useState<{ id: string; imageUrl: string } | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<string | null>(null);
@@ -93,6 +97,7 @@ export default function ConversationDetailScreen() {
                           mediaUrl: newMessage.media_url,
                           documentUrl: newMessage.document_url,
                           documentName: newMessage.document_name,
+                          stickerId: newMessage.sticker_id,
                           messageType: newMessage.message_type || 'text',
                           deletedForSender: newMessage.deleted_for_sender || false,
                           deletedForReceiver: newMessage.deleted_for_receiver || false,
@@ -128,6 +133,7 @@ export default function ConversationDetailScreen() {
                           mediaUrl: newMessage.media_url,
                           documentUrl: newMessage.document_url,
                           documentName: newMessage.document_name,
+                          stickerId: newMessage.sticker_id,
                           messageType: newMessage.message_type || 'text',
                           deletedForSender: newMessage.deleted_for_sender || false,
                           deletedForReceiver: newMessage.deleted_for_receiver || false,
@@ -148,6 +154,7 @@ export default function ConversationDetailScreen() {
                   mediaUrl: newMessage.media_url,
                   documentUrl: newMessage.document_url,
                   documentName: newMessage.document_name,
+                  stickerId: newMessage.sticker_id,
                   messageType: newMessage.message_type || 'text',
                   deletedForSender: newMessage.deleted_for_sender || false,
                   deletedForReceiver: newMessage.deleted_for_receiver || false,
@@ -244,6 +251,7 @@ export default function ConversationDetailScreen() {
             mediaUrl: m.media_url,
             documentUrl: m.document_url,
             documentName: m.document_name,
+            stickerId: m.sticker_id,
             messageType: m.message_type || 'text',
             deletedForSender: m.deleted_for_sender || false,
             deletedForReceiver: m.deleted_for_receiver || false,
@@ -505,9 +513,14 @@ export default function ConversationDetailScreen() {
     let mediaUrl: string | undefined;
     let documentUrl: string | undefined;
     let documentName: string | undefined;
-    let messageType: 'text' | 'image' | 'document' = 'text';
+    let stickerId: string | undefined;
+    let messageType: 'text' | 'image' | 'document' | 'sticker' = 'text';
 
-    if (selectedImage) {
+    if (selectedSticker) {
+      mediaUrl = selectedSticker.imageUrl;
+      stickerId = selectedSticker.id;
+      messageType = 'sticker';
+    } else if (selectedImage) {
       const uploadedUrl = await uploadImage(selectedImage);
       if (uploadedUrl) {
         mediaUrl = uploadedUrl;
@@ -567,7 +580,8 @@ export default function ConversationDetailScreen() {
         mediaUrl,
         documentUrl,
         documentName,
-        messageType
+        messageType,
+        stickerId
       );
       
       // Don't remove optimistic message here - let real-time subscription handle it
@@ -829,7 +843,17 @@ export default function ConversationDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {item.content && typeof item.content === 'string' && item.content.trim() ? (
+          {item.messageType === 'sticker' && item.mediaUrl ? (
+            <View style={styles.stickerContainer}>
+              <Image
+                source={{ uri: item.mediaUrl }}
+                style={styles.stickerImage}
+                contentFit="contain"
+              />
+            </View>
+          ) : null}
+
+          {item.content && typeof item.content === 'string' && item.content.trim() && item.messageType !== 'sticker' ? (
             <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
               {item.content}
             </Text>
@@ -1136,7 +1160,7 @@ export default function ConversationDetailScreen() {
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
           />
 
-          {(selectedImage || selectedDocument) && (
+          {(selectedImage || selectedDocument || selectedSticker) && (
             <View style={styles.attachmentPreview}>
               {selectedImage && (
                 <View style={styles.imagePreviewContainer}>
@@ -1163,6 +1187,17 @@ export default function ConversationDetailScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+              {selectedSticker && (
+                <View style={styles.stickerPreview}>
+                  <Image source={{ uri: selectedSticker.imageUrl }} style={styles.previewSticker} />
+                  <TouchableOpacity
+                    style={styles.removeStickerButton}
+                    onPress={() => setSelectedSticker(null)}
+                  >
+                    <X size={18} color={colors.text.primary} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
 
@@ -1179,6 +1214,12 @@ export default function ConversationDetailScreen() {
             >
               <FileText size={22} color={colors.primary} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.attachmentButton}
+              onPress={() => setShowStickerPicker(true)}
+            >
+              <Smile size={22} color={colors.primary} />
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               placeholder="Type a message..."
@@ -1189,13 +1230,13 @@ export default function ConversationDetailScreen() {
               maxLength={1000}
             />
             <TouchableOpacity
-              style={[styles.sendButton, (!messageText.trim() && !selectedImage && !selectedDocument) && styles.sendButtonDisabled]}
+              style={[styles.sendButton, (!messageText.trim() && !selectedImage && !selectedDocument && !selectedSticker) && styles.sendButtonDisabled]}
               onPress={handleSend}
-              disabled={!messageText.trim() && !selectedImage && !selectedDocument}
+              disabled={!messageText.trim() && !selectedImage && !selectedDocument && !selectedSticker}
             >
               <Send
                 size={20}
-                color={(messageText.trim() || selectedImage || selectedDocument) ? colors.text.white : colors.text.tertiary}
+                color={(messageText.trim() || selectedImage || selectedDocument || selectedSticker) ? colors.text.white : colors.text.tertiary}
               />
             </TouchableOpacity>
           </View>
@@ -1213,6 +1254,16 @@ export default function ConversationDetailScreen() {
         reportedUserId={reportingMessage?.senderId}
         onReport={reportContent}
         colors={colors}
+      />
+
+      {/* Sticker Picker Modal */}
+      <StickerPicker
+        visible={showStickerPicker}
+        onClose={() => setShowStickerPicker(false)}
+        onSelectSticker={(sticker: Sticker) => {
+          setSelectedSticker({ id: sticker.id, imageUrl: sticker.imageUrl });
+          setShowStickerPicker(false);
+        }}
       />
     </>
   );
@@ -1513,6 +1564,38 @@ const styles = StyleSheet.create({
     color: colors.text.white,
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  stickerContainer: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickerImage: {
+    width: 120,
+    height: 120,
+  },
+  stickerPreview: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  previewSticker: {
+    width: 80,
+    height: 80,
+  },
+  removeStickerButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   imageBackgroundButton: {
     flexDirection: 'row',
