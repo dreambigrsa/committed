@@ -15,6 +15,8 @@ import { Shield, Heart, ArrowLeft } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
+import LegalAcceptanceCheckbox from '@/components/LegalAcceptanceCheckbox';
+import { LegalDocument } from '@/types';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -29,12 +31,100 @@ export default function AuthScreen() {
     phoneNumber: '',
     password: '',
   });
+  const [legalDocuments, setLegalDocuments] = useState<LegalDocument[]>([]);
+  const [legalAcceptances, setLegalAcceptances] = useState<Record<string, boolean>>({});
+  const [loadingLegalDocs, setLoadingLegalDocs] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
       router.replace('/(tabs)/home');
     }
   }, [currentUser, router]);
+
+  useEffect(() => {
+    if (isSignUp && !showForgotPassword) {
+      loadLegalDocuments();
+    }
+  }, [isSignUp, showForgotPassword]);
+
+  const loadLegalDocuments = async () => {
+    try {
+      setLoadingLegalDocs(true);
+      const { data, error } = await supabase
+        .from('legal_documents')
+        .select('*')
+        .eq('is_active', true)
+        .contains('display_location', ['signup']);
+
+      if (error) throw error;
+
+      if (data) {
+        const docs = data.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          slug: doc.slug,
+          content: doc.content,
+          version: doc.version,
+          isActive: doc.is_active,
+          isRequired: doc.is_required,
+          displayLocation: doc.display_location || [],
+          createdAt: doc.created_at,
+          updatedAt: doc.updated_at,
+          createdBy: doc.created_by,
+          lastUpdatedBy: doc.last_updated_by,
+        }));
+        setLegalDocuments(docs);
+        // Initialize acceptances as false
+        const initialAcceptances: Record<string, boolean> = {};
+        docs.forEach((doc) => {
+          initialAcceptances[doc.id] = false;
+        });
+        setLegalAcceptances(initialAcceptances);
+      }
+    } catch (error) {
+      console.error('Failed to load legal documents:', error);
+    } finally {
+      setLoadingLegalDocs(false);
+    }
+  };
+
+  const handleToggleAcceptance = (documentId: string, accepted: boolean) => {
+    setLegalAcceptances((prev) => ({
+      ...prev,
+      [documentId]: accepted,
+    }));
+  };
+
+  const handleViewDocument = (document: LegalDocument) => {
+    router.push(`/legal/${document.slug}` as any);
+  };
+
+  const saveLegalAcceptances = async (userId: string) => {
+    try {
+      const acceptancesToSave = Object.entries(legalAcceptances)
+        .filter(([_, accepted]) => accepted)
+        .map(([documentId, _]) => {
+          const doc = legalDocuments.find((d) => d.id === documentId);
+          return {
+            user_id: userId,
+            document_id: documentId,
+            document_version: doc?.version || '1.0.0',
+            context: 'signup' as const,
+          };
+        });
+
+      if (acceptancesToSave.length > 0) {
+        const { error } = await supabase
+          .from('user_legal_acceptances')
+          .insert(acceptancesToSave);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Failed to save legal acceptances:', error);
+      // Don't block signup if saving acceptances fails, but log it
+    }
+  };
 
   const handleResetPassword = async () => {
     setIsLoading(true);
@@ -72,7 +162,24 @@ export default function AuthScreen() {
           return;
         }
 
+        // Check if all required legal documents are accepted
+        const requiredDocs = legalDocuments.filter((doc) => doc.isRequired);
+        const allRequiredAccepted = requiredDocs.every(
+          (doc) => legalAcceptances[doc.id] === true
+        );
+
+        if (requiredDocs.length > 0 && !allRequiredAccepted) {
+          alert('Please accept all required legal documents to continue');
+          setIsLoading(false);
+          return;
+        }
+
         const user = await signup(formData.fullName, formData.email, formData.phoneNumber, formData.password);
+        
+        // Save legal acceptances after successful signup
+        if (user?.id) {
+          await saveLegalAcceptances(user.id);
+        }
         
         // Check if email confirmation is required
         const { data: { session } } = await supabase.auth.getSession();
@@ -265,7 +372,27 @@ export default function AuthScreen() {
             </TouchableOpacity>
           )}
 
-          {isSignUp && (
+          {isSignUp && !showForgotPassword && legalDocuments.length > 0 && (
+            <View style={styles.legalSection}>
+              <Text style={styles.legalSectionTitle}>Legal Documents</Text>
+              {loadingLegalDocs ? (
+                <ActivityIndicator size="small" color={colors.primary} style={styles.legalLoading} />
+              ) : (
+                legalDocuments.map((doc) => (
+                  <LegalAcceptanceCheckbox
+                    key={doc.id}
+                    document={doc}
+                    isAccepted={legalAcceptances[doc.id] || false}
+                    onToggle={handleToggleAcceptance}
+                    onViewDocument={handleViewDocument}
+                    required={doc.isRequired}
+                  />
+                ))
+              )}
+            </View>
+          )}
+
+          {isSignUp && legalDocuments.length === 0 && !loadingLegalDocs && (
             <Text style={styles.disclaimer}>
               By signing up, you agree to verify your relationship status and maintain transparency with your partner.
             </Text>
@@ -414,5 +541,20 @@ const createStyles = (colors: typeof import('@/constants/colors').default) => St
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
+  },
+  legalSection: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  legalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+    marginBottom: 16,
+  },
+  legalLoading: {
+    paddingVertical: 20,
   },
 });
