@@ -71,13 +71,14 @@ export default function MessagesScreen() {
       avatar = conversation.participantAvatars[otherIndex];
     } else {
       // Fallback: if current user is first, other is second, and vice versa
-      if (currentUserIndex === 0) {
+      if (currentUserIndex === 0 && conversation.participantNames.length > 1) {
         name = conversation.participantNames[1] || 'Unknown';
         avatar = conversation.participantAvatars[1];
-      } else {
+      } else if (conversation.participantNames.length > 0) {
         name = conversation.participantNames[0] || 'Unknown';
         avatar = conversation.participantAvatars[0];
       }
+      // If arrays are empty, name and avatar remain 'Unknown' and undefined
     }
     
     return {
@@ -188,7 +189,7 @@ export default function MessagesScreen() {
                       ) : (
                         <View style={styles.avatarPlaceholder}>
                           <Text style={styles.avatarPlaceholderText}>
-                            {otherParticipant.name.charAt(0)}
+                            {otherParticipant.name?.charAt(0) || '?'}
                           </Text>
                         </View>
                       )}
