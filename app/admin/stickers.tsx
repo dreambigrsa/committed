@@ -628,20 +628,24 @@ export default function AdminStickersScreen() {
           </View>
         </View>
 
-        {/* Main Content */}
-        <View style={styles.mainContent}>
-          {/* Packs List */}
+        {/* Main Content - Scrollable */}
+        <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
+          {/* Packs Section */}
           <View style={styles.packsSection}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionHeaderLeft}>
-                <Package size={20} color={themeColors.primary} />
-                <Text style={styles.sectionTitle}>Sticker Packs ({filteredPacks.length})</Text>
+                <Package size={22} color={themeColors.primary} />
+                <Text style={styles.sectionTitle}>Sticker Packs</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{filteredPacks.length}</Text>
+                </View>
               </View>
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={handleCreatePack}
+                activeOpacity={0.7}
               >
-                <Plus size={20} color={themeColors.text.white} />
+                <Plus size={18} color={themeColors.text.white} />
                 <Text style={styles.addButtonText}>New Pack</Text>
               </TouchableOpacity>
             </View>
@@ -649,64 +653,70 @@ export default function AdminStickersScreen() {
             {isLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={themeColors.primary} />
+                <Text style={styles.loadingText}>Loading packs...</Text>
               </View>
             ) : filteredPacks.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Smile size={64} color={themeColors.text.tertiary} />
+                <View style={styles.emptyIconContainer}>
+                  <Smile size={56} color={themeColors.text.tertiary} />
+                </View>
                 <Text style={styles.emptyText}>No sticker packs found</Text>
-                <TouchableOpacity style={styles.emptyButton} onPress={handleCreatePack}>
+                <Text style={styles.emptySubtext}>Create your first pack to get started</Text>
+                <TouchableOpacity style={styles.emptyButton} onPress={handleCreatePack} activeOpacity={0.7}>
+                  <Plus size={18} color={themeColors.text.white} />
                   <Text style={styles.emptyButtonText}>Create First Pack</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <FlatList
-                data={filteredPacks}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item: pack }) => (
+              <View style={styles.packsList}>
+                {filteredPacks.map((pack) => (
                   <TouchableOpacity
+                    key={pack.id}
                     style={[
                       styles.packCard,
                       selectedPack?.id === pack.id && styles.packCardSelected,
                     ]}
                     onPress={() => setSelectedPack(pack)}
+                    activeOpacity={0.7}
                   >
-                    <View style={styles.packCardHeader}>
-                      <View style={styles.packCardLeft}>
-                        {pack.iconUrl ? (
-                          <Image source={{ uri: pack.iconUrl }} style={styles.packIcon} contentFit="cover" />
-                        ) : (
-                          <View style={styles.packIconPlaceholder}>
-                            <Smile size={24} color={themeColors.text.secondary} />
-                          </View>
-                        )}
-                        <View style={styles.packInfo}>
-                          <View style={styles.packNameRow}>
-                            <Text style={styles.packName} numberOfLines={1}>{pack.name}</Text>
-                            {pack.isFeatured && (
-                              <Star size={16} color={themeColors.primary} fill={themeColors.primary} />
-                            )}
-                          </View>
+                    <View style={styles.packCardContent}>
+                      {pack.iconUrl ? (
+                        <Image source={{ uri: pack.iconUrl }} style={styles.packIcon} contentFit="cover" />
+                      ) : (
+                        <View style={styles.packIconPlaceholder}>
+                          <Smile size={28} color={themeColors.text.tertiary} />
+                        </View>
+                      )}
+                      <View style={styles.packInfo}>
+                        <View style={styles.packNameRow}>
+                          <Text style={styles.packName} numberOfLines={1}>{pack.name}</Text>
+                          {pack.isFeatured && (
+                            <Star size={16} color={themeColors.primary} fill={themeColors.primary} />
+                          )}
+                        </View>
+                        {pack.description && (
                           <Text style={styles.packDescription} numberOfLines={1}>
-                            {pack.description || 'No description'}
+                            {pack.description}
                           </Text>
-                          <View style={styles.packMeta}>
-                            <Text style={styles.packMetaText}>
-                              {stickers.filter(s => s.packId === pack.id).length} stickers
+                        )}
+                        <View style={styles.packMeta}>
+                          <Text style={styles.packMetaText}>
+                            {stickers.filter(s => s.packId === pack.id).length} stickers
+                          </Text>
+                          <View style={[styles.statusBadge, pack.isActive && styles.statusBadgeActive]}>
+                            <Text style={[styles.statusText, pack.isActive && styles.statusTextActive]}>
+                              {pack.isActive ? 'Active' : 'Inactive'}
                             </Text>
-                            <View style={[styles.statusBadge, pack.isActive && styles.statusBadgeActive]}>
-                              <Text style={[styles.statusText, pack.isActive && styles.statusTextActive]}>
-                                {pack.isActive ? 'Active' : 'Inactive'}
-                              </Text>
-                            </View>
                           </View>
                         </View>
                       </View>
-                      <ChevronRight size={20} color={themeColors.text.secondary} />
+                      <ChevronRight size={20} color={themeColors.text.tertiary} />
                     </View>
                     <View style={styles.packActions}>
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => handleToggleActive(pack)}
+                        activeOpacity={0.7}
                       >
                         {pack.isActive ? (
                           <EyeOff size={18} color={themeColors.text.secondary} />
@@ -717,6 +727,7 @@ export default function AdminStickersScreen() {
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => handleToggleFeatured(pack)}
+                        activeOpacity={0.7}
                       >
                         {pack.isFeatured ? (
                           <Star size={18} color={themeColors.primary} fill={themeColors.primary} />
@@ -727,85 +738,99 @@ export default function AdminStickersScreen() {
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => handleEditPack(pack)}
+                        activeOpacity={0.7}
                       >
                         <Edit2 size={18} color={themeColors.primary} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={() => handleDeletePack(pack)}
+                        activeOpacity={0.7}
                       >
                         <Trash2 size={18} color={themeColors.danger} />
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
-                )}
-                contentContainerStyle={styles.packsList}
-              />
+                ))}
+              </View>
             )}
           </View>
 
-          {/* Stickers List */}
+          {/* Stickers Section - Only show when pack is selected */}
           {selectedPack && (
             <View style={styles.stickersSection}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderLeft}>
-                  <Smile size={20} color={themeColors.primary} />
-                  <Text style={styles.sectionTitle}>
-                    Stickers in "{selectedPack.name}" ({stickers.length})
+                  <Smile size={22} color={themeColors.primary} />
+                  <Text style={styles.sectionTitle} numberOfLines={1}>
+                    {selectedPack.name}
                   </Text>
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countText}>{stickers.length}</Text>
+                  </View>
                 </View>
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={handleCreateSticker}
+                  activeOpacity={0.7}
                 >
-                  <Plus size={20} color={themeColors.text.white} />
-                  <Text style={styles.addButtonText}>Add Sticker</Text>
+                  <Plus size={18} color={themeColors.text.white} />
+                  <Text style={styles.addButtonText}>Add</Text>
                 </TouchableOpacity>
               </View>
 
               {stickers.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Smile size={48} color={themeColors.text.tertiary} />
+                  <View style={styles.emptyIconContainer}>
+                    <Smile size={48} color={themeColors.text.tertiary} />
+                  </View>
                   <Text style={styles.emptyText}>No stickers in this pack</Text>
-                  <TouchableOpacity style={styles.emptyButton} onPress={handleCreateSticker}>
+                  <Text style={styles.emptySubtext}>Add your first sticker to get started</Text>
+                  <TouchableOpacity style={styles.emptyButton} onPress={handleCreateSticker} activeOpacity={0.7}>
+                    <Plus size={18} color={themeColors.text.white} />
                     <Text style={styles.emptyButtonText}>Add First Sticker</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <FlatList
-                  data={stickers}
-                  numColumns={3}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item: sticker }) => (
-                    <View style={styles.stickerCard}>
-                      <Image
-                        source={{ uri: sticker.imageUrl }}
-                        style={styles.stickerImage}
-                        contentFit="contain"
-                      />
+                <View style={styles.stickersGrid}>
+                  {stickers.map((sticker) => (
+                    <View key={sticker.id} style={styles.stickerCard}>
+                      <View style={styles.stickerImageContainer}>
+                        <Image
+                          source={{ uri: sticker.imageUrl }}
+                          style={styles.stickerImage}
+                          contentFit="contain"
+                        />
+                        {sticker.isAnimated && (
+                          <View style={styles.gifBadge}>
+                            <Text style={styles.gifBadgeText}>GIF</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.stickerName} numberOfLines={1}>{sticker.name}</Text>
                       <View style={styles.stickerActions}>
                         <TouchableOpacity
                           style={styles.stickerActionButton}
                           onPress={() => handleEditSticker(sticker)}
+                          activeOpacity={0.7}
                         >
                           <Edit2 size={14} color={themeColors.primary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.stickerActionButton}
                           onPress={() => handleDeleteSticker(sticker)}
+                          activeOpacity={0.7}
                         >
                           <Trash2 size={14} color={themeColors.danger} />
                         </TouchableOpacity>
                       </View>
                     </View>
-                  )}
-                  contentContainerStyle={styles.stickersGrid}
-                />
+                  ))}
+                </View>
               )}
             </View>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {/* Pack Modal */}
@@ -1018,19 +1043,21 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   searchSection: {
     padding: 16,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   searchInput: {
     flex: 1,
@@ -1043,10 +1070,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexWrap: 'wrap',
   },
   filterButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background.secondary,
     borderWidth: 1,
     borderColor: colors.border.light,
     flexDirection: 'row',
@@ -1058,8 +1085,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderColor: colors.primary,
   },
   filterText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.text.secondary,
   },
   filterTextActive: {
@@ -1067,22 +1094,22 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    flexDirection: 'row',
   },
   packsSection: {
-    flex: 1,
-    borderRightWidth: 1,
-    borderRightColor: colors.border.light,
+    paddingBottom: 20,
   },
   stickersSection: {
-    flex: 1,
-    backgroundColor: colors.background.secondary,
+    marginTop: 8,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: colors.background.primary,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
@@ -1090,57 +1117,100 @@ const createStyles = (colors: any) => StyleSheet.create({
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.text.primary,
+    flex: 1,
+  },
+  countBadge: {
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text.secondary,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: colors.primary,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   addButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.text.white,
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    padding: 40,
     alignItems: 'center',
-    padding: 32,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
   },
   emptyContainer: {
-    flex: 1,
+    padding: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.background.secondary,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    gap: 16,
+    marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: colors.text.secondary,
+    fontWeight: '600',
+    color: colors.text.primary,
     textAlign: 'center',
   },
+  emptySubtext: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: colors.primary,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginTop: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   emptyButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text.white,
   },
   packsList: {
@@ -1149,38 +1219,40 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   packCard: {
     backgroundColor: colors.background.primary,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border.light,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   packCardSelected: {
     borderColor: colors.primary,
     borderWidth: 2,
-    backgroundColor: colors.primary + '10',
+    backgroundColor: colors.primary + '08',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.1,
   },
-  packCardHeader: {
+  packCardContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 14,
     marginBottom: 12,
   },
-  packCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
   packIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: colors.background.secondary,
   },
   packIconPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 14,
     backgroundColor: colors.background.secondary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1247,39 +1319,71 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginLeft: 'auto',
   },
   stickersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     padding: 16,
     gap: 12,
   },
   stickerCard: {
-    flex: 1,
+    width: '30%',
     aspectRatio: 1,
     backgroundColor: colors.background.primary,
-    borderRadius: 12,
-    padding: 8,
-    margin: 4,
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: colors.border.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  stickerImageContainer: {
+    width: '100%',
+    height: '70%',
+    marginBottom: 8,
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stickerImage: {
     width: '100%',
-    height: '70%',
-    marginBottom: 8,
+    height: '100%',
+  },
+  gifBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gifBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   stickerName: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.text.primary,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    flex: 1,
   },
   stickerActions: {
     flexDirection: 'row',
     gap: 8,
+    marginTop: 'auto',
   },
   stickerActionButton: {
-    padding: 4,
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: colors.background.secondary,
   },
   modalContainer: {
     flex: 1,
@@ -1368,25 +1472,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   animatedBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  stickerImageContainer: {
-    position: 'relative',
-    width: '100%',
-    height: '70%',
-  },
-  stickerAnimatedBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  stickerAnimatedBadgeText: {
-    fontSize: 8,
     fontWeight: '700',
     color: '#FFFFFF',
   },
