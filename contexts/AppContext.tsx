@@ -156,8 +156,32 @@ export const [AppContext, useApp] = createContextHook(() => {
         // Load user status
         await loadUserStatus(user.id);
         
-        // Initialize status tracking
-        await updateUserStatus('online');
+        // Set status to online immediately on login
+        const now = new Date().toISOString();
+        const { error: statusError } = await supabase
+          .from('user_status')
+          .update({
+            status_type: 'online',
+            last_active_at: now,
+            updated_at: now,
+          })
+          .eq('user_id', user.id);
+
+        if (!statusError) {
+          setUserStatuses(prev => ({
+            ...prev,
+            [user.id]: {
+              userId: user.id,
+              statusType: 'online',
+              lastActiveAt: now,
+              statusVisibility: 'everyone',
+              lastSeenVisibility: 'everyone',
+              updatedAt: now,
+            } as UserStatus,
+          }));
+        }
+        
+        // Start status tracking
         startStatusTracking();
 
         // Check legal acceptances after user is loaded
@@ -5190,58 +5214,50 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser]);
 
   const getUserStatus = useCallback(async (userId: string): Promise<UserStatus | null> => {
-    // Always load fresh from database to get accurate last_active_at
+    // Always load fresh from database to get accurate status and last_active_at
     const status = await loadUserStatus(userId);
     
     if (!status) return null;
 
-    // Calculate actual status based on last_active_at
+    // Trust the database status - it's updated in real-time by app state handlers
+    // Only calculate if status is 'online' but last_active_at is very old (likely stale)
     const now = new Date();
     const lastActive = new Date(status.lastActiveAt);
     const diffMs = now.getTime() - lastActive.getTime();
     const diffMins = Math.floor(diffMs / 60000);
 
-    // Determine actual status based on activity
     let actualStatusType: UserStatusType = status.statusType;
     
     // If status is manually set to 'busy', always preserve it
     if (status.statusType === 'busy') {
       actualStatusType = 'busy';
-    } 
-    // If stored status is 'online' and last_active_at is recent (< 10 minutes), trust it
-    // This prevents overriding online status when user is actively using the app
-    // We use 10 minutes to account for network delays and update intervals
-    else if (status.statusType === 'online' && diffMins < 10) {
-      actualStatusType = 'online';
     }
-    // If stored status is 'away' and last_active_at is recent (< 15 minutes), trust it
-    else if (status.statusType === 'away' && diffMins < 15) {
-      actualStatusType = 'away';
-    }
-    // Otherwise, calculate based on last activity
-    else {
-      if (diffMins < 2) {
-        // Active in last 2 minutes = Online
-        actualStatusType = 'online';
-      } else if (diffMins >= 2 && diffMins < 15) {
-        // Inactive 2-15 minutes = Away
+    // If status is 'online' but last_active_at is more than 5 minutes old, likely stale
+    // Set to 'away' or 'offline' based on time
+    else if (status.statusType === 'online' && diffMins > 5) {
+      if (diffMins < 15) {
         actualStatusType = 'away';
       } else {
-        // Inactive 15+ minutes = Offline
         actualStatusType = 'offline';
       }
     }
+    // If status is 'away' but last_active_at is more than 20 minutes old, set to offline
+    else if (status.statusType === 'away' && diffMins > 20) {
+      actualStatusType = 'offline';
+    }
+    // Otherwise, trust the database status
+    // The database status is updated in real-time by app state handlers
 
-    // Return status with calculated type
-    const calculatedStatus: UserStatus = {
+    // Return status with calculated type (only if we changed it)
+    const finalStatus: UserStatus = {
       ...status,
       statusType: actualStatusType,
     };
 
-    // Update cache with calculated status
-    setUserStatuses(prev => ({ ...prev, [userId]: calculatedStatus }));
+    // Update cache
+    setUserStatuses(prev => ({ ...prev, [userId]: finalStatus }));
     
-    return calculatedStatus;
+    return finalStatus;
   }, [loadUserStatus]);
 
   const startStatusTracking = useCallback(() => {
@@ -5253,23 +5269,22 @@ export const [AppContext, useApp] = createContextHook(() => {
       statusUpdateIntervalRef.current = null;
     }
 
-    // Update last active and auto-adjust status every 30 seconds
-    // Since the app is running, user is active, so always update last_active_at
+    // Update last_active_at every 30 seconds while app is active
+    // This keeps the user marked as "online" while they're using the app
     const interval = setInterval(async () => {
       if (currentUser) {
         const now = new Date();
         
-        // Always update last_active_at since app is running (user is active)
-        // Also check and update status based on current state
+        // Update last_active_at to show user is active
+        // Only update status to 'online' if it's not manually set to 'busy'
         const { data: currentStatusData, error: fetchError } = await supabase
           .from('user_status')
-          .select('last_active_at, status_type')
+          .select('status_type')
           .eq('user_id', currentUser.id)
           .single();
 
         if (currentStatusData && !fetchError) {
-          // Since we're updating every 30 seconds, user is active
-          // Set status to 'online' unless manually set to 'busy'
+          // Only update to 'online' if not 'busy'
           const newStatusType = currentStatusData.status_type === 'busy' 
             ? 'busy' 
             : 'online';
@@ -5331,7 +5346,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           }
         }
       }
-    }, 30 * 1000); // Every 30 seconds for real-time updates
+    }, 30 * 1000); // Every 30 seconds
 
     statusUpdateIntervalRef.current = interval;
   }, [currentUser]);
@@ -5341,27 +5356,96 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser) return;
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      const now = new Date().toISOString();
+      
       if (nextAppState === 'active') {
-        // App came to foreground - set status to online and start tracking
-        await updateUserStatus('online');
-        startStatusTracking();
-      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // App went to background - stop tracking, status will become offline after 15 min
+        // App came to foreground - set status to online immediately
+        console.log('App became active - setting status to online');
+        
+        // Stop any existing interval first
         if (statusUpdateIntervalRef.current) {
           clearInterval(statusUpdateIntervalRef.current);
           statusUpdateIntervalRef.current = null;
         }
-        // Note: We don't set to offline immediately, let it timeout naturally
-        // This allows for brief app switches without showing as offline
+
+        // Update status to online and last_active_at to NOW
+        const { error } = await supabase
+          .from('user_status')
+          .update({
+            status_type: 'online',
+            last_active_at: now,
+            updated_at: now,
+          })
+          .eq('user_id', currentUser.id);
+
+        if (!error) {
+          setUserStatuses(prev => {
+            const existing = prev[currentUser.id];
+            return {
+              ...prev,
+              [currentUser.id]: {
+                ...existing,
+                statusType: 'online',
+                lastActiveAt: now,
+                updatedAt: now,
+              } as UserStatus,
+            };
+          });
+        }
+
+        // Start tracking
+        startStatusTracking();
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App went to background - update last_active_at to NOW and set to away/offline
+        console.log('App went to background - updating last_active_at and setting status');
+        
+        // Stop tracking interval
+        if (statusUpdateIntervalRef.current) {
+          clearInterval(statusUpdateIntervalRef.current);
+          statusUpdateIntervalRef.current = null;
+        }
+
+        // Update last_active_at to NOW (actual time they left)
+        // Set status to 'away' (will become offline after timeout)
+        const { error } = await supabase
+          .from('user_status')
+          .update({
+            status_type: 'away',
+            last_active_at: now, // Update to actual time they left
+            updated_at: now,
+          })
+          .eq('user_id', currentUser.id);
+
+        if (!error) {
+          setUserStatuses(prev => {
+            const existing = prev[currentUser.id];
+            return {
+              ...prev,
+              [currentUser.id]: {
+                ...existing,
+                statusType: 'away',
+                lastActiveAt: now, // Actual time they left
+                updatedAt: now,
+              } as UserStatus,
+            };
+          });
+        }
       }
     };
+
+    // Get initial app state
+    const currentAppState = AppState.currentState;
+    if (currentAppState === 'active' && currentUser) {
+      // App is already active, set to online
+      handleAppStateChange('active');
+    }
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
       subscription.remove();
     };
-  }, [currentUser, updateUserStatus, startStatusTracking]);
+  }, [currentUser, startStatusTracking]);
 
   // Cleanup interval on unmount or logout
   useEffect(() => {
@@ -5435,11 +5519,13 @@ export const [AppContext, useApp] = createContextHook(() => {
       // Update status to offline AND update last_active_at to NOW when logging out
       const setOfflineOnLogout = async () => {
         const now = new Date().toISOString();
+        console.log('User logged out - setting status to offline');
+        
         await supabase
           .from('user_status')
           .update({
             status_type: 'offline',
-            last_active_at: now, // Update last_active_at to current time on logout
+            last_active_at: now, // Update last_active_at to actual logout time
             updated_at: now,
           })
           .eq('user_id', currentUser.id);
@@ -5453,7 +5539,7 @@ export const [AppContext, useApp] = createContextHook(() => {
               [currentUser.id]: {
                 ...existing,
                 statusType: 'offline',
-                lastActiveAt: now,
+                lastActiveAt: now, // Actual logout time
                 updatedAt: now,
               },
             };
@@ -5464,6 +5550,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       
       setOfflineOnLogout();
       
+      // Stop tracking
       if (statusUpdateIntervalRef.current) {
         clearInterval(statusUpdateIntervalRef.current);
         statusUpdateIntervalRef.current = null;
