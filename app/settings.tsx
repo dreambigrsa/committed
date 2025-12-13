@@ -42,6 +42,7 @@ import {
   Camera,
   Settings,
   X,
+  FileText,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '@/contexts/AppContext';
@@ -49,10 +50,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { LegalDocument } from '@/types';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { currentUser, deleteAccount, getCurrentUserRelationship, endRelationship, updateUserProfile } = useApp();
+  const [legalDocuments, setLegalDocuments] = useState<LegalDocument[]>([]);
   const { colors, isDark, themeMode, setThemeMode, loadThemePreference, saveThemePreference, visualTheme, loadVisualTheme, saveVisualTheme } = useTheme();
   const { language, setLanguage: setLanguageContext, loadLanguagePreference, saveLanguagePreference, t } = useLanguage();
   const relationship = getCurrentUserRelationship();
@@ -123,8 +126,42 @@ export default function SettingsScreen() {
       loadThemePreference(currentUser.id);
       loadVisualTheme(currentUser.id);
       loadLanguagePreference(currentUser.id);
+      loadLegalDocuments();
     }
   }, [currentUser, loadThemePreference, loadVisualTheme, loadLanguagePreference]);
+
+  const loadLegalDocuments = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('legal_documents')
+        .select('*')
+        .eq('is_active', true)
+        .contains('display_location', ['settings']);
+
+      if (error) throw error;
+
+      if (data) {
+        const docs = data.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          slug: doc.slug,
+          content: doc.content,
+          version: doc.version,
+          isActive: doc.is_active,
+          isRequired: doc.is_required,
+          displayLocation: doc.display_location || [],
+          createdAt: doc.created_at,
+          updatedAt: doc.updated_at,
+          createdBy: doc.created_by,
+          lastUpdatedBy: doc.last_updated_by,
+        }));
+        setLegalDocuments(docs);
+      }
+    } catch (error) {
+      console.error('Failed to load legal documents:', error);
+    }
+  };
 
   const loadSettings = async () => {
     if (!currentUser) return;
@@ -1276,6 +1313,32 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Legal & Policies */}
+          {legalDocuments.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <FileText size={20} color={colors.primary} />
+                <Text style={styles.sectionTitle}>Legal & Policies</Text>
+              </View>
+
+              <View style={styles.settingsList}>
+                {legalDocuments.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={styles.settingItem}
+                    onPress={() => router.push(`/legal/${doc.slug}` as any)}
+                  >
+                    <View style={styles.settingLeft}>
+                      <FileText size={20} color={colors.text.secondary} />
+                      <Text style={styles.settingLabel}>{doc.title}</Text>
+                    </View>
+                    <ChevronRight size={20} color={colors.text.tertiary} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* Delete Account */}
           <View style={styles.section}>
