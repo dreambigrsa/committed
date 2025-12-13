@@ -764,11 +764,35 @@ export default function ConversationDetailScreen() {
     const otherParticipantId = conversation.participants.find(id => id !== currentUser.id);
     if (!otherParticipantId) return null;
     
+    // Find the index of the other participant in the participants array
     const otherIndex = conversation.participants.indexOf(otherParticipantId);
+    
+    // Ensure we have valid data - if index is out of bounds, try to find by ID
+    let name = 'Unknown';
+    let avatar: string | undefined = undefined;
+    
+    if (otherIndex >= 0 && otherIndex < conversation.participantNames.length) {
+      name = conversation.participantNames[otherIndex] || 'Unknown';
+      avatar = conversation.participantAvatars[otherIndex];
+    } else {
+      // Fallback: find by matching participant ID with names/avatars
+      // This handles cases where arrays might be misaligned
+      const currentUserIndex = conversation.participants.indexOf(currentUser.id);
+      if (currentUserIndex === 0) {
+        // Current user is first, other is second
+        name = conversation.participantNames[1] || 'Unknown';
+        avatar = conversation.participantAvatars[1];
+      } else {
+        // Current user is second, other is first
+        name = conversation.participantNames[0] || 'Unknown';
+        avatar = conversation.participantAvatars[0];
+      }
+    }
+    
     return {
       id: otherParticipantId,
-      name: conversation.participantNames[otherIndex] || 'Unknown',
-      avatar: conversation.participantAvatars[otherIndex],
+      name,
+      avatar,
     };
   };
 
