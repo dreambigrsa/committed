@@ -362,8 +362,9 @@ export default function ConversationDetailScreen() {
 
   // Subscribe to status updates for other participant and refresh periodically
   useEffect(() => {
+    if (!getUserStatus) return;
     const other = getOtherParticipant();
-    if (!other?.id || !getUserStatus) return;
+    if (!other?.id) return;
 
     // Load status immediately
     const refreshStatus = async () => {
@@ -807,9 +808,14 @@ export default function ConversationDetailScreen() {
     };
   };
 
+  // Early return guard - must be after all hooks
+  if (!currentUser || !conversationId) {
+    return null;
+  }
+
   const otherParticipant = getOtherParticipant();
 
-  if (!currentUser || !conversation || !otherParticipant) {
+  if (!conversation || !otherParticipant) {
     return null;
   }
 
