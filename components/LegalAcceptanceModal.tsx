@@ -96,7 +96,12 @@ export default function LegalAcceptanceModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={() => {}}
+      onRequestClose={() => {
+        // Prevent closing modal if required documents not accepted
+        if (requiredDocs.length > 0 && !allRequiredAccepted) {
+          return;
+        }
+      }}
     >
       <View style={styles.container}>
         {/* Hero Header */}
