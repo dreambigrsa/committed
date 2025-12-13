@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { trpc, trpcClient } from "@/lib/trpc";
 import NotificationToast from "@/components/NotificationToast";
 import BanMessageModal from "@/components/BanMessageModal";
+import LegalAcceptanceEnforcer from "@/components/LegalAcceptanceEnforcer";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -47,6 +48,7 @@ function RootLayoutNav() {
           userId={currentUser.id}
         />
       )}
+      <LegalAcceptanceEnforcer />
     </>
   );
 }
