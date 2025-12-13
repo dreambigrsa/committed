@@ -23,6 +23,7 @@ import {
   Video,
   ScanFace,
   ShieldAlert,
+  Smile,
 } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -115,6 +116,14 @@ export default function AdminDashboardScreen() {
       description: 'Manage ads',
       route: '/admin/advertisements',
       color: '#4ECDC4',
+      visible: true,
+    },
+    {
+      title: 'Stickers',
+      icon: Smile,
+      description: 'Manage stickers',
+      route: '/admin/stickers',
+      color: '#FFB6C1',
       visible: true,
     },
     {
