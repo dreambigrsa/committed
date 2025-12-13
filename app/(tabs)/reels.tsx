@@ -272,6 +272,24 @@ export default function ReelsScreen() {
       });
     };
   }, [reels.length]);
+
+  // Cleanup all intervals and timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (skipCountdownInterval.current) {
+        clearInterval(skipCountdownInterval.current);
+        skipCountdownInterval.current = null;
+      }
+      if (bannerCardSkipCountdownInterval.current) {
+        clearInterval(bannerCardSkipCountdownInterval.current);
+        bannerCardSkipCountdownInterval.current = null;
+      }
+      if (bannerCardAutoDismissTimeout.current) {
+        clearTimeout(bannerCardAutoDismissTimeout.current);
+        bannerCardAutoDismissTimeout.current = null;
+      }
+    };
+  }, []);
   
   // Ensure only the current reel is playing (only if screen is focused)
   useEffect(() => {
