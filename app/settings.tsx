@@ -1318,20 +1318,44 @@ export default function SettingsScreen() {
           {legalDocuments.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <FileText size={20} color={colors.primary} />
-                <Text style={styles.sectionTitle}>Legal & Policies</Text>
+                <View style={styles.sectionIconContainer}>
+                  <FileText size={20} color={colors.primary} />
+                </View>
+                <View style={styles.sectionHeaderText}>
+                  <Text style={styles.sectionTitle}>Legal & Policies</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Review our terms, policies, and guidelines
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.settingsList}>
-                {legalDocuments.map((doc) => (
+                {legalDocuments.map((doc, index) => (
                   <TouchableOpacity
                     key={doc.id}
-                    style={styles.settingItem}
+                    style={[
+                      styles.legalDocumentItem,
+                      index === 0 && styles.legalDocumentItemFirst,
+                      index === legalDocuments.length - 1 && styles.legalDocumentItemLast,
+                    ]}
                     onPress={() => router.push(`/legal/${doc.slug}` as any)}
+                    activeOpacity={0.7}
                   >
-                    <View style={styles.settingLeft}>
-                      <FileText size={20} color={colors.text.secondary} />
-                      <Text style={styles.settingLabel}>{doc.title}</Text>
+                    <View style={styles.legalDocumentLeft}>
+                      <View style={styles.legalDocumentIconContainer}>
+                        <FileText size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.legalDocumentInfo}>
+                        <Text style={styles.legalDocumentTitle}>{doc.title}</Text>
+                        <View style={styles.legalDocumentMeta}>
+                          <Text style={styles.legalDocumentVersion}>v{doc.version}</Text>
+                          {doc.isRequired && (
+                            <View style={styles.legalDocumentRequiredBadge}>
+                              <Text style={styles.legalDocumentRequiredText}>Required</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
                     </View>
                     <ChevronRight size={20} color={colors.text.tertiary} />
                   </TouchableOpacity>
@@ -2012,5 +2036,86 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.white,
+  },
+  sectionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderText: {
+    flex: 1,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  legalDocumentItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  legalDocumentItemFirst: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  legalDocumentItemLast: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  legalDocumentLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  legalDocumentIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary + '10',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legalDocumentInfo: {
+    flex: 1,
+  },
+  legalDocumentTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  legalDocumentMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  legalDocumentVersion: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    fontWeight: '500' as const,
+  },
+  legalDocumentRequiredBadge: {
+    backgroundColor: colors.danger + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  legalDocumentRequiredText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: colors.danger,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
