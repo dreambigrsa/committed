@@ -1,6 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord, LegalDocument } from '@/types';
+import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord, LegalDocument, UserStatus, UserStatusType, StatusVisibility } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
 import { checkUserLegalAcceptances } from '@/lib/legal-enforcement';
@@ -29,6 +29,8 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]); // Array of blocked user IDs
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [, setSubscriptions] = useState<RealtimeChannel[]>([]);
+  const [userStatuses, setUserStatuses] = useState<Record<string, UserStatus>>({}); // userId -> UserStatus
+  const [statusUpdateInterval, setStatusUpdateInterval] = useState<NodeJS.Timeout | null>(null);
   
   // Ban modal state
   const [banModalVisible, setBanModalVisible] = useState(false);
@@ -148,6 +150,13 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: userData.created_at,
         };
         setCurrentUser(user);
+
+        // Load user status
+        await loadUserStatus(user.id);
+        
+        // Initialize status tracking
+        await updateUserStatus('online');
+        startStatusTracking();
 
         // Check legal acceptances after user is loaded
         try {
@@ -4969,6 +4978,232 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  // ============================================
+  // USER STATUS FUNCTIONS
+  // ============================================
+
+  const loadUserStatus = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_status')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Load user status error:', error);
+        return null;
+      }
+
+      if (data) {
+        const status: UserStatus = {
+          userId: data.user_id,
+          statusType: data.status_type,
+          customStatusText: data.custom_status_text,
+          lastActiveAt: data.last_active_at,
+          statusVisibility: data.status_visibility,
+          lastSeenVisibility: data.last_seen_visibility,
+          updatedAt: data.updated_at,
+        };
+        setUserStatuses(prev => ({ ...prev, [userId]: status }));
+        return status;
+      }
+
+      // Create default status if doesn't exist
+      const defaultStatus: UserStatus = {
+        userId,
+        statusType: 'offline',
+        lastActiveAt: new Date().toISOString(),
+        statusVisibility: 'contacts',
+        lastSeenVisibility: 'contacts',
+        updatedAt: new Date().toISOString(),
+      };
+      await createUserStatus(defaultStatus);
+      setUserStatuses(prev => ({ ...prev, [userId]: defaultStatus }));
+      return defaultStatus;
+    } catch (error) {
+      console.error('Load user status error:', error);
+      return null;
+    }
+  }, []);
+
+  const createUserStatus = useCallback(async (status: UserStatus) => {
+    try {
+      const { error } = await supabase
+        .from('user_status')
+        .insert({
+          user_id: status.userId,
+          status_type: status.statusType,
+          custom_status_text: status.customStatusText,
+          last_active_at: status.lastActiveAt,
+          status_visibility: status.statusVisibility,
+          last_seen_visibility: status.lastSeenVisibility,
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Create user status error:', error);
+      return false;
+    }
+  }, []);
+
+  const updateUserStatus = useCallback(async (
+    statusType: UserStatusType,
+    customStatusText?: string
+  ) => {
+    if (!currentUser) return false;
+
+    try {
+      const updateData: any = {
+        status_type: statusType,
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (customStatusText !== undefined) {
+        updateData.custom_status_text = customStatusText || null;
+      }
+
+      const { error } = await supabase
+        .from('user_status')
+        .update(updateData)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setUserStatuses(prev => {
+        const existing = prev[currentUser.id];
+        return {
+          ...prev,
+          [currentUser.id]: {
+            ...existing,
+            statusType,
+            customStatusText: customStatusText || existing?.customStatusText,
+            lastActiveAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as UserStatus,
+        };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Update user status error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
+  const updateStatusPrivacy = useCallback(async (
+    statusVisibility: StatusVisibility,
+    lastSeenVisibility: StatusVisibility
+  ) => {
+    if (!currentUser) return false;
+
+    try {
+      const { error } = await supabase
+        .from('user_status')
+        .update({
+          status_visibility: statusVisibility,
+          last_seen_visibility: lastSeenVisibility,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setUserStatuses(prev => {
+        const existing = prev[currentUser.id];
+        return {
+          ...prev,
+          [currentUser.id]: {
+            ...existing,
+            statusVisibility,
+            lastSeenVisibility,
+            updatedAt: new Date().toISOString(),
+          } as UserStatus,
+        };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Update status privacy error:', error);
+      return false;
+    }
+  }, [currentUser]);
+
+  const getUserStatus = useCallback(async (userId: string): Promise<UserStatus | null> => {
+    // Check local cache first
+    if (userStatuses[userId]) {
+      return userStatuses[userId];
+    }
+
+    // Load from database
+    return await loadUserStatus(userId);
+  }, [userStatuses, loadUserStatus]);
+
+  const startStatusTracking = useCallback(() => {
+    if (!currentUser) return;
+
+    // Clear existing interval
+    if (statusUpdateInterval) {
+      clearInterval(statusUpdateInterval);
+    }
+
+    // Update last active every 2 minutes
+    const interval = setInterval(async () => {
+      if (currentUser) {
+        const { error } = await supabase
+          .from('user_status')
+          .update({
+            last_active_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', currentUser.id);
+
+        if (!error) {
+          setUserStatuses(prev => {
+            const existing = prev[currentUser.id];
+            if (existing) {
+              return {
+                ...prev,
+                [currentUser.id]: {
+                  ...existing,
+                  lastActiveAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                },
+              };
+            }
+            return prev;
+          });
+        }
+      }
+    }, 2 * 60 * 1000); // Every 2 minutes
+
+    setStatusUpdateInterval(interval);
+  }, [currentUser, statusUpdateInterval]);
+
+  // Cleanup interval on unmount or logout
+  useEffect(() => {
+    return () => {
+      if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+      }
+    };
+  }, [statusUpdateInterval]);
+
+  // Set status to offline on logout
+  useEffect(() => {
+    if (!session && currentUser) {
+      updateUserStatus('offline');
+      if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+        setStatusUpdateInterval(null);
+      }
+    }
+  }, [session, currentUser, statusUpdateInterval, updateUserStatus]);
+
   return {
     currentUser,
     isLoading,
@@ -5082,6 +5317,12 @@ export const [AppContext, useApp] = createContextHook(() => {
     updateWarningTemplate,
     legalAcceptanceStatus,
     setLegalAcceptanceStatus,
+    // Status functions
+    userStatuses,
+    getUserStatus,
+    updateUserStatus,
+    updateStatusPrivacy,
+    loadUserStatus,
   };
 });
 
