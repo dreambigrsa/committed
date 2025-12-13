@@ -410,8 +410,14 @@ export const [AppContext, useApp] = createContextHook(() => {
               .select('id, full_name, profile_picture')
               .in('id', participantIds);
 
-            const participantNames = participantsData?.map((p: any) => p.full_name) || [];
-            const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+            // Create a map for quick lookup
+            const participantsMap = new Map(
+              participantsData?.map((p: any) => [p.id, { name: p.full_name, avatar: p.profile_picture }]) || []
+            );
+
+            // Ensure arrays are in the same order as participantIds
+            const participantNames = participantIds.map((id: string) => participantsMap.get(id)?.name || 'Unknown');
+            const participantAvatars = participantIds.map((id: string) => participantsMap.get(id)?.avatar);
 
             // Calculate last message from non-deleted messages
             const convMessages = messagesByConversation[conv.id] || [];
@@ -2398,8 +2404,14 @@ export const [AppContext, useApp] = createContextHook(() => {
           .select('id, full_name, profile_picture')
           .in('id', existingConv.participant_ids);
 
-        const participantNames = participantsData?.map((p: any) => p.full_name) || [];
-        const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+        // Create a map for quick lookup
+        const participantsMap = new Map(
+          participantsData?.map((p: any) => [p.id, { name: p.full_name, avatar: p.profile_picture }]) || []
+        );
+
+        // Ensure arrays are in the same order as participant_ids
+        const participantNames = existingConv.participant_ids.map((id: string) => participantsMap.get(id)?.name || 'Unknown');
+        const participantAvatars = existingConv.participant_ids.map((id: string) => participantsMap.get(id)?.avatar);
 
         const conversation: Conversation = {
           id: existingConv.id,
@@ -2437,8 +2449,14 @@ export const [AppContext, useApp] = createContextHook(() => {
         .select('id, full_name, profile_picture')
         .in('id', [currentUser.id, otherUserId]);
 
-      const participantNames = participantsData?.map((p: any) => p.full_name) || [];
-      const participantAvatars = participantsData?.map((p: any) => p.profile_picture) || [];
+      // Create a map for quick lookup
+      const participantsMap = new Map(
+        participantsData?.map((p: any) => [p.id, { name: p.full_name, avatar: p.profile_picture }]) || []
+      );
+
+      // Ensure arrays are in the same order as participant_ids
+      const participantNames = newConversation.participant_ids.map((id: string) => participantsMap.get(id)?.name || 'Unknown');
+      const participantAvatars = newConversation.participant_ids.map((id: string) => participantsMap.get(id)?.avatar);
 
       const conversation: Conversation = {
         id: newConversation.id,
