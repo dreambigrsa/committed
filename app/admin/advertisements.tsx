@@ -124,12 +124,58 @@ export default function AdminAdvertisementsScreen() {
     );
   }
 
+  const validateURL = (url: string): boolean => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const handleSaveAd = async () => {
     if (!formData.title || !formData.description || !formData.imageUrl) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
+    // Validate Image/Video URL
+    if (!validateURL(formData.imageUrl)) {
+      Alert.alert('Invalid URL', 'Please enter a valid HTTP or HTTPS URL for the image/video');
+      return;
+    }
+
+    // Validate Link URL if provided
+    if (formData.linkUrl && formData.linkUrl.trim() !== '' && !validateURL(formData.linkUrl)) {
+      Alert.alert('Invalid URL', 'Please enter a valid HTTP or HTTPS URL for the link');
+      return;
+    }
+
+    // Warn if video type but URL doesn't look like a video
+    if (formData.type === 'video') {
+      const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.mkv', '.m3u8'];
+      const isVideoUrl = videoExtensions.some(ext => 
+        formData.imageUrl.toLowerCase().includes(ext)
+      );
+      if (!isVideoUrl && !formData.imageUrl.includes('video')) {
+        Alert.alert(
+          'Video URL Warning', 
+          'The URL doesn\'t appear to be a video file. For video ads, please use a video URL (e.g., .mp4, .mov).',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue Anyway', onPress: async () => {
+              await saveAd();
+            }},
+          ]
+        );
+        return;
+      }
+    }
+
+    await saveAd();
+  };
+
+  const saveAd = async () => {
     if (editingAd) {
       await updateAdvertisement(editingAd.id, formData);
     } else {
@@ -377,15 +423,22 @@ export default function AdminAdvertisementsScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Image URL *</Text>
+                <Text style={styles.inputLabel}>
+                  {formData.type === 'video' ? 'Video URL *' : 'Image URL *'}
+                </Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="https://example.com/image.jpg"
+                  placeholder={formData.type === 'video' ? 'https://example.com/video.mp4' : 'https://example.com/image.jpg'}
                   placeholderTextColor={colors.text.tertiary}
                   value={formData.imageUrl}
                   onChangeText={(text) => setFormData({ ...formData, imageUrl: text })}
                   autoCapitalize="none"
                 />
+                {formData.type === 'video' && (
+                  <Text style={styles.helperText}>
+                    💡 For video ads, use a video URL (.mp4, .mov, etc.). In reels, video ads will show as overlays with skip functionality.
+                  </Text>
+                )}
               </View>
 
               <View style={styles.inputGroup}>
@@ -739,6 +792,13 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.text.primary,
     marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    marginTop: 6,
+    fontStyle: 'italic' as const,
+    lineHeight: 16,
   },
   textInput: {
     backgroundColor: colors.background.secondary,
