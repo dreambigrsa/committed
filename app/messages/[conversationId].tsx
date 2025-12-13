@@ -1207,7 +1207,7 @@ export default function ConversationDetailScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : -10}
           enabled={true}
         >
           <FlatList
@@ -1261,7 +1261,14 @@ export default function ConversationDetailScreen() {
             </View>
           )}
 
-          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={[
+            styles.inputContainer,
+            {
+              paddingBottom: Platform.OS === 'android' && isKeyboardVisible
+                ? Math.max(insets.bottom, 4)
+                : Math.max(insets.bottom, 12),
+            },
+          ]}>
             {/* Attachment Toggle Button - Only show when keyboard is visible */}
             {isKeyboardVisible && (
               <TouchableOpacity
