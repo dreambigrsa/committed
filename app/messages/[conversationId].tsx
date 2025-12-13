@@ -360,10 +360,20 @@ export default function ConversationDetailScreen() {
     }
   }, [conversationId, currentUser, conversation, getUserStatus]);
 
-  // Subscribe to status updates for other participant
+  // Subscribe to status updates for other participant and refresh periodically
   useEffect(() => {
     const other = getOtherParticipant();
     if (!other?.id || !getUserStatus) return;
+
+    // Load status immediately
+    const refreshStatus = async () => {
+      const status = await getUserStatus(other.id);
+      setOtherParticipantStatus(status);
+    };
+    refreshStatus();
+
+    // Refresh status every 30 seconds to recalculate based on last_active_at
+    const refreshInterval = setInterval(refreshStatus, 30 * 1000);
 
     const channel = supabase
       .channel(`user_status:${other.id}`)
@@ -383,6 +393,7 @@ export default function ConversationDetailScreen() {
       .subscribe();
 
     return () => {
+      clearInterval(refreshInterval);
       supabase.removeChannel(channel);
     };
   }, [conversationId, conversation, getUserStatus]);
