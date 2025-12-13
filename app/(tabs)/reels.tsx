@@ -44,14 +44,19 @@ export default function ReelsScreen() {
   const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
   const [reportingReel, setReportingReel] = useState<{ id: string; userId: string } | null>(null);
   const [smartAds, setSmartAds] = useState<Advertisement[]>([]);
-  const [activeVideoAd, setActiveVideoAd] = useState<{ reelId: string; ad: Advertisement; canSkip: boolean } | null>(null);
+  const [activeVideoAd, setActiveVideoAd] = useState<{ reelId: string; ad: Advertisement; canSkip: boolean; skipDelay: number } | null>(null);
   const [videoAdPlaybackTime, setVideoAdPlaybackTime] = useState<number>(0);
+  const [skipCountdown, setSkipCountdown] = useState<number>(0);
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const adVideoRefs = useRef<{ [key: string]: Video | null }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const skipButtonOpacity = useRef(new Animated.Value(0)).current;
   const recordedImpressions = useRef<Set<string>>(new Set());
+  const skipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
+  
+  // Configurable skip delay (5-10 seconds, default 5)
+  const SKIP_DELAY_SECONDS = 5;
 
   // Reset recorded impressions when ads change
   useEffect(() => {
@@ -125,9 +130,15 @@ export default function ReelsScreen() {
             if (reelVideoRef) {
               reelVideoRef.pauseAsync().catch(() => {});
             }
-            // Show ad overlay
-            setActiveVideoAd({ reelId: reel.id, ad, canSkip: false });
+            // Show ad overlay with skip delay
+            setActiveVideoAd({ 
+              reelId: reel.id, 
+              ad, 
+              canSkip: false,
+              skipDelay: SKIP_DELAY_SECONDS 
+            });
             setVideoAdPlaybackTime(0);
+            setSkipCountdown(SKIP_DELAY_SECONDS);
             skipButtonOpacity.setValue(0);
           }
         }
@@ -437,7 +448,13 @@ export default function ReelsScreen() {
   };
 
   const handleSkipAd = () => {
-    if (activeVideoAd) {
+    if (activeVideoAd && activeVideoAd.canSkip) {
+      // Clear countdown interval
+      if (skipCountdownInterval.current) {
+        clearInterval(skipCountdownInterval.current);
+        skipCountdownInterval.current = null;
+      }
+      
       // Pause ad video
       const adVideoRef = adVideoRefs.current[activeVideoAd.ad.id];
       if (adVideoRef) {
@@ -450,11 +467,18 @@ export default function ReelsScreen() {
       }
       setActiveVideoAd(null);
       setVideoAdPlaybackTime(0);
+      setSkipCountdown(0);
     }
   };
 
   const handleVideoAdEnd = () => {
     if (activeVideoAd) {
+      // Clear countdown interval
+      if (skipCountdownInterval.current) {
+        clearInterval(skipCountdownInterval.current);
+        skipCountdownInterval.current = null;
+      }
+      
       // Resume reel video when ad ends
       const reelVideoRef = videoRefs.current[activeVideoAd.reelId];
       if (reelVideoRef) {
@@ -462,8 +486,48 @@ export default function ReelsScreen() {
       }
       setActiveVideoAd(null);
       setVideoAdPlaybackTime(0);
+      setSkipCountdown(0);
     }
   };
+
+  // Start countdown timer when video ad is shown
+  useEffect(() => {
+    if (activeVideoAd && !activeVideoAd.canSkip) {
+      // Reset countdown
+      setSkipCountdown(activeVideoAd.skipDelay);
+      
+      // Start countdown interval
+      skipCountdownInterval.current = setInterval(() => {
+        setSkipCountdown((prev) => {
+          if (prev <= 1) {
+            // Countdown finished, enable skip
+            if (skipCountdownInterval.current) {
+              clearInterval(skipCountdownInterval.current);
+              skipCountdownInterval.current = null;
+            }
+            setActiveVideoAd((prevAd) => 
+              prevAd ? { ...prevAd, canSkip: true } : null
+            );
+            // Fade in skip button
+            Animated.timing(skipButtonOpacity, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => {
+        if (skipCountdownInterval.current) {
+          clearInterval(skipCountdownInterval.current);
+          skipCountdownInterval.current = null;
+        }
+      };
+    }
+  }, [activeVideoAd?.reelId, activeVideoAd?.ad.id]);
 
   // Render different ad types
   const renderBannerAd = (ad: Advertisement) => {
@@ -559,15 +623,24 @@ export default function ReelsScreen() {
             <View style={styles.adBadge}>
               <Text style={styles.adBadgeText}>Ad</Text>
             </View>
-            <Animated.View style={[styles.skipButtonContainer, { opacity: skipButtonOpacity }]}>
+            <View style={styles.skipButtonContainer}>
               <TouchableOpacity
-                style={styles.skipButton}
+                style={[
+                  styles.skipButton,
+                  !activeVideoAd.canSkip && styles.skipButtonDisabled
+                ]}
                 onPress={handleSkipAd}
-                activeOpacity={0.8}
+                activeOpacity={activeVideoAd.canSkip ? 0.8 : 1}
+                disabled={!activeVideoAd.canSkip}
               >
-                <Text style={styles.skipButtonText}>Skip Ad</Text>
+                <Text style={styles.skipButtonText}>
+                  {activeVideoAd.canSkip 
+                    ? 'Skip Ad' 
+                    : `Skip in ${skipCountdown}s`
+                  }
+                </Text>
               </TouchableOpacity>
-            </Animated.View>
+            </View>
           </View>
           
           <TouchableOpacity
@@ -595,15 +668,8 @@ export default function ReelsScreen() {
                   const duration = status.durationMillis || 0;
                   setVideoAdPlaybackTime(currentTime);
                   
-                  // Show skip button after 5 seconds
-                  if (currentTime >= 5000 && !activeVideoAd.canSkip) {
-                    setActiveVideoAd(prev => prev ? { ...prev, canSkip: true } : null);
-                    Animated.timing(skipButtonOpacity, {
-                      toValue: 1,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }).start();
-                  }
+                  // Countdown is handled by useEffect, which controls button visibility
+                  // The skip button opacity is animated when countdown completes
                   
                   // Auto-close when video ends
                   if (status.didJustFinish) {
@@ -634,9 +700,15 @@ export default function ReelsScreen() {
         if (reelVideoRef) {
           reelVideoRef.pauseAsync().catch(() => {});
         }
-        // Show ad overlay
-        setActiveVideoAd({ reelId, ad, canSkip: false });
+        // Show ad overlay with skip delay
+        setActiveVideoAd({ 
+          reelId, 
+          ad, 
+          canSkip: false,
+          skipDelay: SKIP_DELAY_SECONDS 
+        });
         setVideoAdPlaybackTime(0);
+        setSkipCountdown(SKIP_DELAY_SECONDS);
         skipButtonOpacity.setValue(0);
       }
       return null; // Video ads are rendered as overlay, not as separate items
@@ -1736,11 +1808,19 @@ const createStyles = (colors: any, overlayBottomPadding: number) => StyleSheet.c
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  skipButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    opacity: 0.8,
   },
   skipButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700' as const,
     color: colors.text.white,
+    letterSpacing: 0.3,
   },
 });
 
