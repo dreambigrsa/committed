@@ -5390,7 +5390,38 @@ export const [AppContext, useApp] = createContextHook(() => {
   // Set status to offline on logout
   useEffect(() => {
     if (!session && currentUser) {
-      updateUserStatus('offline');
+      // Update status to offline AND update last_active_at to NOW when logging out
+      const setOfflineOnLogout = async () => {
+        const now = new Date().toISOString();
+        await supabase
+          .from('user_status')
+          .update({
+            status_type: 'offline',
+            last_active_at: now, // Update last_active_at to current time on logout
+            updated_at: now,
+          })
+          .eq('user_id', currentUser.id);
+        
+        // Update local state
+        setUserStatuses(prev => {
+          const existing = prev[currentUser.id];
+          if (existing) {
+            return {
+              ...prev,
+              [currentUser.id]: {
+                ...existing,
+                statusType: 'offline',
+                lastActiveAt: now,
+                updatedAt: now,
+              },
+            };
+          }
+          return prev;
+        });
+      };
+      
+      setOfflineOnLogout();
+      
       if (statusUpdateIntervalRef.current) {
         clearInterval(statusUpdateIntervalRef.current);
         statusUpdateIntervalRef.current = null;
@@ -5399,7 +5430,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       statusRealtimeChannels.forEach(ch => supabase.removeChannel(ch));
       setStatusRealtimeChannels([]);
     }
-  }, [session, currentUser, updateUserStatus, statusRealtimeChannels]);
+  }, [session, currentUser, statusRealtimeChannels]);
 
   return {
     currentUser,
