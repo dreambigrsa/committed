@@ -76,21 +76,30 @@ export default function FeedScreen() {
       setPersonalizedPosts(sortedPosts);
       
       // Load statuses for all post authors
+      let isMounted = true;
       const loadPostStatuses = async () => {
+        if (!isMounted) return;
         const statusMap: Record<string, any> = {};
         for (const post of sortedPosts) {
+          if (!isMounted) return;
           if (post.userId && getUserStatus && !postStatuses[post.userId]) {
             const status = await getUserStatus(post.userId);
-            if (status) {
+            if (status && isMounted) {
               statusMap[post.userId] = status;
             }
           } else if (postStatuses[post.userId]) {
             statusMap[post.userId] = postStatuses[post.userId];
           }
         }
-        setPostStatuses(prev => ({ ...prev, ...statusMap }));
+        if (isMounted) {
+          setPostStatuses(prev => ({ ...prev, ...statusMap }));
+        }
       };
       loadPostStatuses();
+      
+      return () => {
+        isMounted = false;
+      };
     } else {
       setPersonalizedPosts([]);
     }
