@@ -2386,18 +2386,46 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser) return null;
     
     try {
-      // Check if a conversation already exists between these two users
-      const { data: existingConversations } = await supabase
+      // First, check if conversation already exists in local state
+      const existingInState = conversations.find((conv) => {
+        const participants = conv.participants || [];
+        return participants.includes(currentUser.id) && 
+               participants.includes(otherUserId) && 
+               participants.length === 2;
+      });
+
+      if (existingInState) {
+        return existingInState;
+      }
+
+      // Check if a conversation already exists between these two users in database
+      // Query for conversations that contain the current user, then filter for the other user
+      const { data: existingConversations, error: queryError } = await supabase
         .from('conversations')
         .select('*')
-        .contains('participant_ids', [currentUser.id, otherUserId])
-        .limit(1);
+        .contains('participant_ids', [currentUser.id]);
 
-      // Filter to ensure both participants are in the conversation
+      if (queryError) {
+        console.error('Error querying conversations:', queryError);
+      }
+
+      // Filter to find conversation with exactly these two participants
       const existingConv = existingConversations?.find((conv: any) => {
         const participants = conv.participant_ids || [];
-        return participants.includes(currentUser.id) && participants.includes(otherUserId) && participants.length === 2;
+        const hasCurrentUser = participants.includes(currentUser.id);
+        const hasOtherUser = participants.includes(otherUserId);
+        const isTwoParticipants = participants.length === 2;
+        
+        if (hasCurrentUser && hasOtherUser && isTwoParticipants) {
+          console.log('Found existing conversation:', conv.id, 'with participants:', participants);
+          return true;
+        }
+        return false;
       });
+
+      if (!existingConv) {
+        console.log('No existing conversation found between', currentUser.id, 'and', otherUserId);
+      }
 
       if (existingConv) {
         // Conversation exists, return it
@@ -2425,11 +2453,19 @@ export const [AppContext, useApp] = createContextHook(() => {
           unreadCount: 0,
         };
 
-        // Add to conversations if not already there
-        const isAlreadyInList = conversations.some(c => c.id === conversation.id);
-        if (!isAlreadyInList) {
-          setConversations([conversation, ...conversations]);
-        }
+        // Update conversations list - replace if exists, add if new
+        setConversations(prev => {
+          const existingIndex = prev.findIndex(c => c.id === conversation.id);
+          if (existingIndex >= 0) {
+            // Update existing conversation
+            const updated = [...prev];
+            updated[existingIndex] = conversation;
+            return updated;
+          } else {
+            // Add new conversation at the beginning
+            return [conversation, ...prev];
+          }
+        });
 
         return conversation;
       }
