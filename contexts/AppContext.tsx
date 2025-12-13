@@ -1,5 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord, LegalDocument, UserStatus, UserStatusType, StatusVisibility } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
@@ -30,7 +31,8 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [, setSubscriptions] = useState<RealtimeChannel[]>([]);
   const [userStatuses, setUserStatuses] = useState<Record<string, UserStatus>>({}); // userId -> UserStatus
-  const [statusUpdateInterval, setStatusUpdateInterval] = useState<NodeJS.Timeout | null>(null);
+  const statusUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [statusRealtimeChannels, setStatusRealtimeChannels] = useState<RealtimeChannel[]>([]);
   
   // Ban modal state
   const [banModalVisible, setBanModalVisible] = useState(false);
@@ -5165,62 +5167,205 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser) return;
 
     // Clear existing interval
-    if (statusUpdateInterval) {
-      clearInterval(statusUpdateInterval);
+    if (statusUpdateIntervalRef.current) {
+      clearInterval(statusUpdateIntervalRef.current);
+      statusUpdateIntervalRef.current = null;
     }
 
-    // Update last active every 2 minutes
+    // Update last active and auto-adjust status every 30 seconds
+    // Since the app is running, user is active, so always update last_active_at
     const interval = setInterval(async () => {
       if (currentUser) {
-        const { error } = await supabase
+        const now = new Date();
+        
+        // Always update last_active_at since app is running (user is active)
+        // Also check and update status based on current state
+        const { data: currentStatusData, error: fetchError } = await supabase
           .from('user_status')
-          .update({
-            last_active_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', currentUser.id);
+          .select('last_active_at, status_type')
+          .eq('user_id', currentUser.id)
+          .single();
 
-        if (!error) {
-          setUserStatuses(prev => {
-            const existing = prev[currentUser.id];
-            if (existing) {
-              return {
-                ...prev,
-                [currentUser.id]: {
-                  ...existing,
-                  lastActiveAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                },
-              };
-            }
-            return prev;
-          });
+        if (currentStatusData && !fetchError) {
+          // Since we're updating every 30 seconds, user is active
+          // Set status to 'online' unless manually set to 'busy'
+          const newStatusType = currentStatusData.status_type === 'busy' 
+            ? 'busy' 
+            : 'online';
+
+          const updateData: any = {
+            last_active_at: now.toISOString(),
+            updated_at: now.toISOString(),
+          };
+
+          // Only update status if it changed (and not busy)
+          if (newStatusType !== currentStatusData.status_type) {
+            updateData.status_type = newStatusType;
+          }
+
+          const { error } = await supabase
+            .from('user_status')
+            .update(updateData)
+            .eq('user_id', currentUser.id);
+
+          if (!error) {
+            setUserStatuses(prev => {
+              const existing = prev[currentUser.id];
+              if (existing) {
+                return {
+                  ...prev,
+                  [currentUser.id]: {
+                    ...existing,
+                    statusType: newStatusType,
+                    lastActiveAt: now.toISOString(),
+                    updatedAt: now.toISOString(),
+                  },
+                };
+              }
+              return prev;
+            });
+          }
+        } else if (fetchError && fetchError.code === 'PGRST116') {
+          // No status record exists, create one
+          const { error: insertError } = await supabase
+            .from('user_status')
+            .insert({
+              user_id: currentUser.id,
+              status_type: 'online',
+              last_active_at: now.toISOString(),
+              status_visibility: 'everyone',
+              last_seen_visibility: 'everyone',
+            });
+
+          if (!insertError) {
+            const newStatus: UserStatus = {
+              userId: currentUser.id,
+              statusType: 'online',
+              lastActiveAt: now.toISOString(),
+              statusVisibility: 'everyone',
+              lastSeenVisibility: 'everyone',
+              updatedAt: now.toISOString(),
+            };
+            setUserStatuses(prev => ({ ...prev, [currentUser.id]: newStatus }));
+          }
         }
       }
-    }, 2 * 60 * 1000); // Every 2 minutes
+    }, 30 * 1000); // Every 30 seconds for real-time updates
 
-    setStatusUpdateInterval(interval);
-  }, [currentUser, statusUpdateInterval]);
+    statusUpdateIntervalRef.current = interval;
+  }, [currentUser]);
+
+  // Handle app state changes (foreground/background)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // App came to foreground - set status to online and start tracking
+        await updateUserStatus('online');
+        startStatusTracking();
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App went to background - stop tracking, status will become offline after 15 min
+        if (statusUpdateIntervalRef.current) {
+          clearInterval(statusUpdateIntervalRef.current);
+          statusUpdateIntervalRef.current = null;
+        }
+        // Note: We don't set to offline immediately, let it timeout naturally
+        // This allows for brief app switches without showing as offline
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [currentUser, updateUserStatus, startStatusTracking]);
 
   // Cleanup interval on unmount or logout
   useEffect(() => {
     return () => {
-      if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
+      if (statusUpdateIntervalRef.current) {
+        clearInterval(statusUpdateIntervalRef.current);
+        statusUpdateIntervalRef.current = null;
       }
     };
-  }, [statusUpdateInterval]);
+  }, []);
+
+  // Subscribe to real-time status updates for all users we interact with
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Subscribe to status updates for users in conversations
+    const conversationUserIds = new Set<string>();
+    conversations.forEach(conv => {
+      conv.participants.forEach(id => {
+        if (id !== currentUser.id) {
+          conversationUserIds.add(id);
+        }
+      });
+    });
+
+    // Subscribe to status updates for followed users
+    follows.forEach(follow => {
+      if (follow.followingId !== currentUser.id) {
+        conversationUserIds.add(follow.followingId);
+      }
+    });
+
+    if (conversationUserIds.size === 0) return;
+
+    const channels: RealtimeChannel[] = [];
+    
+    // Create a channel for status updates
+    const statusChannel = supabase
+      .channel('user_status_updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_status',
+        },
+        (payload) => {
+          const statusData = payload.new as any;
+          if (statusData && conversationUserIds.has(statusData.user_id)) {
+            const status: UserStatus = {
+              userId: statusData.user_id,
+              statusType: statusData.status_type,
+              customStatusText: statusData.custom_status_text,
+              lastActiveAt: statusData.last_active_at,
+              statusVisibility: statusData.status_visibility,
+              lastSeenVisibility: statusData.last_seen_visibility,
+              updatedAt: statusData.updated_at,
+            };
+            setUserStatuses(prev => ({ ...prev, [statusData.user_id]: status }));
+          }
+        }
+      )
+      .subscribe();
+
+    channels.push(statusChannel);
+    setStatusRealtimeChannels(channels);
+
+    return () => {
+      channels.forEach(ch => supabase.removeChannel(ch));
+    };
+  }, [currentUser, conversations, follows]);
 
   // Set status to offline on logout
   useEffect(() => {
     if (!session && currentUser) {
       updateUserStatus('offline');
-      if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
-        setStatusUpdateInterval(null);
+      if (statusUpdateIntervalRef.current) {
+        clearInterval(statusUpdateIntervalRef.current);
+        statusUpdateIntervalRef.current = null;
       }
+      // Clean up realtime channels
+      statusRealtimeChannels.forEach(ch => supabase.removeChannel(ch));
+      setStatusRealtimeChannels([]);
     }
-  }, [session, currentUser, statusUpdateInterval, updateUserStatus]);
+  }, [session, currentUser, updateUserStatus, statusRealtimeChannels]);
 
   return {
     currentUser,
