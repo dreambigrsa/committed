@@ -21,6 +21,7 @@ import colors from '@/constants/colors';
 import { User, Post, Reel } from '@/types';
 import { supabase } from '@/lib/supabase';
 import ReportContentModal from '@/components/ReportContentModal';
+import StatusIndicator from '@/components/StatusIndicator';
 
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 44) / 3;
@@ -30,7 +31,7 @@ type TabType = 'posts' | 'reels';
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
-  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser, unblockUser, isBlocked: checkIsBlocked, reportContent } = useApp();
+  const { currentUser, getUserRelationship, posts: allPosts, reels: allReels, createOrGetConversation, followUser, unfollowUser, isFollowing: checkIsFollowing, blockUser, unblockUser, isBlocked: checkIsBlocked, reportContent, getUserStatus, userStatuses } = useApp();
   
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -46,6 +47,7 @@ export default function UserProfileScreen() {
   const [isBlocking, setIsBlocking] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [reportingProfile, setReportingProfile] = useState(false);
+  const [userStatus, setUserStatus] = useState<any>(null);
   const imageViewerScrollRef = useRef<ScrollView>(null);
   
   const relationship = user ? getUserRelationship(user.id) : null;
@@ -56,8 +58,49 @@ export default function UserProfileScreen() {
       checkFollowStatus();
       loadFollowCounts();
       checkBlockStatus();
+      loadUserStatus();
     }
   }, [userId, checkIsFollowing, checkIsBlocked]);
+
+  // Load user status
+  const loadUserStatus = async () => {
+    if (userId && getUserStatus) {
+      const status = await getUserStatus(userId);
+      setUserStatus(status);
+    }
+  };
+
+  useEffect(() => {
+    loadUserStatus();
+  }, [userId, getUserStatus, userStatuses]);
+
+  // Subscribe to real-time status updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`user_status:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_status',
+          filter: `user_id=eq.${userId}`,
+        },
+        async (payload) => {
+          if (getUserStatus) {
+            const status = await getUserStatus(userId);
+            setUserStatus(status);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, getUserStatus]);
 
   useEffect(() => {
     loadUserContent();
@@ -368,6 +411,13 @@ export default function UserProfileScreen() {
                   {user.fullName.charAt(0)}
                 </Text>
               </View>
+            )}
+            {userStatus && (
+              <StatusIndicator 
+                status={userStatus.statusType} 
+                size="medium" 
+                showBorder={true}
+              />
             )}
           </View>
 
@@ -735,6 +785,9 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: 16,
+    position: 'relative',
+    width: 100,
+    height: 100,
   },
   avatar: {
     width: 100,
