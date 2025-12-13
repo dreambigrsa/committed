@@ -64,7 +64,7 @@ export default function ConversationDetailScreen() {
   
   // Animation for attachment buttons
   const attachmentButtonsOpacity = useRef(new Animated.Value(1)).current;
-  const attachmentButtonsWidth = useRef(new Animated.Value(1)).current;
+  const attachmentButtonsScale = useRef(new Animated.Value(1)).current;
 
   // Keyboard listeners
   useEffect(() => {
@@ -80,10 +80,10 @@ export default function ConversationDetailScreen() {
             duration: 200,
             useNativeDriver: true,
           }),
-          Animated.timing(attachmentButtonsWidth, {
+          Animated.timing(attachmentButtonsScale, {
             toValue: 0,
             duration: 200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
         ]).start();
       }
@@ -101,10 +101,10 @@ export default function ConversationDetailScreen() {
             duration: 200,
             useNativeDriver: true,
           }),
-          Animated.timing(attachmentButtonsWidth, {
+          Animated.timing(attachmentButtonsScale, {
             toValue: 1,
             duration: 200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
         ]).start();
       }
@@ -1275,10 +1275,10 @@ export default function ConversationDetailScreen() {
                         duration: 200,
                         useNativeDriver: true,
                       }),
-                      Animated.timing(attachmentButtonsWidth, {
+                      Animated.timing(attachmentButtonsScale, {
                         toValue: 1,
                         duration: 200,
-                        useNativeDriver: false,
+                        useNativeDriver: true,
                       }),
                     ]).start();
                   } else {
@@ -1288,10 +1288,10 @@ export default function ConversationDetailScreen() {
                         duration: 200,
                         useNativeDriver: true,
                       }),
-                      Animated.timing(attachmentButtonsWidth, {
+                      Animated.timing(attachmentButtonsScale, {
                         toValue: 0,
                         duration: 200,
-                        useNativeDriver: false,
+                        useNativeDriver: true,
                       }),
                     ]).start();
                   }
@@ -1312,10 +1312,8 @@ export default function ConversationDetailScreen() {
                 styles.attachmentButtonsContainer,
                 {
                   opacity: attachmentButtonsOpacity,
-                  width: attachmentButtonsWidth.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 136], // 3 buttons (40px each) + 2 gaps (8px each) = 136px
-                  }),
+                  transform: [{ scaleX: attachmentButtonsScale }],
+                  width: (!isKeyboardVisible || showAttachments) ? 136 : 0, // Non-animated width based on state
                   overflow: 'hidden',
                 },
               ]}
