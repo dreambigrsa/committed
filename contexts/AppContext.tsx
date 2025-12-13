@@ -2504,15 +2504,18 @@ export const [AppContext, useApp] = createContextHook(() => {
     if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin')) return;
     
     try {
+      const updateData: any = {};
+      if (updates.title !== undefined) updateData.title = updates.title;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.imageUrl !== undefined) updateData.image_url = updates.imageUrl;
+      if (updates.linkUrl !== undefined) updateData.link_url = updates.linkUrl;
+      if (updates.type !== undefined) updateData.type = updates.type;
+      if (updates.placement !== undefined) updateData.placement = updates.placement;
+      if (updates.active !== undefined) updateData.active = updates.active;
+
       const { error } = await supabase
         .from('advertisements')
-        .update({
-          title: updates.title,
-          description: updates.description,
-          image_url: updates.imageUrl,
-          link_url: updates.linkUrl,
-          active: updates.active,
-        })
+        .update(updateData)
         .eq('id', adId);
 
       if (error) throw error;
