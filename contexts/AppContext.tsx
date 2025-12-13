@@ -1,8 +1,9 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord } from '@/types';
+import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversation, Message, Advertisement, Notification, CheatingAlert, Follow, Dispute, CoupleCertificate, Anniversary, ReportedContent, ReelComment, NotificationType, MessageWarning, InfidelityReport, TriggerWord, LegalDocument } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
+import { checkUserLegalAcceptances } from '@/lib/legal-enforcement';
 
 export const [AppContext, useApp] = createContextHook(() => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -36,6 +37,13 @@ export const [AppContext, useApp] = createContextHook(() => {
     restrictionType: 'full_ban' | 'feature_restriction';
     restrictedFeature?: string;
     restrictionId?: string;
+  } | null>(null);
+
+  // Legal acceptance state
+  const [legalAcceptanceStatus, setLegalAcceptanceStatus] = useState<{
+    hasAllRequired: boolean;
+    missingDocuments: LegalDocument[];
+    needsReAcceptance: LegalDocument[];
   } | null>(null);
   
   // Helper function to show ban modal
@@ -140,6 +148,14 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: userData.created_at,
         };
         setCurrentUser(user);
+
+        // Check legal acceptances after user is loaded
+        try {
+          const acceptanceStatus = await checkUserLegalAcceptances(user.id);
+          setLegalAcceptanceStatus(acceptanceStatus);
+        } catch (error) {
+          console.error('Failed to check legal acceptances:', error);
+        }
       }
 
       const { data: postsData } = await supabase
@@ -5057,6 +5073,8 @@ export const [AppContext, useApp] = createContextHook(() => {
     deleteTriggerWord,
     getWarningTemplates,
     updateWarningTemplate,
+    legalAcceptanceStatus,
+    setLegalAcceptanceStatus,
   };
 });
 
