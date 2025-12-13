@@ -214,16 +214,26 @@ export default function AdminStickersScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
+        allowsEditing: false, // Don't allow editing for GIFs
+        quality: 1.0, // Full quality for GIFs
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        const uploadedUrl = await uploadImage(asset.uri, 'stickers');
+        // Check if it's a GIF based on file extension or MIME type
+        const uri = asset.uri.toLowerCase();
+        const isGif = Boolean(
+          uri.endsWith('.gif') || 
+          (asset.mimeType && asset.mimeType.toLowerCase() === 'image/gif')
+        );
+        
+        const uploadedUrl = await uploadImage(asset.uri, 'stickers', isGif);
         if (uploadedUrl) {
-          setStickerFormData({ ...stickerFormData, imageUrl: uploadedUrl });
+          setStickerFormData({ 
+            ...stickerFormData, 
+            imageUrl: uploadedUrl,
+            isAnimated: isGif, // Auto-detect and set animated flag
+          });
         }
       }
     } catch (error) {
@@ -232,16 +242,19 @@ export default function AdminStickersScreen() {
     }
   };
 
-  const uploadImage = async (uri: string, folder: string): Promise<string | null> => {
+  const uploadImage = async (uri: string, folder: string, isGif: boolean = false): Promise<string | null> => {
     try {
-      const filename = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+      const extension = isGif ? 'gif' : 'jpg';
+      const contentType = isGif ? 'image/gif' : 'image/jpeg';
+      const filename = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
+      
       const response = await fetch(uri);
       const blob = await response.blob();
 
       const { data, error } = await supabase.storage
         .from('stickers')
         .upload(filename, blob, {
-          contentType: 'image/jpeg',
+          contentType: contentType,
           upsert: false,
         });
 
@@ -909,17 +922,24 @@ export default function AdminStickersScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Sticker Image *</Text>
+              <Text style={styles.label}>Sticker Image * (Supports PNG, JPG, and GIF)</Text>
               <TouchableOpacity
                 style={styles.imagePicker}
                 onPress={handlePickStickerImage}
               >
                 {stickerFormData.imageUrl ? (
-                  <Image source={{ uri: stickerFormData.imageUrl }} style={styles.previewStickerImage} contentFit="contain" />
+                  <View style={styles.previewContainer}>
+                    <Image source={{ uri: stickerFormData.imageUrl }} style={styles.previewStickerImage} contentFit="contain" />
+                    {stickerFormData.isAnimated && (
+                      <View style={styles.animatedBadge}>
+                        <Text style={styles.animatedBadgeText}>GIF</Text>
+                      </View>
+                    )}
+                  </View>
                 ) : (
                   <View style={styles.imagePickerPlaceholder}>
                     <ImageIcon size={32} color={themeColors.text.secondary} />
-                    <Text style={styles.imagePickerText}>Tap to select image</Text>
+                    <Text style={styles.imagePickerText}>Tap to select image or GIF</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1307,9 +1327,47 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  previewContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
   previewStickerImage: {
     width: '100%',
     height: '100%',
+  },
+  animatedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  animatedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  stickerImageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: '70%',
+  },
+  stickerAnimatedBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  stickerAnimatedBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   switchGroup: {
     flexDirection: 'row',
