@@ -124,10 +124,34 @@ export default function ReelsScreen() {
     if (reels.length > 0 && currentIndex >= 0 && currentReelId) {
       const reel = reels[currentIndex];
       if (reel) {
-        // Check if this reel should show an ad
-        const shouldShowAdAfter = (currentIndex + 1) % 5 === 0 && smartAds.length > 0;
+        // Smart ad logic: Show ads more frequently when there are fewer reels
+        // - If 1-3 reels: Show ad after first reel (index 1)
+        // - If 4-10 reels: Show ad every 3 reels (after 2nd, 5th, 8th)
+        // - If 11+ reels: Show ad every 5 reels (after 4th, 9th, 14th, etc.)
+        let shouldShowAdAfter = false;
+        let adIndex = 0;
+        
+        if (smartAds.length > 0) {
+          if (reels.length <= 3) {
+            // For 1-3 reels: Show ad after first reel
+            shouldShowAdAfter = currentIndex === 1;
+            adIndex = 0;
+          } else if (reels.length <= 10) {
+            // For 4-10 reels: Show ad every 3 reels (after 2nd, 5th, 8th)
+            shouldShowAdAfter = (currentIndex + 1) % 3 === 0 && currentIndex > 0;
+            if (shouldShowAdAfter) {
+              adIndex = Math.floor((currentIndex + 1) / 3 - 1) % smartAds.length;
+            }
+          } else {
+            // For 11+ reels: Show ad every 5 reels (after 4th, 9th, 14th, etc.)
+            shouldShowAdAfter = (currentIndex + 1) % 5 === 0;
+            if (shouldShowAdAfter) {
+              adIndex = Math.floor((currentIndex + 1) / 5 - 1) % smartAds.length;
+            }
+          }
+        }
+        
         if (shouldShowAdAfter) {
-          const adIndex = Math.floor((currentIndex + 1) / 5 - 1) % smartAds.length;
           const ad = smartAds[adIndex];
           
           if (ad) {
