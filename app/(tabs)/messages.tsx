@@ -87,13 +87,15 @@ export default function MessagesScreen() {
     };
   };
 
-  // Load statuses for all participants
+  // Load statuses for all participants and refresh periodically
   useEffect(() => {
+    if (!currentUser || !getUserStatus || conversations.length === 0) return;
+
     const loadStatuses = async () => {
       const statuses: Record<string, UserStatus> = {};
       for (const conversation of conversations) {
         const other = getOtherParticipant(conversation);
-        if (other.id && getUserStatus) {
+        if (other.id) {
           const status = await getUserStatus(other.id);
           if (status) {
             statuses[other.id] = status;
@@ -102,10 +104,18 @@ export default function MessagesScreen() {
       }
       setParticipantStatuses(statuses);
     };
-    if (conversations.length > 0) {
+
+    loadStatuses();
+
+    // Refresh statuses every 30 seconds to recalculate based on last_active_at
+    const refreshInterval = setInterval(() => {
       loadStatuses();
-    }
-  }, [conversations, getUserStatus, userStatuses]);
+    }, 30 * 1000);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [conversations, currentUser, getUserStatus]);
 
   const handleDeleteConversation = async (conversationId: string) => {
     Alert.alert(
