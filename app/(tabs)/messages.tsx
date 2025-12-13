@@ -91,28 +91,37 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!currentUser || !getUserStatus || conversations.length === 0) return;
 
+    let isMounted = true;
+
     const loadStatuses = async () => {
+      if (!isMounted) return;
       const statuses: Record<string, UserStatus> = {};
       for (const conversation of conversations) {
+        if (!isMounted) return;
         const other = getOtherParticipant(conversation);
         if (other.id) {
           const status = await getUserStatus(other.id);
-          if (status) {
+          if (status && isMounted) {
             statuses[other.id] = status;
           }
         }
       }
-      setParticipantStatuses(statuses);
+      if (isMounted) {
+        setParticipantStatuses(statuses);
+      }
     };
 
     loadStatuses();
 
     // Refresh statuses every 30 seconds to recalculate based on last_active_at
     const refreshInterval = setInterval(() => {
-      loadStatuses();
+      if (isMounted) {
+        loadStatuses();
+      }
     }, 30 * 1000);
 
     return () => {
+      isMounted = false;
       clearInterval(refreshInterval);
     };
   }, [conversations, currentUser, getUserStatus]);
