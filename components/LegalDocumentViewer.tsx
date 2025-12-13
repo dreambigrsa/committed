@@ -30,11 +30,7 @@ export default function LegalDocumentViewer({ document, isLoading }: LegalDocume
           options={{
             headerShown: true,
             title: 'Loading...',
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <ArrowLeft size={24} color={colors.text.primary} />
-              </TouchableOpacity>
-            ),
+            headerBackTitle: 'Back',
           }}
         />
         <View style={styles.loadingContainer}>
@@ -52,11 +48,7 @@ export default function LegalDocumentViewer({ document, isLoading }: LegalDocume
           options={{
             headerShown: true,
             title: 'Document Not Found',
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <ArrowLeft size={24} color={colors.text.primary} />
-              </TouchableOpacity>
-            ),
+            headerBackTitle: 'Back',
           }}
         />
         <View style={styles.errorContainer}>
@@ -120,18 +112,13 @@ export default function LegalDocumentViewer({ document, isLoading }: LegalDocume
       <Stack.Screen
         options={{
           headerShown: true,
-          title: '',
-          headerTransparent: true,
-          headerLeft: () => (
-            <TouchableOpacity 
-              onPress={() => router.back()} 
-              style={styles.headerBackButton}
-            >
-              <View style={styles.backButtonCircle}>
-                <ArrowLeft size={20} color={colors.text.primary} />
-              </View>
-            </TouchableOpacity>
-          ),
+          title: document.title,
+          headerStyle: {
+            backgroundColor: colors.background.primary,
+          },
+          headerTintColor: colors.text.primary,
+          headerBackTitle: 'Back',
+          headerBackTitleVisible: true,
         }}
       />
       <ScrollView
@@ -197,25 +184,6 @@ export default function LegalDocumentViewer({ document, isLoading }: LegalDocume
 const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerBackButton: {
-    marginLeft: 16,
-  },
-  backButtonCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.background.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   loadingContainer: {
     flex: 1,
