@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import LegalAcceptanceModal from './LegalAcceptanceModal';
@@ -10,9 +10,16 @@ export default function LegalAcceptanceEnforcer() {
   const pathname = usePathname();
   const [modalVisible, setModalVisible] = useState(false);
   const [isViewingDocument, setIsViewingDocument] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Hide modal when viewing a legal document, show it again when back
   useEffect(() => {
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
     if (pathname?.startsWith('/legal/')) {
       setIsViewingDocument(true);
       setModalVisible(false);
@@ -20,7 +27,7 @@ export default function LegalAcceptanceEnforcer() {
       // User came back from viewing a document
       setIsViewingDocument(false);
       // Show modal again after a short delay
-      setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         const shouldShow =
           currentUser &&
           legalAcceptanceStatus &&
@@ -28,8 +35,16 @@ export default function LegalAcceptanceEnforcer() {
           (legalAcceptanceStatus.missingDocuments.length > 0 ||
             legalAcceptanceStatus.needsReAcceptance.length > 0);
         setModalVisible(shouldShow || false);
+        timeoutRef.current = null;
       }, 300);
     }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
   }, [pathname, isViewingDocument, currentUser, legalAcceptanceStatus]);
 
   const handleViewDocument = (document: LegalDocument) => {
@@ -37,8 +52,12 @@ export default function LegalAcceptanceEnforcer() {
     setModalVisible(false);
     setIsViewingDocument(true);
     // Small delay to ensure modal closes before navigation
-    setTimeout(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
       router.push(`/legal/${document.slug}` as any);
+      timeoutRef.current = null;
     }, 100);
   };
 
