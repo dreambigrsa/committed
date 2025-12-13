@@ -694,6 +694,7 @@ export default function ConversationDetailScreen() {
     const index = conversation.participants.indexOf(currentUser!.id);
     const otherIndex = index === 0 ? 1 : 0;
     return {
+      id: conversation.participants[otherIndex],
       name: conversation.participantNames[otherIndex],
       avatar: conversation.participantAvatars[otherIndex],
     };
@@ -1344,25 +1345,37 @@ export default function ConversationDetailScreen() {
           headerShown: true,
           title: '',
           headerLeft: () => (
-            <TouchableOpacity
-              style={styles.headerLeft}
-              onPress={() => router.back()}
-            >
-              <ArrowLeft size={24} color={colors.text.primary} />
-              {otherParticipant.avatar ? (
-                <Image
-                  source={{ uri: otherParticipant.avatar }}
-                  style={styles.headerAvatar}
-                />
-              ) : (
-                <View style={styles.headerAvatarPlaceholder}>
-                  <Text style={styles.headerAvatarPlaceholderText}>
-                    {otherParticipant.name.charAt(0)}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.headerLeft}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.backButton}
+              >
+                <ArrowLeft size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (otherParticipant?.id) {
+                    router.push(`/profile/${otherParticipant.id}` as any);
+                  }
+                }}
+                style={styles.headerProfileButton}
+                activeOpacity={0.7}
+              >
+                {otherParticipant.avatar ? (
+                  <Image
+                    source={{ uri: otherParticipant.avatar }}
+                    style={styles.headerAvatar}
+                  />
+                ) : (
+                  <View style={styles.headerAvatarPlaceholder}>
+                    <Text style={styles.headerAvatarPlaceholderText}>
+                      {otherParticipant.name.charAt(0)}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
               <Text style={styles.headerName}>{otherParticipant.name}</Text>
-            </TouchableOpacity>
+            </View>
           ),
           headerRight: () => (
             <TouchableOpacity
@@ -1600,6 +1613,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerProfileButton: {
+    padding: 2,
   },
   headerRight: {
     padding: 4,
