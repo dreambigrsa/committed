@@ -120,6 +120,8 @@ export interface Comment {
   userName: string;
   userAvatar?: string;
   content: string;
+  stickerId?: string;
+  messageType?: 'text' | 'sticker';
   likes: string[];
   createdAt: string;
   parentCommentId?: string;
@@ -298,6 +300,8 @@ export interface ReelComment {
   userName: string;
   userAvatar?: string;
   content: string;
+  stickerId?: string;
+  messageType?: 'text' | 'sticker';
   likes: string[];
   createdAt: string;
   parentCommentId?: string;
