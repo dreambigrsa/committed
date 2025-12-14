@@ -511,6 +511,8 @@ export const [AppContext, useApp] = createContextHook(() => {
             userName: c.users.full_name,
             userAvatar: c.users.profile_picture,
             content: c.content,
+            stickerId: c.sticker_id || undefined,
+            messageType: (c.message_type || 'text') as 'text' | 'sticker',
             likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
             parentCommentId: c.parent_comment_id || undefined,
@@ -666,6 +668,8 @@ export const [AppContext, useApp] = createContextHook(() => {
             userName: c.users.full_name,
             userAvatar: c.users.profile_picture,
             content: c.content,
+            stickerId: c.sticker_id || undefined,
+            messageType: (c.message_type || 'text') as 'text' | 'sticker',
             likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
             parentCommentId: c.parent_comment_id || undefined,
@@ -1924,7 +1928,13 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, reels, createNotification]);
 
-  const addComment = useCallback(async (postId: string, content: string, parentCommentId?: string) => {
+  const addComment = useCallback(async (
+    postId: string, 
+    content: string, 
+    parentCommentId?: string,
+    stickerId?: string,
+    messageType: 'text' | 'sticker' = 'text'
+  ) => {
     if (!currentUser) return null;
     
     // Check if user is restricted from commenting
@@ -1937,11 +1947,16 @@ export const [AppContext, useApp] = createContextHook(() => {
       const insertData: any = {
         post_id: postId,
         user_id: currentUser.id,
-        content,
+        content: messageType === 'sticker' ? '' : content, // Empty content for stickers
+        message_type: messageType,
       };
       
       if (parentCommentId) {
         insertData.parent_comment_id = parentCommentId;
+      }
+
+      if (stickerId && messageType === 'sticker') {
+        insertData.sticker_id = stickerId;
       }
 
       const { data, error } = await supabase
@@ -1958,7 +1973,9 @@ export const [AppContext, useApp] = createContextHook(() => {
         userId: currentUser.id,
         userName: currentUser.fullName,
         userAvatar: currentUser.profilePicture,
-        content,
+        content: messageType === 'sticker' ? '' : content,
+        stickerId: data.sticker_id || undefined,
+        messageType: (data.message_type || 'text') as 'text' | 'sticker',
         likes: [],
         createdAt: data.created_at,
         parentCommentId: data.parent_comment_id || undefined,
@@ -3608,7 +3625,13 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [currentUser, blockedUsers]);
 
-  const addReelComment = useCallback(async (reelId: string, content: string, parentCommentId?: string) => {
+  const addReelComment = useCallback(async (
+    reelId: string, 
+    content: string, 
+    parentCommentId?: string,
+    stickerId?: string,
+    messageType: 'text' | 'sticker' = 'text'
+  ) => {
     if (!currentUser) return null;
     
     // Check if user is restricted from commenting on reels
@@ -3621,11 +3644,16 @@ export const [AppContext, useApp] = createContextHook(() => {
       const insertData: any = {
         reel_id: reelId,
         user_id: currentUser.id,
-        content,
+        content: messageType === 'sticker' ? '' : content, // Empty content for stickers
+        message_type: messageType,
       };
       
       if (parentCommentId) {
         insertData.parent_comment_id = parentCommentId;
+      }
+
+      if (stickerId && messageType === 'sticker') {
+        insertData.sticker_id = stickerId;
       }
 
       const { data, error } = await supabase
@@ -3642,7 +3670,9 @@ export const [AppContext, useApp] = createContextHook(() => {
         userId: currentUser.id,
         userName: currentUser.fullName,
         userAvatar: currentUser.profilePicture,
-        content,
+        content: messageType === 'sticker' ? '' : content,
+        stickerId: data.sticker_id || undefined,
+        messageType: (data.message_type || 'text') as 'text' | 'sticker',
         likes: [],
         createdAt: data.created_at,
         parentCommentId: data.parent_comment_id || undefined,
