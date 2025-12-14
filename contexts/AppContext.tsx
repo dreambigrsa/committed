@@ -479,7 +479,8 @@ export const [AppContext, useApp] = createContextHook(() => {
         .from('comments')
         .select(`
           *,
-          users!comments_user_id_fkey(full_name, profile_picture)
+          users!comments_user_id_fkey(full_name, profile_picture),
+          stickers!comments_sticker_id_fkey(image_url, is_animated)
         `)
         .order('created_at', { ascending: true });
 
@@ -512,6 +513,7 @@ export const [AppContext, useApp] = createContextHook(() => {
             userAvatar: c.users.profile_picture,
             content: c.content,
             stickerId: c.sticker_id || undefined,
+            stickerImageUrl: c.stickers?.image_url || undefined, // Include sticker image URL
             messageType: (c.message_type || 'text') as 'text' | 'sticker',
             likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
@@ -636,7 +638,8 @@ export const [AppContext, useApp] = createContextHook(() => {
         .from('reel_comments')
         .select(`
           *,
-          users!reel_comments_user_id_fkey(full_name, profile_picture)
+          users!reel_comments_user_id_fkey(full_name, profile_picture),
+          stickers!reel_comments_sticker_id_fkey(image_url, is_animated)
         `)
         .order('created_at', { ascending: true });
 
@@ -669,6 +672,7 @@ export const [AppContext, useApp] = createContextHook(() => {
             userAvatar: c.users.profile_picture,
             content: c.content,
             stickerId: c.sticker_id || undefined,
+            stickerImageUrl: c.stickers?.image_url || undefined, // Include sticker image URL
             messageType: (c.message_type || 'text') as 'text' | 'sticker',
             likes: likesByComment[c.id] || [],
             createdAt: c.created_at,
