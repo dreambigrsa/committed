@@ -121,6 +121,7 @@ export interface Comment {
   userAvatar?: string;
   content: string;
   stickerId?: string;
+  stickerImageUrl?: string; // Sticker image URL for rendering
   messageType?: 'text' | 'sticker';
   likes: string[];
   createdAt: string;
@@ -301,6 +302,7 @@ export interface ReelComment {
   userAvatar?: string;
   content: string;
   stickerId?: string;
+  stickerImageUrl?: string; // Sticker image URL for rendering
   messageType?: 'text' | 'sticker';
   likes: string[];
   createdAt: string;
