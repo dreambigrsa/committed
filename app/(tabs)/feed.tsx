@@ -18,10 +18,11 @@ import {
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2, Image as ImageIcon, Flag } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Plus, X, ExternalLink, MoreVertical, Edit2, Trash2, Image as ImageIcon, Flag, Smile } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Post, Advertisement } from '@/types';
+import { Post, Advertisement, Sticker } from '@/types';
+import StickerPicker from '@/components/StickerPicker';
 import StatusIndicator from '@/components/StatusIndicator';
 import * as WebBrowser from 'expo-web-browser';
 import ReportContentModal from '@/components/ReportContentModal';
@@ -390,6 +391,15 @@ export default function FeedScreen() {
       lineHeight: 20,
       marginBottom: 4,
     },
+    commentStickerContainer: {
+      marginTop: 4,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    commentSticker: {
+      width: 120,
+      height: 120,
+    },
     commentTime: {
       fontSize: 12,
       color: colors.text.tertiary,
@@ -480,14 +490,41 @@ export default function FeedScreen() {
       opacity: 0.5,
     },
     commentInputContainer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: 12,
       paddingHorizontal: 16,
       paddingVertical: 12,
       borderTopWidth: 1,
       borderTopColor: colors.border.light,
       backgroundColor: colors.background.primary,
+    },
+    stickerPreview: {
+      position: 'relative',
+      alignSelf: 'flex-start',
+      marginBottom: 8,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    previewSticker: {
+      width: 100,
+      height: 100,
+    },
+    removeStickerButton: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      borderRadius: 12,
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    commentInputRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 12,
+    },
+    stickerButton: {
+      padding: 8,
     },
     commentInput: {
       flex: 1,
@@ -1645,13 +1682,15 @@ function CommentsModal({
   comments: any[];
   colors: any;
   styles: any;
-  addComment: (postId: string, content: string, parentCommentId?: string) => Promise<any>;
+  addComment: (postId: string, content: string, parentCommentId?: string, stickerId?: string, messageType?: 'text' | 'sticker') => Promise<any>;
   editComment: (commentId: string, content: string) => Promise<any>;
   deleteComment: (commentId: string) => Promise<boolean>;
   toggleCommentLike: (commentId: string, postId: string) => Promise<boolean>;
 }) {
   const { currentUser, reportContent } = useApp();
   const [commentText, setCommentText] = useState<string>('');
+  const [selectedSticker, setSelectedSticker] = useState<{ id: string; imageUrl: string } | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [reportingComment, setReportingComment] = useState<{ id: string; userId: string } | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<string>('');
@@ -1660,14 +1699,28 @@ function CommentsModal({
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   const handleSubmit = async () => {
-    if (replyingTo && replyText.trim()) {
-      await addComment(postId, replyText.trim(), replyingTo);
+    if (replyingTo && (replyText.trim() || selectedSticker)) {
+      await addComment(
+        postId, 
+        replyText.trim(), 
+        replyingTo,
+        selectedSticker?.id,
+        selectedSticker ? 'sticker' : 'text'
+      );
       setReplyText('');
+      setSelectedSticker(null);
       setReplyingTo(null);
       setExpandedReplies(prev => new Set([...prev, replyingTo]));
-    } else if (commentText.trim()) {
-      await addComment(postId, commentText.trim());
+    } else if (commentText.trim() || selectedSticker) {
+      await addComment(
+        postId, 
+        commentText.trim(),
+        undefined,
+        selectedSticker?.id,
+        selectedSticker ? 'sticker' : 'text'
+      );
       setCommentText('');
+      setSelectedSticker(null);
     }
   };
 
@@ -1798,7 +1851,19 @@ function CommentsModal({
                         placeholderTextColor={colors.text.tertiary}
                       />
                     ) : (
-                      <Text style={styles.commentText}>{comment.content}</Text>
+                      <>
+                        {comment.messageType === 'sticker' && comment.stickerImageUrl ? (
+                          <View style={styles.commentStickerContainer}>
+                            <Image
+                              source={{ uri: comment.stickerImageUrl }}
+                              style={styles.commentSticker}
+                              contentFit="contain"
+                            />
+                          </View>
+                        ) : (
+                          <Text style={styles.commentText}>{comment.content}</Text>
+                        )}
+                      </>
                     )}
                     <View style={styles.commentActionsRow}>
                       <TouchableOpacity
@@ -1903,7 +1968,19 @@ function CommentsModal({
                                   placeholderTextColor={colors.text.tertiary}
                                 />
                               ) : (
-                                <Text style={styles.commentText}>{reply.content}</Text>
+                                <>
+                                  {reply.messageType === 'sticker' && reply.stickerImageUrl ? (
+                                    <View style={styles.commentStickerContainer}>
+                                      <Image
+                                        source={{ uri: reply.stickerImageUrl }}
+                                        style={styles.commentSticker}
+                                        contentFit="contain"
+                                      />
+                                    </View>
+                                  ) : (
+                                    <Text style={styles.commentText}>{reply.content}</Text>
+                                  )}
+                                </>
                               )}
                               <View style={styles.commentActionsRow}>
                                 <TouchableOpacity
@@ -1970,31 +2047,51 @@ function CommentsModal({
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.commentInputContainer}
           >
-            <TextInput
-              style={styles.commentInput}
-              placeholder="Write a comment..."
-              placeholderTextColor={colors.text.tertiary}
-              value={commentText}
-              onChangeText={setCommentText}
-              multiline
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                !commentText.trim() && styles.sendButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={!commentText.trim()}
-            >
-              <Text
-                style={[
-                  styles.sendButtonText,
-                  !commentText.trim() && styles.sendButtonTextDisabled,
-                ]}
+            {selectedSticker && (
+              <View style={styles.stickerPreview}>
+                <Image source={{ uri: selectedSticker.imageUrl }} style={styles.previewSticker} />
+                <TouchableOpacity
+                  style={styles.removeStickerButton}
+                  onPress={() => setSelectedSticker(null)}
+                >
+                  <X size={16} color={colors.text.white} />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.commentInputRow}>
+              <TouchableOpacity
+                style={styles.stickerButton}
+                onPress={() => setShowStickerPicker(true)}
+                activeOpacity={0.7}
               >
-                Send
-              </Text>
-            </TouchableOpacity>
+                <Smile size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Write a comment..."
+                placeholderTextColor={colors.text.tertiary}
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!commentText.trim() && !selectedSticker) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={!commentText.trim() && !selectedSticker}
+              >
+                <Text
+                  style={[
+                    styles.sendButtonText,
+                    (!commentText.trim() && !selectedSticker) && styles.sendButtonTextDisabled,
+                  ]}
+                >
+                  Send
+                </Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>
@@ -2008,6 +2105,16 @@ function CommentsModal({
         reportedUserId={reportingComment?.userId}
         onReport={reportContent}
         colors={colors}
+      />
+
+      {/* Sticker Picker */}
+      <StickerPicker
+        visible={showStickerPicker}
+        onClose={() => setShowStickerPicker(false)}
+        onSelectSticker={(sticker: Sticker) => {
+          setSelectedSticker({ id: sticker.id, imageUrl: sticker.imageUrl });
+          setShowStickerPicker(false);
+        }}
       />
     </Modal>
   );
