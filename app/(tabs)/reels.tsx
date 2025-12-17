@@ -64,9 +64,9 @@ export default function ReelsScreen() {
   const bannerCardAdSlideAnim = useRef(new Animated.Value(200)).current; // Start off-screen
   const bannerCardSkipButtonOpacity = useRef(new Animated.Value(0)).current;
   const recordedImpressions = useRef<Set<string>>(new Set());
-  const skipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
-  const bannerCardSkipCountdownInterval = useRef<NodeJS.Timeout | null>(null);
-  const bannerCardAutoDismissTimeout = useRef<NodeJS.Timeout | null>(null);
+  const skipCountdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bannerCardSkipCountdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bannerCardAutoDismissTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Configurable skip delay (5-15 seconds, default 15)
   const SKIP_DELAY_SECONDS = 15;
@@ -619,14 +619,14 @@ export default function ReelsScreen() {
       
       // Start countdown interval
       skipCountdownInterval.current = setInterval(() => {
-        setSkipCountdown((prev) => {
+        setSkipCountdown((prev: number) => {
           if (prev <= 1) {
             // Countdown finished, enable skip
             if (skipCountdownInterval.current) {
               clearInterval(skipCountdownInterval.current);
               skipCountdownInterval.current = null;
             }
-            setActiveVideoAd((prevAd) => 
+            setActiveVideoAd((prevAd: any) => 
               prevAd ? { ...prevAd, canSkip: true } : null
             );
             // Fade in skip button
@@ -664,7 +664,7 @@ export default function ReelsScreen() {
       
       // Start countdown interval immediately
       bannerCardSkipCountdownInterval.current = setInterval(() => {
-        setBannerCardSkipCountdown((prev) => {
+        setBannerCardSkipCountdown((prev: number) => {
           const newValue = prev - 1;
           if (newValue <= 0) {
             // Countdown finished, enable skip
@@ -672,7 +672,7 @@ export default function ReelsScreen() {
               clearInterval(bannerCardSkipCountdownInterval.current);
               bannerCardSkipCountdownInterval.current = null;
             }
-            setActiveBannerCardAd((prevAd) => 
+            setActiveBannerCardAd((prevAd: any) => 
               prevAd ? { ...prevAd, canSkip: true } : null
             );
             return 0;
@@ -913,7 +913,7 @@ export default function ReelsScreen() {
             activeOpacity={0.9}
           >
             <Video
-              ref={(ref) => {
+              ref={(ref: any) => {
                 adVideoRefs.current[ad.id] = ref;
               }}
               source={{ uri: ad.imageUrl }}
@@ -921,7 +921,7 @@ export default function ReelsScreen() {
               resizeMode={ResizeMode.COVER}
               shouldPlay={true}
               isMuted={false}
-              onError={(error) => {
+              onError={(error: any) => {
                 console.error('Failed to load video ad:', ad.id, error);
                 Alert.alert('Error', 'Failed to load video advertisement. Skipping ad.');
                 handleSkipAd();
@@ -1014,7 +1014,7 @@ export default function ReelsScreen() {
           style={styles.videoTouchable}
         >
           <Video
-            ref={(ref) => {
+            ref={(ref: any) => {
               videoRefs.current[reel.id] = ref;
             }}
             source={{ uri: reel.videoUrl }}
@@ -1318,7 +1318,7 @@ export default function ReelsScreen() {
             scrollEventThrottle={16}
             style={styles.scrollView}
           >
-            {reels.map((reel, index) => {
+            {reels.map((reel: any, index: number) => {
               // Show ad every 5 reels (after the 4th, 9th, 14th, etc.)
               const shouldShowAdAfter = (index + 1) % 5 === 0 && smartAds.length > 0;
               let adToShow: Advertisement | null = null;
@@ -2311,7 +2311,7 @@ function ReelCommentsModal({
       setReplyText('');
       setSelectedSticker(null);
       setReplyingTo(null);
-      setExpandedReplies(prev => new Set([...prev, replyingTo]));
+      setExpandedReplies((prev: Set<string>) => new Set([...prev, replyingTo]));
     } else if (commentText.trim() || selectedSticker) {
       await addComment(
         reelId, 
