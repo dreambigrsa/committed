@@ -5,6 +5,15 @@
 
 import { supabase } from './supabase';
 
+// Import Constants with proper typing
+let Constants: any;
+try {
+  Constants = require('expo-constants').default;
+} catch (e) {
+  // Constants might not be available in all contexts
+  Constants = null;
+}
+
 const COMMITTED_AI_EMAIL = 'ai@committed.app';
 const COMMITTED_AI_NAME = 'Committed AI';
 
@@ -84,14 +93,58 @@ export async function getOrCreateAIUser(): Promise<{ id: string } | null> {
 }
 
 /**
- * Generate image using DALL-E API
+ * Get OpenAI API key from environment variables
+ * Tries multiple methods to retrieve the API key for maximum compatibility
  */
-async function generateImage(prompt: string): Promise<AIResponse> {
+function getOpenAIApiKey(): string | null {
+  // Try multiple methods to get the API key
+  // Method 1: Expo Constants (recommended for Expo)
+  try {
+    if (Constants && Constants.expoConfig) {
+      const expoConfig = Constants.expoConfig;
+      if (expoConfig?.extra?.openaiApiKey) {
+        return String(expoConfig.extra.openaiApiKey);
+      }
+    }
+  } catch (e) {
+    // Constants might not be available in all contexts
+  }
+  
+  // Method 2: Process env (works at build time in Expo)
   try {
     // @ts-ignore - process.env is available in Expo at build time
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
-    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+    const processEnv: any = typeof process !== 'undefined' && process.env ? process.env : {};
+    if (processEnv.EXPO_PUBLIC_OPENAI_API_KEY) {
+      return String(processEnv.EXPO_PUBLIC_OPENAI_API_KEY);
+    }
+    if (processEnv.OPENAI_API_KEY) {
+      return String(processEnv.OPENAI_API_KEY);
+    }
+  } catch (e) {
+    // Process might not be available
+  }
+  
+  // Method 3: Global process (fallback)
+  try {
+    // @ts-ignore
+    const globalProcess: any = (global as any)?.process?.env;
+    if (globalProcess?.EXPO_PUBLIC_OPENAI_API_KEY) {
+      return String(globalProcess.EXPO_PUBLIC_OPENAI_API_KEY);
+    }
+    if (globalProcess?.OPENAI_API_KEY) {
+      return String(globalProcess.OPENAI_API_KEY);
+    }
+  } catch (e) {
+    // Global process might not be available
+  }
+  
+  console.warn('[AI Service] OpenAI API key not found. Please set EXPO_PUBLIC_OPENAI_API_KEY environment variable.');
+  return null;
+}
+
+async function generateImage(prompt: string): Promise<AIResponse> {
+  try {
+    const openaiApiKey = getOpenAIApiKey();
 
     if (!openaiApiKey) {
       return {
@@ -210,10 +263,7 @@ async function generateDocument(
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<AIResponse> {
   try {
-    // @ts-ignore - process.env is available in Expo at build time
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
-    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+    const openaiApiKey = getOpenAIApiKey();
 
     if (!openaiApiKey) {
       return {
@@ -380,10 +430,7 @@ async function analyzeConversationForLearnings(
 ): Promise<Partial<UserLearnings>> {
   try {
     // Use OpenAI to analyze the conversation if available
-    // @ts-ignore - process.env is available in Expo at build time
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const processEnv = (global as any).process?.env || {};
-    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+    const openaiApiKey = getOpenAIApiKey();
 
     if (openaiApiKey) {
       // Create analysis prompt
@@ -537,10 +584,12 @@ function buildPersonalizedSystemPrompt(
 
 CRITICAL INSTRUCTIONS:
 - Answer questions directly and accurately - address exactly what ${userDisplayName} is asking
+- If ${userDisplayName} asks about you (e.g., "tell me about yourself", "who are you", "what are you", "talk about you"), you MUST explain who you are: You are Committed AI, an intelligent AI assistant created to help people with relationships, life advice, business questions, and friendly conversation. Be specific and conversational about your capabilities.
 - Think through the question carefully and provide thoughtful, knowledgeable responses
-- Stay on topic - respond to what they asked, don't go off on tangents
+- Stay on topic - respond to what they asked, don't go off on tangents or give generic responses
 - Use conversation history to understand context and maintain natural flow
 - Be conversational and human-like, but prioritize being helpful and accurate
+- NEVER give a generic "I'm here to help" response when asked a specific question - always answer what was actually asked
 - If the question is unclear, ask a specific clarifying question rather than guessing
 
 IMPORTANT CONTEXT:
@@ -584,8 +633,10 @@ IMPORTANT CONTEXT:
 
   prompt += `\n\nYOUR CORE PRINCIPLES:
 - Answer questions directly and accurately - address exactly what the user is asking
+- If asked about yourself (e.g., "tell me about yourself", "who are you", "what are you"), explain that you're Committed AI, an AI assistant designed to help with relationships, life advice, business questions, or just conversation. Be specific and conversational.
 - Think through problems carefully before responding - provide thoughtful, knowledgeable answers
 - Stay on topic - don't go off on tangents or change the subject
+- Never give the same generic response twice - every answer must be specific to what was asked
 - Use conversation history to maintain context and flow naturally
 - Be conversational and human-like, but prioritize accuracy and relevance
 - Adapt your tone based on the user's needs - be a friend, companion, relationship advisor, life advisor, or business advisor as needed
@@ -593,12 +644,14 @@ IMPORTANT CONTEXT:
 - Continuously learn from interactions to better serve ${userDisplayName}
 
 RESPONSE GUIDELINES:
-- Read the user's question or statement carefully
-- Provide direct, relevant answers that directly address their query
+- Read the user's question or statement carefully - understand what they're really asking
+- Provide direct, relevant answers that directly address their specific query
+- If asked about yourself, talk about yourself naturally - explain who you are and what you can do
 - If you need clarification, ask a specific follow-up question
 - Maintain conversation flow by referencing previous messages when relevant
 - Keep responses natural in length - be thorough when needed, concise when appropriate
 - Don't repeat information unnecessarily or go off-topic
+- Never use generic "I'm here to help" responses when asked specific questions - always answer the actual question asked
 
 COMMANDS:
 - When users ask for images (e.g., "generate an image of...", "create a picture of..."), respond with just "GENERATE_IMAGE: [their prompt]"
@@ -658,11 +711,15 @@ export async function getAIResponse(
     }
 
     // Check if OpenAI API key is configured
-    // In React Native/Expo, process.env is available at build time
-    // @ts-ignore - process.env is available in Expo at build time
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
-    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+    const openaiApiKey = getOpenAIApiKey();
+    
+    // Log for debugging (remove in production if needed)
+    if (!openaiApiKey) {
+      console.warn('[AI Service] OpenAI API key not found. Using fallback responses.');
+      console.warn('[AI Service] To fix: Set EXPO_PUBLIC_OPENAI_API_KEY in your environment variables.');
+    } else {
+      console.log('[AI Service] OpenAI API key found. Using OpenAI API.');
+    }
 
     // Get user learnings if userId provided
     let userLearnings: UserLearnings | null = null;
@@ -722,6 +779,12 @@ async function getOpenAIResponse(
   learnings?: UserLearnings | null
 ): Promise<AIResponse> {
   try {
+    // Validate API key format
+    if (!apiKey || apiKey.trim().length === 0) {
+      console.error('[AI Service] Invalid API key provided');
+      throw new Error('Invalid OpenAI API key');
+    }
+
     // Build personalized system prompt with learnings
     const systemPrompt = buildPersonalizedSystemPrompt(userName || '', userUsername, learnings);
 
@@ -730,6 +793,13 @@ async function getOpenAIResponse(
       ...conversationHistory.slice(-20), // Keep last 20 messages for better context and flow
       { role: 'user', content: userMessage },
     ];
+
+    console.log('[AI Service] Calling OpenAI API with', {
+      messageLength: userMessage.length,
+      conversationHistoryLength: conversationHistory.length,
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey.substring(0, 7) + '...',
+    });
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -747,25 +817,46 @@ async function getOpenAIResponse(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+      const errorMessage = errorData.error?.message || `OpenAI API error: ${response.status}`;
+      console.error('[AI Service] OpenAI API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorMessage,
+        errorData,
+      });
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    const aiMessage = data.choices[0]?.message?.content || 'I apologize, but I had trouble processing that. Could you try rephrasing?';
+    const aiMessage = data.choices[0]?.message?.content;
+    
+    if (!aiMessage) {
+      console.error('[AI Service] No message content in OpenAI response:', data);
+      throw new Error('No message content in OpenAI response');
+    }
 
+    console.log('[AI Service] OpenAI API response received successfully');
+    
     return {
       success: true,
       message: aiMessage,
     };
   } catch (error: any) {
-    console.error('OpenAI API error:', error);
+    console.error('[AI Service] OpenAI API error:', error);
+    console.error('[AI Service] Error details:', {
+      message: error?.message,
+      name: error?.name,
+      stack: error?.stack?.substring(0, 200),
+    });
     // Fallback to rule-based responses if API fails
+    console.warn('[AI Service] Falling back to rule-based responses');
     return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, learnings);
   }
 }
 
 /**
  * Fallback rule-based responses when OpenAI is not available
+ * NOTE: This should rarely be used if OpenAI API key is configured properly
  */
 function getFallbackResponse(
   userMessage: string,
@@ -777,6 +868,24 @@ function getFallbackResponse(
   const userDisplayName = userName || userUsername || 'there';
   const message = userMessage.toLowerCase().trim();
   
+  // Questions about the AI itself - MUST be checked first
+  if (message.includes('tell me about yourself') || 
+      message.includes('tell me about you') || 
+      message.includes('who are you') || 
+      message.includes('what are you') ||
+      message.includes('about your self') ||
+      message.includes('about yourself') ||
+      message.includes('talk about you') ||
+      message.includes('tell me more about you') ||
+      (message.includes('you') && (message.includes('what') || message.includes('who') || message.includes('tell'))) ||
+      message.match(/what.*you/i) ||
+      message.match(/who.*you/i)) {
+    return {
+      success: true,
+      message: `I'm Committed AI, an intelligent AI assistant designed to be your companion, advisor, and friend. I can help you with relationship advice, life guidance, business questions, or just be someone to talk to. I learn from our conversations to better understand you and provide more personalized help. I'm always here when you need someone to talk to or when you need advice. What would you like to know more about me, or how can I help you today?`,
+    };
+  }
+
   // Build personalized greeting with learnings
   const personalizedGreeting = (() => {
     let greeting = `Hello ${userDisplayName}! I'm Committed AI. How can I help you today?`;
@@ -811,7 +920,7 @@ function getFallbackResponse(
   }
 
   // Greeting patterns
-  if (message.includes('hello') || message.includes('hi') || message.includes('hey') || message.startsWith('h')) {
+  if (message.includes('hello') || message.includes('hi') || message.includes('hey') || (message.length < 5 && message.startsWith('h'))) {
     return {
       success: true,
       message: personalizedGreeting,
@@ -826,10 +935,10 @@ function getFallbackResponse(
     };
   }
 
-  // General positive response
+  // If OpenAI is not available, tell the user
   return {
-    success: true,
-    message: "Thank you for sharing that with me. I'm here to listen and help however I can. Whether you need relationship advice, someone to talk to, or just a friendly conversation, I'm here for you. What would you like to explore?",
+    success: false,
+    error: "I apologize, but my advanced features are currently unavailable. Please ensure the OpenAI API key is configured. In the meantime, I can help with basic questions - feel free to ask me anything!",
   };
 }
 
