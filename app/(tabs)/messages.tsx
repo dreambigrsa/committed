@@ -201,7 +201,7 @@ export default function MessagesScreen() {
         aiQuery.trim(), 
         conversationHistory, 
         isNewConversation,
-        currentUser.full_name,
+        currentUser.fullName,
         currentUser.username,
         currentUser.id // Pass userId for learning system
       );
