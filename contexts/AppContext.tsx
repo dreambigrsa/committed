@@ -5262,6 +5262,27 @@ export const [AppContext, useApp] = createContextHook(() => {
   }, [currentUser]);
 
   const getUserStatus = useCallback(async (userId: string): Promise<UserStatus | null> => {
+    // Check if this is the AI user - always return online status
+    const { data: userData } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userData?.email === 'ai@committed.app') {
+      // AI user - always return online status
+      const aiStatus: UserStatus = {
+        userId,
+        statusType: 'online',
+        lastActiveAt: new Date().toISOString(),
+        statusVisibility: 'everyone',
+        lastSeenVisibility: 'everyone',
+        updatedAt: new Date().toISOString(),
+      };
+      setUserStatuses(prev => ({ ...prev, [userId]: aiStatus }));
+      return aiStatus;
+    }
+
     // Always load fresh from database to get accurate status and last_active_at
     const status = await loadUserStatus(userId);
     
