@@ -864,6 +864,8 @@ export interface StatusViewer {
   id: string;
   viewer_id: string;
   viewed_at: string;
+  reaction_type?: 'heart' | 'like' | 'laugh' | null;
+  has_message?: boolean;
   user: {
     id: string;
     full_name: string;
@@ -918,11 +920,41 @@ export async function getStatusViewers(statusId: string): Promise<StatusViewer[]
     });
   }
 
-  // Combine views with user data
+  // Get reactions for all viewers
+  const { data: reactionsData } = await supabase
+    .from('status_reactions')
+    .select('user_id, reaction_type')
+    .eq('status_id', statusId)
+    .in('user_id', viewerIds);
+
+  const reactionsMap = new Map<string, 'heart' | 'like' | 'laugh'>();
+  if (reactionsData) {
+    reactionsData.forEach((r: any) => {
+      reactionsMap.set(r.user_id, r.reaction_type);
+    });
+  }
+
+  // Get messages that reference this status
+  const { data: messagesData } = await supabase
+    .from('messages')
+    .select('sender_id')
+    .eq('status_id', statusId)
+    .in('sender_id', viewerIds);
+
+  const hasMessageSet = new Set<string>();
+  if (messagesData) {
+    messagesData.forEach((m: any) => {
+      hasMessageSet.add(m.sender_id);
+    });
+  }
+
+  // Combine views with user data, reactions, and messages
   return views.map((view: any) => ({
     id: view.id,
     viewer_id: view.viewer_id,
     viewed_at: view.viewed_at,
+    reaction_type: reactionsMap.get(view.viewer_id) || null,
+    has_message: hasMessageSet.has(view.viewer_id),
     user: usersMap.get(view.viewer_id) || {
       id: view.viewer_id,
       full_name: 'Unknown User',
@@ -1097,6 +1129,156 @@ export async function getSignedUrlForMedia(mediaPath: string): Promise<string | 
 /**
  * Delete a status (owner only)
  */
+/**
+ * React to a status
+ */
+export async function reactToStatus(
+  statusId: string,
+  reactionType: 'heart' | 'like' | 'laugh'
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    console.error('❌ [reactToStatus] No authenticated user');
+    return false;
+  }
+
+  try {
+    // First, check if reaction already exists
+    const { data: existingReaction } = await supabase
+      .from('status_reactions')
+      .select('id, reaction_type')
+      .eq('status_id', statusId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    let error;
+    
+    if (existingReaction) {
+      // Update existing reaction
+      const { error: updateError } = await supabase
+        .from('status_reactions')
+        .update({ reaction_type: reactionType })
+        .eq('id', existingReaction.id);
+      error = updateError;
+    } else {
+      // Insert new reaction
+      const { error: insertError } = await supabase
+        .from('status_reactions')
+        .insert({
+          status_id: statusId,
+          user_id: user.id,
+          reaction_type: reactionType,
+        });
+      error = insertError;
+    }
+
+    if (error) {
+      console.error('❌ [reactToStatus] Database error:', error);
+      console.error('❌ [reactToStatus] Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      // Check if it's a table not found error
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        console.error('❌ [reactToStatus] Table "status_reactions" does not exist. Please run status-reactions-setup.sql');
+      } else if (error.code === '42501' || error.message?.includes('permission denied') || error.code === 'PGRST301') {
+        console.error('❌ [reactToStatus] Permission denied. Check RLS policies for status_reactions table.');
+        console.error('❌ [reactToStatus] Status ID:', statusId);
+        console.error('❌ [reactToStatus] User ID:', user.id);
+      }
+      throw error;
+    }
+    console.log('✅ [reactToStatus] Reaction saved successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ [reactToStatus] Error reacting to status:', error);
+    // Re-throw to let caller handle it
+    throw error;
+  }
+}
+
+/**
+ * Remove reaction from a status
+ */
+export async function removeStatusReaction(statusId: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  try {
+    const { error } = await supabase
+      .from('status_reactions')
+      .delete()
+      .eq('status_id', statusId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error removing reaction:', error);
+    return false;
+  }
+}
+
+/**
+ * Get user's reaction to a status
+ */
+export async function getUserReaction(statusId: string): Promise<'heart' | 'like' | 'laugh' | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('status_reactions')
+      .select('reaction_type')
+      .eq('status_id', statusId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.reaction_type as 'heart' | 'like' | 'laugh' | null;
+  } catch (error) {
+    console.error('Error getting user reaction:', error);
+    return null;
+  }
+}
+
+/**
+ * Get reaction counts for a status
+ */
+export async function getStatusReactionCounts(statusId: string): Promise<{
+  heart: number;
+  like: number;
+  laugh: number;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('status_reactions')
+      .select('reaction_type')
+      .eq('status_id', statusId);
+
+    if (error) throw error;
+
+    const counts = {
+      heart: 0,
+      like: 0,
+      laugh: 0,
+    };
+
+    data?.forEach((reaction) => {
+      if (reaction.reaction_type === 'heart') counts.heart++;
+      else if (reaction.reaction_type === 'like') counts.like++;
+      else if (reaction.reaction_type === 'laugh') counts.laugh++;
+    });
+
+    return counts;
+  } catch (error) {
+    console.error('Error getting reaction counts:', error);
+    return { heart: 0, like: 0, laugh: 0 };
+  }
+}
+
 export async function deleteStatus(statusId: string): Promise<boolean> {
   console.log('🗑️ [deleteStatus] Starting deletion:', { statusId });
   
