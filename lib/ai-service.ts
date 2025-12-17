@@ -868,21 +868,48 @@ function getFallbackResponse(
   const userDisplayName = userName || userUsername || 'there';
   const message = userMessage.toLowerCase().trim();
   
-  // Questions about the AI itself - MUST be checked first
-  if (message.includes('tell me about yourself') || 
-      message.includes('tell me about you') || 
-      message.includes('who are you') || 
-      message.includes('what are you') ||
-      message.includes('about your self') ||
-      message.includes('about yourself') ||
-      message.includes('talk about you') ||
-      message.includes('tell me more about you') ||
-      (message.includes('you') && (message.includes('what') || message.includes('who') || message.includes('tell'))) ||
-      message.match(/what.*you/i) ||
-      message.match(/who.*you/i)) {
+  /**
+   * Questions about the AI itself (identity/background).
+   *
+   * IMPORTANT: Keep this matcher STRICT so it doesn't hijack normal requests like:
+   * - "can you tell jokes?"
+   * - "can you help me with ..."
+   */
+  const isAboutAI =
+    message.includes('tell me about yourself') ||
+    message.includes('tell me about you') ||
+    message.includes('tell me more about you') ||
+    message.includes('about yourself') ||
+    message.includes('about your self') ||
+    message.includes('who are you') ||
+    message.includes('what are you') ||
+    message.includes('talk about you') ||
+    /^who\s+are\s+you\??$/.test(message) ||
+    /^what\s+are\s+you\??$/.test(message) ||
+    /^tell\s+me\s+about\s+you(rself)?\??$/.test(message);
+
+  if (isAboutAI) {
     return {
       success: true,
       message: `I'm Committed AI, an intelligent AI assistant designed to be your companion, advisor, and friend. I can help you with relationship advice, life guidance, business questions, or just be someone to talk to. I learn from our conversations to better understand you and provide more personalized help. I'm always here when you need someone to talk to or when you need advice. What would you like to know more about me, or how can I help you today?`,
+    };
+  }
+
+  // Capability questions (e.g. "can you ...?") - answer the capability directly.
+  if (message.startsWith('can you') || message.startsWith('could you') || message.startsWith('are you able')) {
+    // Jokes
+    if (message.includes('joke') || message.includes('jokes')) {
+      return {
+        success: true,
+        message:
+          "Yes — I can tell jokes. Here are a few:\n\n1) Why don’t programmers like nature? Too many bugs.\n2) I told my computer I needed a break… and it said: “No problem, I’ll go to sleep.”\n3) Why did the scarecrow get promoted? He was outstanding in his field.\n\nWant clean jokes, dark humor, or dad jokes?",
+      };
+    }
+
+    return {
+      success: true,
+      message:
+        "Yes, I can help with that. Tell me exactly what you want (and any constraints or details), and I’ll respond directly.",
     };
   }
 
