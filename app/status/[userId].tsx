@@ -885,7 +885,7 @@ export default function StatusViewerScreen() {
           'text', // messageType
           undefined, // stickerId
           status.id, // statusId - NEW PARAMETER
-          statusPreviewUrl // statusPreviewUrl - stores media_path, not signed URL
+          statusPreviewUrl || undefined // statusPreviewUrl - convert null to undefined
         );
         
         // Navigate to the conversation screen
