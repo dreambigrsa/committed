@@ -18,6 +18,20 @@ export interface AIResponse {
   contentType?: 'text' | 'image' | 'document'; // Type of response
 }
 
+export interface UserLearnings {
+  communication_style?: string;
+  preferred_topics?: string[];
+  interests?: string[];
+  goals?: string[];
+  relationship_status?: string;
+  concerns?: string[];
+  response_preferences?: any;
+  conversation_patterns?: any;
+  user_satisfaction_score?: number;
+  total_interactions?: number;
+  ai_notes?: string;
+}
+
 /**
  * Get or create the Committed AI user
  */
@@ -75,8 +89,9 @@ export async function getOrCreateAIUser(): Promise<{ id: string } | null> {
 async function generateImage(prompt: string): Promise<AIResponse> {
   try {
     // @ts-ignore - process.env is available in Expo at build time
-    const openaiApiKey = process.env?.EXPO_PUBLIC_OPENAI_API_KEY || 
-                        process.env?.OPENAI_API_KEY;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
+    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
 
     if (!openaiApiKey) {
       return {
@@ -196,8 +211,9 @@ async function generateDocument(
 ): Promise<AIResponse> {
   try {
     // @ts-ignore - process.env is available in Expo at build time
-    const openaiApiKey = process.env?.EXPO_PUBLIC_OPENAI_API_KEY || 
-                        process.env?.OPENAI_API_KEY;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
+    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
 
     if (!openaiApiKey) {
       return {
@@ -321,17 +337,276 @@ export function isFirstMessage(conversationHistory: Array<{ role: 'user' | 'assi
 }
 
 /**
+ * Get user learnings from database
+ */
+export async function getUserLearnings(userId: string): Promise<UserLearnings | null> {
+  try {
+    const { data, error } = await supabase
+      .from('ai_user_learnings')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return {
+      communication_style: data.communication_style,
+      preferred_topics: data.preferred_topics || [],
+      interests: data.interests || [],
+      goals: data.goals || [],
+      relationship_status: data.relationship_status,
+      concerns: data.concerns || [],
+      response_preferences: data.response_preferences,
+      conversation_patterns: data.conversation_patterns,
+      user_satisfaction_score: data.user_satisfaction_score,
+      total_interactions: data.total_interactions,
+      ai_notes: data.ai_notes,
+    };
+  } catch (error) {
+    console.error('Error getting user learnings:', error);
+    return null;
+  }
+}
+
+/**
+ * Analyze conversation and extract learnings
+ */
+async function analyzeConversationForLearnings(
+  userMessage: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  userId: string
+): Promise<Partial<UserLearnings>> {
+  try {
+    // Use OpenAI to analyze the conversation if available
+    // @ts-ignore - process.env is available in Expo at build time
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processEnv = (global as any).process?.env || {};
+    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+
+    if (openaiApiKey) {
+      // Create analysis prompt
+      const analysisPrompt = `Analyze this conversation and extract user characteristics. Respond ONLY with valid JSON:
+{
+  "communication_style": "formal|casual|friendly|direct",
+  "interests": ["interest1", "interest2"],
+  "topics": ["topic1", "topic2"],
+  "goals": ["goal1"],
+  "relationship_status": "single|dating|married|etc",
+  "concerns": ["concern1"],
+  "response_preferences": {"length": "short|medium|long", "tone": "supportive|direct|etc"}
+}
+
+User messages: ${conversationHistory.filter(m => m.role === 'user').slice(-10).map(m => m.content).join('\n')}
+Latest message: ${userMessage}`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: 'You are an expert at analyzing conversations and extracting user characteristics. Respond only with valid JSON.' },
+            { role: 'user', content: analysisPrompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 500,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const analysisText = data.choices[0]?.message?.content || '{}';
+        try {
+          const analysis = JSON.parse(analysisText);
+          return {
+            communication_style: analysis.communication_style,
+            preferred_topics: analysis.topics,
+            interests: analysis.interests,
+            goals: analysis.goals,
+            relationship_status: analysis.relationship_status,
+            concerns: analysis.concerns,
+            response_preferences: analysis.response_preferences,
+          };
+        } catch (e) {
+          console.error('Error parsing analysis JSON:', e);
+        }
+      }
+    }
+
+    // Fallback: Simple pattern-based analysis
+    return analyzeConversationPatterns(userMessage, conversationHistory);
+  } catch (error) {
+    console.error('Error analyzing conversation:', error);
+    return analyzeConversationPatterns(userMessage, conversationHistory);
+  }
+}
+
+/**
+ * Simple pattern-based conversation analysis (fallback)
+ */
+function analyzeConversationPatterns(
+  userMessage: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+): Partial<UserLearnings> {
+  const message = userMessage.toLowerCase();
+  const allMessages = conversationHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase()).join(' ');
+  
+  const learnings: Partial<UserLearnings> = {};
+  const interests: string[] = [];
+  const topics: string[] = [];
+  const concerns: string[] = [];
+
+  // Detect communication style
+  if (message.includes('please') || message.includes('thank you') || message.includes('appreciate')) {
+    learnings.communication_style = 'formal';
+  } else if (message.includes('hey') || message.includes("what's up") || message.includes('lol')) {
+    learnings.communication_style = 'casual';
+  } else if (message.length < 20) {
+    learnings.communication_style = 'direct';
+  }
+
+  // Detect topics and interests
+  if (allMessages.includes('relationship') || allMessages.includes('partner')) topics.push('relationships');
+  if (allMessages.includes('business') || allMessages.includes('work') || allMessages.includes('career')) topics.push('business');
+  if (allMessages.includes('health') || allMessages.includes('fitness') || allMessages.includes('exercise')) topics.push('health');
+  if (allMessages.includes('travel') || allMessages.includes('vacation')) interests.push('travel');
+  if (allMessages.includes('music') || allMessages.includes('song')) interests.push('music');
+  if (allMessages.includes('food') || allMessages.includes('cooking') || allMessages.includes('recipe')) interests.push('food');
+
+  // Detect concerns
+  if (allMessages.includes('stressed') || allMessages.includes('worried') || allMessages.includes('anxious')) concerns.push('stress');
+  if (allMessages.includes('sad') || allMessages.includes('depressed') || allMessages.includes('down')) concerns.push('emotional');
+  if (allMessages.includes('relationship') && (allMessages.includes('problem') || allMessages.includes('issue'))) concerns.push('relationship_issues');
+
+  if (topics.length > 0) learnings.preferred_topics = topics;
+  if (interests.length > 0) learnings.interests = interests;
+  if (concerns.length > 0) learnings.concerns = concerns;
+
+  return learnings;
+}
+
+/**
+ * Update user learnings in database
+ */
+export async function updateUserLearnings(
+  userId: string,
+  learnings: Partial<UserLearnings>,
+  satisfactionScore?: number
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.rpc('update_ai_learnings', {
+      p_user_id: userId,
+      p_communication_style: learnings.communication_style || null,
+      p_preferred_topics: learnings.preferred_topics || null,
+      p_interests: learnings.interests || null,
+      p_goals: learnings.goals || null,
+      p_relationship_status: learnings.relationship_status || null,
+      p_concerns: learnings.concerns || null,
+      p_response_preferences: learnings.response_preferences || null,
+      p_conversation_patterns: learnings.conversation_patterns || null,
+      p_satisfaction_score: satisfactionScore || null,
+      p_ai_notes: learnings.ai_notes || null,
+    });
+
+    if (error) {
+      console.error('Error updating user learnings:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error updating user learnings:', error);
+    return false;
+  }
+}
+
+/**
+ * Generate personalized system prompt based on learnings
+ */
+function buildPersonalizedSystemPrompt(
+  userName: string,
+  userUsername?: string,
+  learnings?: UserLearnings | null
+): string {
+  const userDisplayName = userName || userUsername || 'the user';
+  let prompt = `You are Committed AI, a versatile, friendly, and supportive AI companion. You are talking to ${userDisplayName}${userName && userUsername ? ` (also known as @${userUsername})` : userUsername ? ` (@${userUsername})` : ''}.
+
+IMPORTANT CONTEXT:
+- The user's name is ${userDisplayName}. Use their name naturally in conversation to make it personal.
+- Pay attention to what ${userDisplayName} shares with you - their interests, concerns, goals, and preferences.
+- Remember details from previous conversations to build a meaningful relationship.
+- Learn their communication style and adapt to what works best for them.`;
+
+  // Add learnings to prompt
+  if (learnings) {
+    if (learnings.communication_style) {
+      prompt += `\n- Communication style: ${learnings.communication_style}. Adapt your responses to match this style.`;
+    }
+    if (learnings.interests && learnings.interests.length > 0) {
+      prompt += `\n- User's interests: ${learnings.interests.join(', ')}. Reference these naturally when relevant.`;
+    }
+    if (learnings.preferred_topics && learnings.preferred_topics.length > 0) {
+      prompt += `\n- Preferred topics: ${learnings.preferred_topics.join(', ')}. Be especially knowledgeable about these areas.`;
+    }
+    if (learnings.goals && learnings.goals.length > 0) {
+      prompt += `\n- User's goals: ${learnings.goals.join(', ')}. Support them in achieving these goals.`;
+    }
+    if (learnings.relationship_status) {
+      prompt += `\n- Relationship status: ${learnings.relationship_status}. Consider this context in your advice.`;
+    }
+    if (learnings.concerns && learnings.concerns.length > 0) {
+      prompt += `\n- Common concerns: ${learnings.concerns.join(', ')}. Be empathetic and supportive about these.`;
+    }
+    if (learnings.response_preferences) {
+      const prefs = learnings.response_preferences;
+      if (prefs.length) prompt += `\n- Prefers ${prefs.length} responses.`;
+      if (prefs.tone) prompt += `\n- Prefers ${prefs.tone} tone.`;
+    }
+    if (learnings.ai_notes) {
+      prompt += `\n- Notes for serving this user better: ${learnings.ai_notes}`;
+    }
+    if (learnings.total_interactions && learnings.total_interactions > 10) {
+      prompt += `\n- You've had ${learnings.total_interactions} interactions with this user. Use your history together to provide more personalized responses.`;
+    }
+  }
+
+  prompt += `\n\nYOUR ROLE:
+- Be warm, understanding, and genuinely caring
+- Adapt your tone based on the user's needs - be a friend, companion, relationship advisor, life advisor, or business advisor as needed
+- Keep responses concise and natural (typically 1-3 sentences)
+- Use their name occasionally to make conversations feel personal
+- Continuously learn from interactions to better serve ${userDisplayName}
+
+COMMANDS:
+- When users ask for images (e.g., "generate an image of...", "create a picture of..."), respond with just "GENERATE_IMAGE: [their prompt]"
+- When users ask for documents (e.g., "create a document", "write a...", "generate a PDF"), respond with just "GENERATE_DOCUMENT: [document type and content]"`;
+
+  return prompt;
+}
+
+/**
  * Get AI response using OpenAI API or fallback
  */
 export async function getAIResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+  isNewConversation: boolean = false,
+  userName?: string,
+  userUsername?: string,
+  userId?: string
 ): Promise<AIResponse> {
-  // If this is the first message, send a simple greeting
-  if (conversationHistory.length === 0) {
+  // Build personalized greeting with user's name
+  const userDisplayName = userName || userUsername || 'there';
+  
+  // If this is the first message, send a personalized greeting
+  if (isNewConversation || conversationHistory.length === 0) {
     return {
       success: true,
-      message: "Hello! I'm Committed AI.",
+      message: `Hello ${userDisplayName}! I'm Committed AI. How can I help you today?`,
       contentType: 'text',
     };
   }
@@ -366,12 +641,30 @@ export async function getAIResponse(
     // Check if OpenAI API key is configured
     // In React Native/Expo, process.env is available at build time
     // @ts-ignore - process.env is available in Expo at build time
-    const openaiApiKey = process.env?.EXPO_PUBLIC_OPENAI_API_KEY || 
-                        process.env?.OPENAI_API_KEY;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processEnv = (global as any).process?.env || (global as any).process?.env || {};
+    const openaiApiKey = processEnv.EXPO_PUBLIC_OPENAI_API_KEY || processEnv.OPENAI_API_KEY;
+
+    // Get user learnings if userId provided
+    let userLearnings: UserLearnings | null = null;
+    if (userId) {
+      userLearnings = await getUserLearnings(userId);
+      
+      // Analyze conversation and update learnings asynchronously (don't wait)
+      analyzeConversationForLearnings(userMessage, conversationHistory, userId)
+        .then((newLearnings) => {
+          if (Object.keys(newLearnings).length > 0) {
+            updateUserLearnings(userId, newLearnings);
+          }
+        })
+        .catch((error) => {
+          console.error('Error updating learnings:', error);
+        });
+    }
 
     if (openaiApiKey) {
-      // Use OpenAI API
-      const response = await getOpenAIResponse(userMessage, conversationHistory, openaiApiKey);
+      // Use OpenAI API with learnings
+      const response = await getOpenAIResponse(userMessage, conversationHistory, openaiApiKey, userName, userUsername, userLearnings);
       
       // Check if response contains generation commands
       if (response.message?.startsWith('GENERATE_IMAGE:')) {
@@ -386,8 +679,8 @@ export async function getAIResponse(
       
       return response;
     } else {
-      // Fallback to rule-based responses
-      return getFallbackResponse(userMessage, conversationHistory);
+      // Fallback to rule-based responses with learnings
+      return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, userLearnings);
     }
   } catch (error: any) {
     console.error('Error getting AI response:', error);
@@ -404,28 +697,18 @@ export async function getAIResponse(
 async function getOpenAIResponse(
   userMessage: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
-  apiKey: string
+  apiKey: string,
+  userName?: string,
+  userUsername?: string,
+  learnings?: UserLearnings | null
 ): Promise<AIResponse> {
   try {
-    // Use the provided apiKey parameter (already resolved from process.env in getAIResponse)
-    const systemPrompt = `You are Committed AI, a versatile, friendly, and supportive AI companion designed to help users with relationships, life advice, business guidance, and general companionship. You are:
-
-- Warm, understanding, and non-judgmental
-- Knowledgeable about relationships, communication, personal growth, and business
-- Able to provide both emotional support and practical advice
-- Respectful of boundaries and privacy
-- Encouraging and positive while being realistic
-- Business-savvy with knowledge of entrepreneurship, marketing, finance, strategy, and professional development
-
-Respond naturally and conversationally, as if you're a trusted friend who genuinely cares. Keep responses concise but meaningful (2-4 sentences typically). Adapt your tone based on the user's needs - be a friend, companion, relationship advisor, life advisor, or business advisor as the situation requires.
-
-When users ask for images (e.g., "generate an image of...", "create a picture of...", "show me..."), respond with just the text "GENERATE_IMAGE: [their prompt]" so the system can generate it.
-
-When users ask for documents (e.g., "create a document", "write a...", "generate a PDF", "make a contract"), respond with just the text "GENERATE_DOCUMENT: [document type and content]" so the system can generate it.`;
+    // Build personalized system prompt with learnings
+    const systemPrompt = buildPersonalizedSystemPrompt(userName || '', userUsername, learnings);
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...conversationHistory.slice(-10), // Keep last 10 messages for context
+      ...conversationHistory.slice(-15), // Keep last 15 messages for context (more for better learning)
       { role: 'user', content: userMessage },
     ];
 
@@ -458,7 +741,7 @@ When users ask for documents (e.g., "create a document", "write a...", "generate
   } catch (error: any) {
     console.error('OpenAI API error:', error);
     // Fallback to rule-based responses if API fails
-    return getFallbackResponse(userMessage, conversationHistory);
+    return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, learnings);
   }
 }
 
@@ -467,9 +750,22 @@ When users ask for documents (e.g., "create a document", "write a...", "generate
  */
 function getFallbackResponse(
   userMessage: string,
-  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  userName?: string,
+  userUsername?: string,
+  learnings?: UserLearnings | null
 ): AIResponse {
+  const userDisplayName = userName || userUsername || 'there';
   const message = userMessage.toLowerCase().trim();
+  
+  // Build personalized greeting with learnings
+  const personalizedGreeting = (() => {
+    let greeting = `Hello ${userDisplayName}! I'm Committed AI. How can I help you today?`;
+    if (learnings?.interests && learnings.interests.length > 0) {
+      greeting += ` I remember you're interested in ${learnings.interests.slice(0, 2).join(' and ')}.`;
+    }
+    return greeting;
+  })();
 
   // Relationship advice patterns
   if (message.includes('relationship') || message.includes('partner') || message.includes('boyfriend') || message.includes('girlfriend') || message.includes('spouse')) {
@@ -499,7 +795,7 @@ function getFallbackResponse(
   if (message.includes('hello') || message.includes('hi') || message.includes('hey') || message.startsWith('h')) {
     return {
       success: true,
-      message: "Hello! I'm Committed AI.",
+      message: personalizedGreeting,
     };
   }
 
