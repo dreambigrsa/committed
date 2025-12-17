@@ -62,7 +62,7 @@ export default function StatusViewerScreen() {
   const [reactionCounts, setReactionCounts] = useState<Record<string, { heart: number; like: number; laugh: number }>>({});
   const [pausedProgress, setPausedProgress] = useState(0);
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const progressInterval = useRef<NodeJS.Timeout | null>(null);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const styles = StyleSheet.create({
     container: {
@@ -490,7 +490,7 @@ export default function StatusViewerScreen() {
     if (!status) return;
     
     const reaction = await getUserReaction(status.id);
-    setUserReactions(prev => ({ ...prev, [status.id]: reaction }));
+    setUserReactions((prev: Record<string, 'heart' | 'like' | 'laugh' | null>) => ({ ...prev, [status.id]: reaction }));
   };
 
   const loadReactionCounts = async () => {
@@ -498,7 +498,7 @@ export default function StatusViewerScreen() {
     if (!status) return;
     
     const counts = await getStatusReactionCounts(status.id);
-    setReactionCounts(prev => ({ ...prev, [status.id]: counts }));
+    setReactionCounts((prev: Record<string, { heart: number; like: number; laugh: number }>) => ({ ...prev, [status.id]: counts }));
   };
 
   // Pause when viewers modal opens, resume when it closes
@@ -727,7 +727,7 @@ export default function StatusViewerScreen() {
       progressInterval.current = null;
       setIsPaused(true);
       // Save current progress value synchronously
-      progressAnim.stopAnimation((value) => {
+      progressAnim.stopAnimation((value: number) => {
         setPausedProgress(value);
       });
     }
@@ -743,7 +743,7 @@ export default function StatusViewerScreen() {
       
       // Get current progress value from the animated value directly
       // stopAnimation is synchronous in terms of getting the value
-      progressAnim.stopAnimation((currentProgressValue) => {
+      progressAnim.stopAnimation((currentProgressValue: number) => {
         // Update state
         setIsPaused(false);
         setPausedProgress(currentProgressValue);
@@ -912,18 +912,18 @@ export default function StatusViewerScreen() {
       if (currentReaction === reactionType) {
         const success = await removeStatusReaction(status.id);
         if (success) {
-          setUserReactions(prev => ({ ...prev, [status.id]: null }));
+          setUserReactions((prev: Record<string, 'heart' | 'like' | 'laugh' | null>) => ({ ...prev, [status.id]: null }));
           // Update counts
           const counts = await getStatusReactionCounts(status.id);
-          setReactionCounts(prev => ({ ...prev, [status.id]: counts }));
+          setReactionCounts((prev: Record<string, { heart: number; like: number; laugh: number }>) => ({ ...prev, [status.id]: counts }));
         }
       } else {
         try {
           await reactToStatus(status.id, reactionType);
-          setUserReactions(prev => ({ ...prev, [status.id]: reactionType }));
+          setUserReactions((prev: Record<string, 'heart' | 'like' | 'laugh' | null>) => ({ ...prev, [status.id]: reactionType }));
           // Update counts
           const counts = await getStatusReactionCounts(status.id);
-          setReactionCounts(prev => ({ ...prev, [status.id]: counts }));
+          setReactionCounts((prev: Record<string, { heart: number; like: number; laugh: number }>) => ({ ...prev, [status.id]: counts }));
           
           // Send notification to status owner (if not own status)
           if (status.user_id !== currentUser.id) {
@@ -966,7 +966,7 @@ export default function StatusViewerScreen() {
       const success = await updateStatusPrivacy(status.id, privacyLevel);
       if (success) {
         // Update local state
-        setStatuses(prev => prev.map(s => 
+        setStatuses((prev: Status[]) => prev.map((s: Status) => 
           s.id === status.id ? { ...s, privacy_level: privacyLevel } : s
         ));
         Alert.alert('Success', 'Story privacy updated successfully!');
@@ -998,7 +998,7 @@ export default function StatusViewerScreen() {
               const success = await archiveStatus(status.id);
               if (success) {
                 // Remove from current statuses list
-                const remainingStatuses = statuses.filter(s => s.id !== status.id);
+                const remainingStatuses = statuses.filter((s: Status) => s.id !== status.id);
                 setStatuses(remainingStatuses);
                 
                 if (remainingStatuses.length === 0) {
@@ -1116,7 +1116,7 @@ export default function StatusViewerScreen() {
               
               if (success) {
                 // Remove deleted status from list
-                const newStatuses = statuses.filter((s) => s.id !== status.id);
+                const newStatuses = statuses.filter((s: Status) => s.id !== status.id);
                 setStatuses(newStatuses);
 
                 // Navigate appropriately
@@ -1171,7 +1171,7 @@ export default function StatusViewerScreen() {
       <View style={styles.container}>
         {/* Progress Bars */}
         <View style={styles.progressContainer}>
-          {statuses.map((_, index) => (
+          {statuses.map((_: Status, index: number) => (
             <View key={index} style={styles.progressBarWrapper}>
               {index === currentIndex ? (
                 <Animated.View
@@ -1240,7 +1240,7 @@ export default function StatusViewerScreen() {
             {currentUser?.id === status.user_id && (
               <TouchableOpacity 
                 style={[styles.closeButton, { zIndex: 101 }]} 
-                onPress={(e) => {
+                onPress={(e: any) => {
                   e?.stopPropagation?.();
                   setShowOwnStatusMenu(true);
                 }}
@@ -1251,7 +1251,7 @@ export default function StatusViewerScreen() {
             )}
             <TouchableOpacity 
               style={[styles.closeButton, { zIndex: 101 }]} 
-              onPress={(e) => {
+              onPress={(e: any) => {
                 e?.stopPropagation?.();
                 handleClose();
               }}
@@ -1291,7 +1291,7 @@ export default function StatusViewerScreen() {
                     }]} 
                     pointerEvents="none"
                   >
-                    {status.text_content.split('\n').map((line, index) => {
+                    {status.text_content.split('\n').map((line: string, index: number) => {
                       const trimmedLine = line.trim();
                       if (!trimmedLine) return null;
                       
@@ -1351,7 +1351,7 @@ export default function StatusViewerScreen() {
               {/* Stickers */}
               {status.stickers && status.stickers.length > 0 && (
                 <View style={styles.stickersContainer} pointerEvents="none">
-                  {status.stickers.map((sticker) => {
+                  {status.stickers.map((sticker: any) => {
                     const stickerUrl = stickerUrls.get(sticker.id);
                     if (!stickerUrl) return null;
                     
@@ -1399,7 +1399,7 @@ export default function StatusViewerScreen() {
         {/* Navigation Areas - these will intercept touches but also allow pause/resume */}
         <TouchableOpacity
           style={[styles.navArea, styles.leftArea]}
-          onPress={(e) => {
+          onPress={(e: any) => {
             e?.stopPropagation?.();
             togglePause();
             handlePrev();
@@ -1408,7 +1408,7 @@ export default function StatusViewerScreen() {
         />
         <TouchableOpacity
           style={[styles.navArea, styles.rightArea]}
-          onPress={(e) => {
+          onPress={(e: any) => {
             e?.stopPropagation?.();
             togglePause();
             handleNext();
@@ -1750,7 +1750,7 @@ export default function StatusViewerScreen() {
 
                 <TouchableOpacity
                   style={styles.ownStatusMenuOption}
-                  onPress={(e) => {
+                  onPress={(e: any) => {
                     e?.stopPropagation?.();
                     setShowOwnStatusMenu(false);
                     resumeProgress();
@@ -2164,7 +2164,7 @@ function ViewersListModal({
                   <Text style={styles.emptyText}>No viewers yet</Text>
                 </View>
               ) : (
-                viewers.map((viewer) => {
+                viewers.map((viewer: StatusViewer) => {
                   const reactionEmoji = viewer.reaction_type === 'heart' ? '❤️' 
                     : viewer.reaction_type === 'like' ? '👍' 
                     : viewer.reaction_type === 'laugh' ? '😂' 
@@ -2246,7 +2246,7 @@ function ViewersListModal({
                       activeOpacity={0.7}
                     >
                       <TouchableOpacity
-                        onPress={(e) => {
+                        onPress={(e: any) => {
                           e.stopPropagation();
                           handleNavigateToProfile();
                         }}
@@ -2290,7 +2290,7 @@ function ViewersListModal({
                       </View>
                       <TouchableOpacity 
                         style={styles.viewerOptions}
-                        onPress={(e) => {
+                        onPress={(e: any) => {
                           e.stopPropagation();
                           // Could add menu options here later
                         }}
