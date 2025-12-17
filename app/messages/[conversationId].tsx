@@ -40,6 +40,7 @@ import { ExternalLink } from 'lucide-react-native';
 import StatusIndicator from '@/components/StatusIndicator';
 import { UserStatus } from '@/types';
 import { getSignedUrlForMedia } from '@/lib/status-queries';
+import { getOrCreateAIUser, getAIResponse } from '@/lib/ai-service';
 
 /**
  * Status Preview Attachment Component
@@ -906,6 +907,97 @@ export default function ConversationDetailScreen() {
         stickerId
       );
       
+      // Check if the other participant is the AI user and respond if needed
+      // Only respond to text messages (not images, documents, or stickers)
+      if (messageType === 'text' && messageContent.trim()) {
+        const aiUser = await getOrCreateAIUser();
+        if (aiUser && otherParticipantId === aiUser.id) {
+          // This is a conversation with the AI, trigger AI response
+          try {
+            // Get conversation history for context
+            const existingMessages = localMessages || [];
+            const conversationHistory = existingMessages
+              .slice(-20) // Last 20 messages for context
+              .map((msg: any) => ({
+                role: msg.senderId === currentUser.id ? 'user' as const : 'assistant' as const,
+                content: msg.content || '',
+              }));
+
+            // Add the current message to history
+            conversationHistory.push({
+              role: 'user' as const,
+              content: messageContent,
+            });
+
+            const isNewConversation = existingMessages.length === 0;
+
+            // Get AI response
+            const aiResponse = await getAIResponse(
+              messageContent,
+              conversationHistory,
+              isNewConversation,
+              currentUser.fullName,
+              currentUser.username,
+              currentUser.id
+            );
+
+            if (aiResponse.success) {
+              // Send AI response using database function or direct insert
+              try {
+                const messageData: any = {
+                  conversation_id: conversationId,
+                  sender_id: aiUser.id,
+                  receiver_id: currentUser.id,
+                  content: aiResponse.message || '',
+                  message_type: aiResponse.contentType === 'image' ? 'image' : 
+                               aiResponse.contentType === 'document' ? 'document' : 'text',
+                };
+
+                if (aiResponse.contentType === 'image' && aiResponse.imageUrl) {
+                  messageData.media_url = aiResponse.imageUrl;
+                  messageData.content = aiResponse.message || 'I\'ve generated an image for you!';
+                } else if (aiResponse.contentType === 'document' && aiResponse.documentUrl) {
+                  messageData.document_url = aiResponse.documentUrl;
+                  messageData.document_name = aiResponse.documentName || 'document.txt';
+                  messageData.content = aiResponse.message || 'I\'ve generated a document for you!';
+                }
+
+                // Try direct insert first (RLS policy should allow AI to send messages)
+                const { error: insertError } = await supabase
+                  .from('messages')
+                  .insert(messageData);
+
+                if (insertError) {
+                  // If direct insert fails, try using the RPC function
+                  const { error: rpcError } = await supabase
+                    .rpc('send_ai_message', {
+                      p_conversation_id: conversationId,
+                      p_receiver_id: currentUser.id,
+                      p_content: messageData.content,
+                      p_message_type: messageData.message_type,
+                      p_media_url: messageData.media_url || null,
+                      p_document_url: messageData.document_url || null,
+                      p_document_name: messageData.document_name || null,
+                      p_sticker_id: null,
+                      p_status_id: null,
+                      p_status_preview_url: null,
+                    });
+
+                  if (rpcError) {
+                    console.error('Error sending AI response:', JSON.stringify(rpcError, null, 2));
+                  }
+                }
+              } catch (error: any) {
+                console.error('Error sending AI response:', error);
+              }
+            }
+          } catch (error: any) {
+            console.error('Error generating AI response:', error);
+            // Don't show error to user - AI failure shouldn't block the conversation
+          }
+        }
+      }
+      
       // Don't remove optimistic message here - let real-time subscription handle it
       // The real-time subscription will replace the optimistic message with the real one
       // We match by content, sender, and time to replace the optimistic message
@@ -1098,7 +1190,16 @@ export default function ConversationDetailScreen() {
     }
   };
 
-  const getLastSeenText = (lastActiveAt: string, statusType?: string) => {
+  const getLastSeenText = (lastActiveAt: string, statusType?: string, userId?: string) => {
+    // Check if this is the AI user - always show as online
+    const other = getOtherParticipant();
+    if (other && other.name === 'Committed AI') {
+      return 'Online';
+    }
+
+    // Also check by userId if available (AI user email is 'ai@committed.app')
+    // For now, we rely on the name check above, and getUserStatus will handle it
+
     const lastActive = new Date(lastActiveAt);
     const now = new Date();
     const diffMs = now.getTime() - lastActive.getTime();
@@ -1717,7 +1818,7 @@ export default function ConversationDetailScreen() {
                         ? 'Away'
                         : otherParticipantStatus.statusType === 'busy'
                         ? 'Busy'
-                        : getLastSeenText(otherParticipantStatus.lastActiveAt, otherParticipantStatus.statusType))
+                        : getLastSeenText(otherParticipantStatus.lastActiveAt, otherParticipantStatus.statusType, otherParticipant?.id))
                     : 'Loading...'}
                 </Text>
               </View>
