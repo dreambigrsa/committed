@@ -207,56 +207,73 @@ export default function MessagesScreen() {
       );
 
       if (aiResponse.success) {
-        // Send AI response using database function to bypass RLS
+        // Send AI response - try direct insert first (RLS policy should allow it)
+        // If that fails, it means the RLS policy hasn't been updated yet
         try {
-          const { data: messageId, error: insertError } = await supabase
-            .rpc('send_ai_message', {
-              p_conversation_id: conversation.id,
-              p_receiver_id: currentUser.id,
-              p_content: aiResponse.message || '',
-              p_message_type: aiResponse.contentType === 'image' ? 'image' : 
-                             aiResponse.contentType === 'document' ? 'document' : 'text',
-              p_media_url: aiResponse.contentType === 'image' ? aiResponse.imageUrl : null,
-              p_document_url: aiResponse.contentType === 'document' ? aiResponse.documentUrl : null,
-              p_document_name: aiResponse.contentType === 'document' ? aiResponse.documentName : null,
-              p_sticker_id: null,
-              p_status_id: null,
-              p_status_preview_url: null,
-            });
+          const messageData: any = {
+            conversation_id: conversation.id,
+            sender_id: aiUser.id,
+            receiver_id: currentUser.id,
+            content: aiResponse.message || '',
+            message_type: aiResponse.contentType === 'image' ? 'image' : 
+                         aiResponse.contentType === 'document' ? 'document' : 'text',
+          };
+
+          if (aiResponse.contentType === 'image' && aiResponse.imageUrl) {
+            messageData.media_url = aiResponse.imageUrl;
+            messageData.content = aiResponse.message || 'I\'ve generated an image for you!';
+          } else if (aiResponse.contentType === 'document' && aiResponse.documentUrl) {
+            messageData.document_url = aiResponse.documentUrl;
+            messageData.document_name = aiResponse.documentName || 'document.txt';
+            messageData.content = aiResponse.message || 'I\'ve generated a document for you!';
+          }
+
+          // Try direct insert first (RLS policy should allow AI to send messages)
+          const { data: insertedMessage, error: insertError } = await supabase
+            .from('messages')
+            .insert(messageData)
+            .select()
+            .single();
 
           if (insertError) {
-            console.error('Error sending AI message:', insertError);
-            // Fallback: try direct insert (in case RLS policy works)
-            const messageData: any = {
-              conversation_id: conversation.id,
-              sender_id: aiUser.id,
-              receiver_id: currentUser.id,
-              content: aiResponse.message || '',
-              message_type: aiResponse.contentType === 'image' ? 'image' : 
-                           aiResponse.contentType === 'document' ? 'document' : 'text',
-            };
+            // If direct insert fails, try using the RPC function
+            console.log('Direct insert failed, trying RPC function:', insertError.message || insertError.code);
+            
+            const { data: messageId, error: rpcError } = await supabase
+              .rpc('send_ai_message', {
+                p_conversation_id: conversation.id,
+                p_receiver_id: currentUser.id,
+                p_content: messageData.content,
+                p_message_type: messageData.message_type,
+                p_media_url: messageData.media_url || null,
+                p_document_url: messageData.document_url || null,
+                p_document_name: messageData.document_name || null,
+                p_sticker_id: null,
+                p_status_id: null,
+                p_status_preview_url: null,
+              });
 
-            if (aiResponse.contentType === 'image' && aiResponse.imageUrl) {
-              messageData.media_url = aiResponse.imageUrl;
-              messageData.content = aiResponse.message || 'I\'ve generated an image for you!';
-            } else if (aiResponse.contentType === 'document' && aiResponse.documentUrl) {
-              messageData.document_url = aiResponse.documentUrl;
-              messageData.document_name = aiResponse.documentName || 'document.txt';
-              messageData.content = aiResponse.message || 'I\'ve generated a document for you!';
+            if (rpcError) {
+              console.error('Error sending AI message (RPC):', JSON.stringify(rpcError, null, 2));
+              console.error('Error code:', rpcError.code);
+              console.error('Error message:', rpcError.message);
+              console.error('Error details:', rpcError.details);
+              console.error('Error hint:', rpcError.hint);
+              
+              Alert.alert(
+                'Error', 
+                `Failed to send AI response. ${rpcError.message || insertError.message || 'Please run the fix-ai-message-rls.sql script in Supabase.'}`
+              );
             }
-
-            const { error: fallbackError } = await supabase
-              .from('messages')
-              .insert(messageData);
-
-            if (fallbackError) {
-              console.error('Error sending AI message (fallback):', fallbackError);
-              Alert.alert('Error', 'Failed to send AI response');
-            }
+          } else {
+            // Success - message was inserted
+            console.log('AI message sent successfully');
           }
         } catch (error: any) {
-          console.error('Error sending AI message:', error);
-          Alert.alert('Error', 'Failed to send AI response');
+          const errorMessage = error?.message || error?.code || JSON.stringify(error);
+          console.error('Error sending AI message:', errorMessage);
+          console.error('Full error:', JSON.stringify(error, null, 2));
+          Alert.alert('Error', `Failed to send AI response: ${errorMessage}`);
         }
       }
     } catch (error: any) {
