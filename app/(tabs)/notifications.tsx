@@ -155,6 +155,17 @@ export default function NotificationsScreen() {
           router.push(`/profile/${data.followerId}` as any);
         }
         break;
+      case 'status_reaction':
+        // Navigate to the status owner's status viewer (the person who owns the status that was reacted to)
+        // data.statusOwnerId is the owner of the status, data.userId is the person who reacted
+        if (data.statusOwnerId) {
+          router.push(`/status/${data.statusOwnerId}` as any);
+        } else if (data.statusId) {
+          // Fallback: if statusOwnerId not available, we need to fetch it from the status
+          // But for now, we can't navigate without the owner ID, so just show an error
+          console.warn('Status owner ID not available in notification data');
+        }
+        break;
       case 'relationship_request':
         setActiveTab('requests');
         break;
