@@ -39,6 +39,114 @@ import * as WebBrowser from 'expo-web-browser';
 import { ExternalLink } from 'lucide-react-native';
 import StatusIndicator from '@/components/StatusIndicator';
 import { UserStatus } from '@/types';
+import { getSignedUrlForMedia } from '@/lib/status-queries';
+
+/**
+ * Status Preview Attachment Component
+ * Handles loading signed URL from media path (which may be stored as path or URL)
+ */
+function StatusPreviewAttachment({ 
+  mediaPath, 
+  isMe, 
+  onPress 
+}: { 
+  mediaPath: string; 
+  isMe: boolean; 
+  onPress: () => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPreview = async () => {
+      try {
+        setLoading(true);
+        
+        // Check if mediaPath is already a URL (starts with http/https)
+        // If it's a URL, use it directly (for backward compatibility)
+        // If it's a path (starts with 'status-media/'), generate signed URL
+        if (mediaPath.startsWith('http://') || mediaPath.startsWith('https://')) {
+          // Already a signed URL, use it directly
+          if (isMounted) {
+            setPreviewUrl(mediaPath);
+            setLoading(false);
+          }
+        } else if (mediaPath.startsWith('status-media/')) {
+          // It's a media path, generate signed URL
+          const url = await getSignedUrlForMedia(mediaPath);
+          if (isMounted) {
+            setPreviewUrl(url);
+            setLoading(false);
+          }
+        } else {
+          // Try to generate signed URL anyway (might be a path without prefix)
+          const url = await getSignedUrlForMedia(mediaPath);
+          if (isMounted) {
+            setPreviewUrl(url);
+            setLoading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading status preview:', error);
+        if (isMounted) {
+          setPreviewUrl(null);
+          setLoading(false);
+        }
+      }
+    };
+
+    loadPreview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mediaPath]);
+
+  if (loading || !previewUrl) {
+    return (
+      <View style={[
+        styles.statusAttachment,
+        isMe ? styles.statusAttachmentMe : styles.statusAttachmentThem,
+        { justifyContent: 'center', alignItems: 'center', minHeight: 150 }
+      ]}>
+        {loading ? (
+          <Text style={[styles.statusAttachmentLabel, isMe ? styles.statusAttachmentLabelMe : styles.statusAttachmentLabelThem]}>
+            Loading preview...
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.statusAttachment,
+        isMe ? styles.statusAttachmentMe : styles.statusAttachmentThem
+      ]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <View style={styles.statusAttachmentHeader}>
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={styles.statusAttachmentIcon}
+          contentFit="contain"
+        />
+        <Text style={[styles.statusAttachmentLabel, isMe ? styles.statusAttachmentLabelMe : styles.statusAttachmentLabelThem]}>
+          Story Reply
+        </Text>
+      </View>
+      <Image
+        source={{ uri: previewUrl }}
+        style={styles.statusAttachmentPreview}
+        contentFit="cover"
+      />
+    </TouchableOpacity>
+  );
+}
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
@@ -449,6 +557,8 @@ export default function ConversationDetailScreen() {
             deletedForReceiver: m.deleted_for_receiver || false,
             read: m.read,
             createdAt: m.created_at,
+            statusId: m.status_id,
+            statusPreviewUrl: m.status_preview_url,
           }));
         setLocalMessages(filteredMessages);
       }
@@ -1273,6 +1383,21 @@ export default function ConversationDetailScreen() {
                 contentFit="contain"
               />
             </View>
+          ) : null}
+
+          {/* Status Attachment - Highlighted */}
+          {item.statusId && item.statusPreviewUrl ? (
+            <StatusPreviewAttachment
+              mediaPath={item.statusPreviewUrl}
+              isMe={isMe}
+              onPress={() => {
+                // Get status owner from conversation
+                const otherParticipantId = conversation?.participants.find(id => id !== currentUser.id);
+                if (otherParticipantId) {
+                  router.push(`/status/${otherParticipantId}` as any);
+                }
+              }}
+            />
           ) : null}
 
           {item.content && typeof item.content === 'string' && item.content.trim() && item.messageType !== 'sticker' ? (
@@ -2166,6 +2291,47 @@ const styles = StyleSheet.create({
   stickerImage: {
     width: 120,
     height: 120,
+  },
+  statusAttachment: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    borderWidth: 2,
+  },
+  statusAttachmentMe: {
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statusAttachmentThem: {
+    borderColor: colors.primary + '40',
+    backgroundColor: colors.background.secondary,
+  },
+  statusAttachmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  statusAttachmentIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+  },
+  statusAttachmentLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  statusAttachmentLabelMe: {
+    color: '#fff',
+  },
+  statusAttachmentLabelThem: {
+    color: colors.primary,
+  },
+  statusAttachmentPreview: {
+    width: '100%',
+    height: 150,
   },
   stickerPreview: {
     position: 'relative',
