@@ -20,6 +20,7 @@ import StatusStoriesBar from '@/components/StatusStoriesBar';
 import { UserStatus } from '@/types';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getOrCreateAIUser, getAIResponse } from '@/lib/ai-service';
+import { supabase } from '@/lib/supabase';
 
 export default function MessagesScreen() {
   const router = useRouter();
@@ -179,69 +180,65 @@ export default function MessagesScreen() {
       // Navigate to conversation
       router.push(`/messages/${conversation.id}` as any);
 
-      // Check if this is a new conversation (no messages yet)
+      // Get conversation history for context (before sending user's message)
       const existingMessages = getMessages(conversation.id) || [];
       const isNewConversation = existingMessages.length === 0;
 
-      // If it's a new conversation, send initial greeting first
-      if (isNewConversation) {
-        await sendMessage(
-          conversation.id,
-          aiUser.id,
-          "Hello! I'm Committed AI.",
-          undefined,
-          undefined,
-          undefined,
-          'text'
-        );
-      }
-
-      // Get conversation history for context
-      const conversationHistory = existingMessages
-        .slice(-10) // Last 10 messages
+      // Get conversation history for context (including the message we just sent)
+      // Use more messages (last 20) for better context and learning
+      const conversationHistory = [
+        ...existingMessages,
+        { senderId: currentUser.id, content: aiQuery.trim() } // Include the current message
+      ]
+        .slice(-20) // Last 20 messages for better context
         .map((msg: any) => ({
           role: msg.senderId === currentUser.id ? 'user' as const : 'assistant' as const,
           content: msg.content || '',
         }));
 
-      // Get AI response immediately (no delay)
-      const aiResponse = await getAIResponse(aiQuery.trim(), conversationHistory);
+      // Get AI response immediately (no delay) with user information for personalization
+      const aiResponse = await getAIResponse(
+        aiQuery.trim(), 
+        conversationHistory, 
+        isNewConversation,
+        currentUser.full_name,
+        currentUser.username,
+        currentUser.id // Pass userId for learning system
+      );
 
       if (aiResponse.success) {
-        // Send AI response immediately (no delay for faster response)
-        if (aiResponse.contentType === 'image' && aiResponse.imageUrl) {
-          // Send image message
-          await sendMessage(
-            conversation.id,
-            aiUser.id,
-            aiResponse.message || 'I\'ve generated an image for you!',
-            aiResponse.imageUrl,
-            undefined,
-            undefined,
-            'image'
-          );
-        } else if (aiResponse.contentType === 'document' && aiResponse.documentUrl) {
-          // Send document message
-          await sendMessage(
-            conversation.id,
-            aiUser.id,
-            aiResponse.message || 'I\'ve generated a document for you!',
-            undefined,
-            aiResponse.documentUrl,
-            aiResponse.documentName || 'document.txt',
-            'document'
-          );
-        } else if (aiResponse.message) {
-          // Send text message
-          await sendMessage(
-            conversation.id,
-            aiUser.id,
-            aiResponse.message,
-            undefined,
-            undefined,
-            undefined,
-            'text'
-          );
+        // Send AI response - insert directly into database since sendMessage always uses currentUser as sender
+        try {
+          const messageData: any = {
+            conversation_id: conversation.id,
+            sender_id: aiUser.id, // AI is the sender
+            receiver_id: currentUser.id, // Current user is the receiver
+            content: aiResponse.message || '',
+            message_type: 'text',
+          };
+
+          if (aiResponse.contentType === 'image' && aiResponse.imageUrl) {
+            messageData.media_url = aiResponse.imageUrl;
+            messageData.message_type = 'image';
+            messageData.content = aiResponse.message || 'I\'ve generated an image for you!';
+          } else if (aiResponse.contentType === 'document' && aiResponse.documentUrl) {
+            messageData.document_url = aiResponse.documentUrl;
+            messageData.document_name = aiResponse.documentName || 'document.txt';
+            messageData.message_type = 'document';
+            messageData.content = aiResponse.message || 'I\'ve generated a document for you!';
+          }
+
+          const { error: insertError } = await supabase
+            .from('messages')
+            .insert(messageData);
+
+          if (insertError) {
+            console.error('Error sending AI message:', insertError);
+            Alert.alert('Error', 'Failed to send AI response');
+          }
+        } catch (error: any) {
+          console.error('Error sending AI message:', error);
+          Alert.alert('Error', 'Failed to send AI response');
         }
       }
     } catch (error: any) {
@@ -280,6 +277,7 @@ export default function MessagesScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image
+            // @ts-ignore - require is available in React Native
             source={require('@/assets/images/icon.png')}
             style={styles.appLogoImage}
             contentFit="contain"
@@ -302,6 +300,7 @@ export default function MessagesScreen() {
             onPress={() => router.push('/(tabs)/feed' as any)}
           >
             <Image
+              // @ts-ignore - require is available in React Native
               source={require('@/assets/images/icon.png')}
               style={styles.appLogoSmall}
               contentFit="contain"
