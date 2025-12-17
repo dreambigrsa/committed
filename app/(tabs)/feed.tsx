@@ -96,7 +96,7 @@ export default function FeedScreen() {
           }
         }
         if (isMounted) {
-          setPostStatuses(prev => ({ ...prev, ...statusMap }));
+          setPostStatuses((prev: Record<string, any>) => ({ ...prev, ...statusMap }));
         }
       };
       loadPostStatuses();
@@ -1014,16 +1014,16 @@ export default function FeedScreen() {
     return (
       <View style={styles.mediaWrapper}>
         <ScrollView
-          ref={(ref) => {
+          ref={(ref: any) => {
             postScrollRefs.current[post.id] = ref;
           }}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           style={styles.mediaContainer}
-          onMomentumScrollEnd={(event) => {
+          onMomentumScrollEnd={(event: any) => {
             const newIndex = Math.round(event.nativeEvent.contentOffset.x / width);
-            setPostImageIndices(prev => ({
+            setPostImageIndices((prev: Record<string, number>) => ({
               ...prev,
               [post.id]: newIndex,
             }));
@@ -1031,7 +1031,7 @@ export default function FeedScreen() {
           onScrollBeginDrag={() => {
             // Initialize index if not set
             if (postImageIndices[post.id] === undefined) {
-              setPostImageIndices(prev => ({
+              setPostImageIndices((prev: Record<string, number>) => ({
                 ...prev,
                 [post.id]: 0,
               }));
@@ -1192,7 +1192,7 @@ export default function FeedScreen() {
             useNativeControls
             resizeMode={ResizeMode.COVER}
             shouldPlay={false}
-            onError={(error) => {
+            onError={(error: any) => {
               console.error('Failed to load video ad:', ad.id, error);
               Alert.alert('Error', 'Failed to load video advertisement');
             }}
@@ -1326,17 +1326,17 @@ export default function FeedScreen() {
     });
 
     if (!result.canceled && result.assets) {
-      const urls = result.assets.map(asset => asset.uri);
+      const urls = result.assets.map((asset: any) => asset.uri);
       setEditMediaUrls([...editMediaUrls, ...urls]);
     }
   };
 
   const handleRemoveMedia = (index: number) => {
-    setEditMediaUrls(editMediaUrls.filter((_, i) => i !== index));
+    setEditMediaUrls(editMediaUrls.filter((_: any, i: number) => i !== index));
   };
 
   const handleSaveEdit = async (postId: string) => {
-    const post = posts.find(p => p.id === postId);
+    const post = posts.find((p: any) => p.id === postId);
     if (!post) return;
     
     setIsUploadingMedia(true);
@@ -1530,7 +1530,7 @@ export default function FeedScreen() {
             
             {editMediaUrls.length > 0 && (
               <View style={styles.editMediaContainer}>
-                {editMediaUrls.map((url, index) => (
+                {editMediaUrls.map((url: string, index: number) => (
                   <View key={index} style={styles.editMediaWrapper}>
                     <Image
                       source={{ uri: url }}
@@ -1646,6 +1646,7 @@ export default function FeedScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image
+            // @ts-ignore - require is available in React Native
             source={require('@/assets/images/icon.png')}
             style={styles.appLogoImage}
             contentFit="contain"
@@ -1765,7 +1766,7 @@ export default function FeedScreen() {
             </Text>
           </Animated.View>
         ) : (
-          personalizedPosts.map((post, index) => {
+          personalizedPosts.map((post: any, index: number) => {
             // Smart ad distribution: show ad every 3 posts using smart algorithm
             // Algorithm ensures rotation - ads that were shown recently will have lower scores
             // and different ads will be selected, but ads can still appear again later
@@ -1805,14 +1806,14 @@ export default function FeedScreen() {
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(event) => {
+              onMomentumScrollEnd={(event: any) => {
                 const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
-                setViewingImages(prev => prev ? { ...prev, index: newIndex } : null);
+                setViewingImages((prev: any) => prev ? { ...prev, index: newIndex } : null);
               }}
               style={styles.imageViewerScroll}
               contentOffset={{ x: viewingImages.index * Dimensions.get('window').width, y: 0 }}
             >
-              {viewingImages.urls.map((url, index) => (
+              {viewingImages.urls.map((url: string, index: number) => (
                 <View key={index} style={styles.imageViewerItem}>
                   <Image
                     source={{ uri: url }}
@@ -1894,7 +1895,7 @@ function CommentsModal({
       setReplyText('');
       setSelectedSticker(null);
       setReplyingTo(null);
-      setExpandedReplies(prev => new Set([...prev, replyingTo]));
+      setExpandedReplies((prev: Set<string>) => new Set([...prev, replyingTo]));
     } else if (commentText.trim() || selectedSticker) {
       await addComment(
         postId, 
