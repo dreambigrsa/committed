@@ -22,6 +22,7 @@ import {
   Platform,
   Clipboard,
   Share,
+  InteractionManager,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
@@ -861,10 +862,12 @@ export default function StatusViewerScreen() {
     if (!status) return;
     
     try {
-      // Get status preview URL for attachment
+      // Store the media_path instead of signed URL so it doesn't expire
+      // We'll generate the signed URL when displaying the message
       let statusPreviewUrl: string | null = null;
       if (status.media_path) {
-        statusPreviewUrl = await getSignedUrlForMedia(status.media_path);
+        // Store the media_path, not the signed URL, so it doesn't expire
+        statusPreviewUrl = status.media_path;
       }
       
       // Navigate to conversation with the status owner
@@ -882,7 +885,7 @@ export default function StatusViewerScreen() {
           'text', // messageType
           undefined, // stickerId
           status.id, // statusId - NEW PARAMETER
-          statusPreviewUrl // statusPreviewUrl - NEW PARAMETER
+          statusPreviewUrl // statusPreviewUrl - stores media_path, not signed URL
         );
         
         // Navigate to the conversation screen
@@ -915,8 +918,8 @@ export default function StatusViewerScreen() {
           setReactionCounts(prev => ({ ...prev, [status.id]: counts }));
         }
       } else {
-        const success = await reactToStatus(status.id, reactionType);
-        if (success) {
+        try {
+          await reactToStatus(status.id, reactionType);
           setUserReactions(prev => ({ ...prev, [status.id]: reactionType }));
           // Update counts
           const counts = await getStatusReactionCounts(status.id);
@@ -930,13 +933,28 @@ export default function StatusViewerScreen() {
               'status_reaction',
               'Status Reaction',
               `${currentUser.fullName} reacted ${reactionEmoji} to your story`,
-              { statusId: status.id, reactionType, userId: currentUser.id }
+              { statusId: status.id, reactionType, userId: currentUser.id, statusOwnerId: status.user_id }
             );
           }
+        } catch (reactionError: any) {
+          console.error('Error reacting to status:', reactionError);
+          let errorMessage = 'Failed to react to status.';
+          
+          if (reactionError?.code === '42P01' || reactionError?.message?.includes('does not exist')) {
+            errorMessage = 'Status reactions table not found. Please run the status-reactions-setup.sql script in Supabase.';
+          } else if (reactionError?.code === '42501' || reactionError?.message?.includes('permission denied') || reactionError?.code === 'PGRST301') {
+            errorMessage = 'Permission denied. Please check that the status_reactions table exists and RLS policies are set up correctly.';
+          } else if (reactionError?.message) {
+            errorMessage = `Failed to react: ${reactionError.message}`;
+          }
+          
+          Alert.alert('Error', errorMessage);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error handling reaction:', error);
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+      Alert.alert('Error', `Failed to react to status: ${errorMessage}`);
     }
   };
 
@@ -1911,6 +1929,7 @@ function ViewersListModal({
   status: Status;
   onRefresh: () => Promise<void>;
 }) {
+  const router = useRouter();
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<'viewers' | 'insights'>('viewers');
   const [viewers, setViewers] = useState<StatusViewer[]>(initialViewers);
@@ -2041,6 +2060,18 @@ function ViewersListModal({
       fontSize: 14,
       color: '#aaa',
     },
+    viewerReaction: {
+      fontSize: 16,
+    },
+    messageIndicator: {
+      backgroundColor: '#007AFF',
+      borderRadius: 10,
+      width: 20,
+      height: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 2,
+    },
     viewerOptions: {
       padding: 8,
     },
@@ -2133,30 +2164,142 @@ function ViewersListModal({
                   <Text style={styles.emptyText}>No viewers yet</Text>
                 </View>
               ) : (
-                viewers.map((viewer) => (
-                  <TouchableOpacity key={viewer.id} style={styles.viewerItem}>
-                    {viewer.user.profile_picture ? (
-                      <Image
-                        source={{ uri: viewer.user.profile_picture }}
-                        style={styles.viewerAvatar}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={styles.viewerAvatarPlaceholder}>
-                        <Text style={styles.viewerAvatarText}>
-                          {viewer.user.full_name.charAt(0).toUpperCase()}
-                        </Text>
+                viewers.map((viewer) => {
+                  const reactionEmoji = viewer.reaction_type === 'heart' ? '❤️' 
+                    : viewer.reaction_type === 'like' ? '👍' 
+                    : viewer.reaction_type === 'laugh' ? '😂' 
+                    : null;
+                  
+                  const handleNavigateToProfile = () => {
+                    // Use viewer_id directly (the person who viewed the status)
+                    // This is the actual ID of the viewer, not the status owner
+                    const profileUserId = viewer.viewer_id || viewer.user.id;
+                    
+                    // Get the status owner ID from the status prop
+                    const statusOwnerId = status?.user_id;
+                    
+                    console.log('Navigating to profile:', {
+                      profileUserId,
+                      viewerId: viewer.viewer_id,
+                      userId: viewer.user.id,
+                      viewerName: viewer.user.full_name,
+                      statusOwnerId: statusOwnerId
+                    });
+                    
+                    if (!profileUserId) {
+                      console.error('No profile user ID available');
+                      Alert.alert('Error', 'Unable to navigate to profile');
+                      return;
+                    }
+                    
+                    // Safety check: Don't navigate if somehow we got the status owner's ID
+                    // (This shouldn't happen, but just in case)
+                    if (profileUserId === statusOwnerId) {
+                      console.error('ERROR: Trying to navigate to status owner instead of viewer!');
+                      console.error('Viewer ID:', viewer.viewer_id);
+                      console.error('Status Owner ID:', statusOwnerId);
+                      Alert.alert('Error', 'Cannot navigate to status owner. This is a bug.');
+                      return;
+                    }
+                    
+                    // Close modal first, then navigate after it's fully closed
+                    // This prevents navigation conflicts
+                    const profileRoute = `/profile/${profileUserId}`;
+                    console.log('=== NAVIGATION DEBUG ===');
+                    console.log('Profile Route:', profileRoute);
+                    console.log('Profile User ID:', profileUserId);
+                    console.log('Viewer ID:', viewer.viewer_id);
+                    console.log('Viewer Name:', viewer.user.full_name);
+                    console.log('Status Owner ID:', statusOwnerId);
+                    console.log('Are they the same?', profileUserId === statusOwnerId);
+                    console.log('=======================');
+                    
+                    // Close modal first
+                    onClose();
+                    
+                    // Wait for modal to fully close, then navigate
+                    // Use replace instead of push to replace the status viewer in the stack
+                    InteractionManager.runAfterInteractions(() => {
+                      setTimeout(() => {
+                        try {
+                          console.log('Navigating to profile after modal closed (using replace):', profileRoute);
+                          // Use replace to prevent going back to status viewer
+                          router.replace(profileRoute as any);
+                        } catch (error) {
+                          console.error('Navigation error after modal close:', error);
+                          // Fallback: try push
+                          try {
+                            router.push(profileRoute as any);
+                          } catch (pushError) {
+                            console.error('Push also failed:', pushError);
+                          }
+                        }
+                      }, 300); // Increased delay to ensure modal is fully closed
+                    });
+                  };
+
+                  return (
+                    <TouchableOpacity 
+                      key={viewer.id} 
+                      style={styles.viewerItem}
+                      onPress={handleNavigateToProfile}
+                      activeOpacity={0.7}
+                    >
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleNavigateToProfile();
+                        }}
+                        activeOpacity={0.8}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ marginRight: 12 }}
+                      >
+                        {viewer.user.profile_picture ? (
+                          <Image
+                            source={{ uri: viewer.user.profile_picture }}
+                            style={styles.viewerAvatar}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <View style={styles.viewerAvatarPlaceholder}>
+                            <Text style={styles.viewerAvatarText}>
+                              {viewer.user.full_name.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                      <View style={styles.viewerInfo}>
+                        <TouchableOpacity
+                          onPress={handleNavigateToProfile}
+                          activeOpacity={0.7}
+                          style={{ flex: 1 }}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text style={styles.viewerName}>{viewer.user.full_name}</Text>
+                            {reactionEmoji && (
+                              <Text style={styles.viewerReaction}>{reactionEmoji}</Text>
+                            )}
+                            {viewer.has_message && (
+                              <View style={styles.messageIndicator}>
+                                <MessageCircle size={14} color="#fff" />
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.viewerTime}>{formatViewTime(viewer.viewed_at)}</Text>
+                        </TouchableOpacity>
                       </View>
-                    )}
-                    <View style={styles.viewerInfo}>
-                      <Text style={styles.viewerName}>{viewer.user.full_name}</Text>
-                      <Text style={styles.viewerTime}>{formatViewTime(viewer.viewed_at)}</Text>
-                    </View>
-                    <TouchableOpacity style={styles.viewerOptions}>
-                      <MoreHorizontal size={20} color="#aaa" />
+                      <TouchableOpacity 
+                        style={styles.viewerOptions}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          // Could add menu options here later
+                        }}
+                      >
+                        <MoreHorizontal size={20} color="#aaa" />
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </TouchableOpacity>
-                ))
+                  );
+                })
               )}
             </>
           ) : (
