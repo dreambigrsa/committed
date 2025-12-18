@@ -779,18 +779,12 @@ export async function getAIResponse(
       return await generateDocument(userMessage, conversationHistory);
     }
 
-    // Check if OpenAI API key is configured (build-time config).
-    // IMPORTANT: keys stored in Supabase `app_settings` are not readable by normal users due to RLS,
-    // so non-admin users will use the Supabase Edge Function instead.
-    const openaiApiKey = await getOpenAIApiKeyAsync();
-    
-    // Log for debugging (remove in production if needed)
-    if (!openaiApiKey) {
-      console.warn('[AI Service] OpenAI API key not found. Using fallback responses.');
-      console.warn('[AI Service] To fix: Set EXPO_PUBLIC_OPENAI_API_KEY or configure the key in Admin → Settings.');
-    } else {
-      console.log('[AI Service] OpenAI API key found. Using OpenAI API.');
-    }
+    /**
+     * Production rule:
+     * Always call the Supabase Edge Function (`ai-chat`) so Android/iOS builds behave the same,
+     * and we never rely on a client-shipped OpenAI key or a model that may be unavailable.
+     */
+    const shouldUseDirectOpenAI = __DEV__ && !!(await getOpenAIApiKeyAsync());
 
     // Get user learnings if userId provided
     let userLearnings: UserLearnings | null = null;
@@ -809,7 +803,12 @@ export async function getAIResponse(
         });
     }
 
-    if (openaiApiKey) {
+    if (shouldUseDirectOpenAI) {
+      const openaiApiKey = await getOpenAIApiKeyAsync();
+      if (!openaiApiKey) {
+        // Defensive: shouldn't happen because shouldUseDirectOpenAI checked it.
+        throw new Error('OpenAI API key missing');
+      }
       // Use OpenAI directly (build-time configured key)
       const response = await getOpenAIResponse(
         userMessage,
@@ -834,12 +833,13 @@ export async function getAIResponse(
       return response;
     }
 
-    // No local key available (typical for production). Call Supabase Edge Function (server-side OpenAI).
+    // Default path (including production builds): Call Supabase Edge Function (server-side OpenAI).
     const systemPrompt = buildPersonalizedSystemPrompt(userName || '', userUsername, userLearnings);
     const fnResponse = await getOpenAIResponseViaSupabaseFunction({
       userMessage,
       conversationHistory,
       systemPrompt,
+      userId,
     });
     if (fnResponse.success) return fnResponse;
 
@@ -945,6 +945,7 @@ async function getOpenAIResponseViaSupabaseFunction(params: {
   userMessage: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   systemPrompt: string;
+  userId?: string;
 }): Promise<AIResponse> {
   try {
     const { data, error } = await supabase.functions.invoke('ai-chat', {
@@ -952,6 +953,7 @@ async function getOpenAIResponseViaSupabaseFunction(params: {
         userMessage: params.userMessage,
         conversationHistory: params.conversationHistory.slice(-10),
         systemPrompt: params.systemPrompt,
+        userId: params.userId,
       },
     });
     if (error) throw error;
