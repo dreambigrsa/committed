@@ -10,24 +10,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-function corsHeaders() {
+function corsHeaders(req?: Request) {
+  const requested = req?.headers?.get('Access-Control-Request-Headers');
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
   };
 }
 
-function json(status: number, payload: unknown) {
+function json(status: number, payload: unknown, req?: Request) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(req) },
   });
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' }, req);
 
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -39,7 +40,7 @@ serve(async (req: Request) => {
     const fallbackSystemPrompt = body?.systemPrompt ? String(body.systemPrompt) : null;
 
     if (!userMessage) {
-      return json(400, { success: false, error: 'Missing userMessage' });
+      return json(400, { success: false, error: 'Missing userMessage' }, req);
     }
 
     // Pick an active prompt version (supports rollout via hashing userId).
@@ -85,9 +86,9 @@ serve(async (req: Request) => {
       .eq('key', 'openai_api_key')
       .maybeSingle();
 
-    if (keyErr) return json(500, { success: false, error: keyErr.message });
+    if (keyErr) return json(500, { success: false, error: keyErr.message }, req);
     const apiKey = keyRow?.value ? String(keyRow.value).trim() : '';
-    if (!apiKey) return json(400, { success: false, error: 'OpenAI API key not configured' });
+    if (!apiKey) return json(400, { success: false, error: 'OpenAI API key not configured' }, req);
 
     // Keep history shorter for latency/cost. The system prompt already carries global context.
     const messages = [
@@ -116,11 +117,11 @@ serve(async (req: Request) => {
       return json(502, {
         success: false,
         error: openaiJson?.error?.message || `OpenAI error: ${openaiRes.status}`,
-      });
+      }, req);
     }
 
     const content = openaiJson?.choices?.[0]?.message?.content;
-    if (!content) return json(502, { success: false, error: 'No content returned from OpenAI' });
+    if (!content) return json(502, { success: false, error: 'No content returned from OpenAI' }, req);
 
     return json(200, {
       success: true,
@@ -129,10 +130,10 @@ serve(async (req: Request) => {
         promptVersionId: selectedPromptId,
         model: selectedModel || 'gpt-4o-mini',
       },
-    });
+    }, req);
   } catch (e: any) {
     console.error('ai-chat fatal error:', e);
-    return json(500, { success: false, error: e?.message ?? 'Internal server error' });
+    return json(500, { success: false, error: e?.message ?? 'Internal server error' }, req);
   }
 });
 

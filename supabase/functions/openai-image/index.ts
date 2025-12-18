@@ -22,18 +22,19 @@ const OPENAI_IMAGE_MODEL = Deno.env.get('OPENAI_IMAGE_MODEL') || 'dall-e-3';
 
 const OPENAI_SETTINGS_KEY = 'openai_api_key';
 
-function corsHeaders() {
+function corsHeaders(req?: Request) {
+  const requested = req?.headers?.get('Access-Control-Request-Headers');
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
   };
 }
 
-function json(status: number, payload: unknown) {
+function json(status: number, payload: unknown, req?: Request) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(req) },
   });
 }
 
@@ -50,19 +51,19 @@ async function getOpenAIKey(supabaseAdmin: any): Promise<string | null> {
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' }, req);
 
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { prompt, size, quality, n, model } = await req.json().catch(() => ({}));
 
     const p = String(prompt ?? '').trim();
-    if (!p) return json(400, { success: false, error: 'Missing prompt' });
+    if (!p) return json(400, { success: false, error: 'Missing prompt' }, req);
 
     const openaiKey = await getOpenAIKey(supabaseAdmin);
     if (!openaiKey) {
-      return json(400, { success: false, error: 'OpenAI key not configured. Set it in Admin Settings.' });
+      return json(400, { success: false, error: 'OpenAI key not configured. Set it in Admin Settings.' }, req);
     }
 
     const resp = await fetch('https://api.openai.com/v1/images/generations', {
@@ -82,16 +83,16 @@ serve(async (req: Request) => {
 
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      return json(502, { success: false, error: data?.error?.message || `OpenAI error: ${resp.status}`, details: data });
+      return json(502, { success: false, error: data?.error?.message || `OpenAI error: ${resp.status}`, details: data }, req);
     }
 
     const imageUrl = data?.data?.[0]?.url;
-    if (!imageUrl) return json(502, { success: false, error: 'No image URL returned from OpenAI', details: data });
+    if (!imageUrl) return json(502, { success: false, error: 'No image URL returned from OpenAI', details: data }, req);
 
-    return json(200, { success: true, imageUrl });
+    return json(200, { success: true, imageUrl }, req);
   } catch (e: any) {
     console.error('openai-image fatal:', e);
-    return json(500, { success: false, error: e?.message ?? 'Internal server error' });
+    return json(500, { success: false, error: e?.message ?? 'Internal server error' }, req);
   }
 });
 

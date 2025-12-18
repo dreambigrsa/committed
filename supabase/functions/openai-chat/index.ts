@@ -22,18 +22,19 @@ const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
 
 const OPENAI_SETTINGS_KEY = 'openai_api_key';
 
-function corsHeaders() {
+function corsHeaders(req?: Request) {
+  const requested = req?.headers?.get('Access-Control-Request-Headers');
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
   };
 }
 
-function json(status: number, payload: unknown) {
+function json(status: number, payload: unknown, req?: Request) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(req) },
   });
 }
 
@@ -50,20 +51,20 @@ async function getOpenAIKey(supabaseAdmin: any): Promise<string | null> {
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' }, req);
 
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { messages, temperature, max_tokens } = await req.json().catch(() => ({}));
     if (!Array.isArray(messages) || messages.length === 0) {
-      return json(400, { success: false, error: 'Missing messages[]' });
+      return json(400, { success: false, error: 'Missing messages[]' }, req);
     }
 
     const openaiKey = await getOpenAIKey(supabaseAdmin);
     if (!openaiKey) {
-      return json(400, { success: false, error: 'OpenAI key not configured. Set it in Admin Settings.' });
+      return json(400, { success: false, error: 'OpenAI key not configured. Set it in Admin Settings.' }, req);
     }
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -82,16 +83,16 @@ serve(async (req: Request) => {
 
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      return json(502, { success: false, error: data?.error?.message || `OpenAI error: ${resp.status}`, details: data });
+      return json(502, { success: false, error: data?.error?.message || `OpenAI error: ${resp.status}`, details: data }, req);
     }
 
     const content = data?.choices?.[0]?.message?.content;
-    if (!content) return json(502, { success: false, error: 'No message content returned from OpenAI', details: data });
+    if (!content) return json(502, { success: false, error: 'No message content returned from OpenAI', details: data }, req);
 
-    return json(200, { success: true, message: content });
+    return json(200, { success: true, message: content }, req);
   } catch (e: any) {
     console.error('openai-chat fatal:', e);
-    return json(500, { success: false, error: e?.message ?? 'Internal server error' });
+    return json(500, { success: false, error: e?.message ?? 'Internal server error' }, req);
   }
 });
 
