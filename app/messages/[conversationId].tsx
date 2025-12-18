@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
   Modal,
   ScrollView,
   Image as RNImage,
