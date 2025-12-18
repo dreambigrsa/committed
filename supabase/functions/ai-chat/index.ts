@@ -89,9 +89,10 @@ serve(async (req: Request) => {
     const apiKey = keyRow?.value ? String(keyRow.value).trim() : '';
     if (!apiKey) return json(400, { success: false, error: 'OpenAI API key not configured' });
 
+    // Keep history shorter for latency/cost. The system prompt already carries global context.
     const messages = [
       ...((selectedPrompt || fallbackSystemPrompt) ? [{ role: 'system', content: selectedPrompt || fallbackSystemPrompt }] : []),
-      ...conversationHistory.slice(-20),
+      ...conversationHistory.slice(-10),
       { role: 'user', content: userMessage },
     ];
 
@@ -105,8 +106,8 @@ serve(async (req: Request) => {
       body: JSON.stringify({
         model: selectedModel || 'gpt-4o-mini',
         messages,
-        temperature: Number.isFinite(selectedTemperature) ? selectedTemperature : 0.8,
-        max_tokens: Number.isFinite(selectedMaxTokens) ? selectedMaxTokens : 600,
+        temperature: Number.isFinite(selectedTemperature) ? selectedTemperature : 0.7,
+        max_tokens: Number.isFinite(selectedMaxTokens) ? selectedMaxTokens : 350,
       }),
     });
 

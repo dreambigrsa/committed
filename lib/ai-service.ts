@@ -20,6 +20,7 @@ const OPENAI_SETTINGS_KEY = 'openai_api_key';
 
 // High-signal product knowledge injected into the AI system prompt so the assistant
 // can help users with app-specific questions and troubleshooting.
+// Keep this compact; it runs on every AI turn and affects latency/cost.
 const COMMITTED_APP_KNOWLEDGE = `
 ABOUT THE APP (COMMITTED)
 - Committed is a relationship-focused social app: profiles, relationship registration, verification, posts, reels, messages, notifications, and admin tools.
@@ -33,13 +34,11 @@ MAIN NAVIGATION (TABS)
 - Notifications: alerts, requests, system notices.
 - Profile/Settings: your profile and account settings.
 
-KEY FLOWS
-- Create account / sign in: from the Auth screens.
-- Register a relationship: Relationship → Register; invite/confirm with your partner.
-- Verification: Settings/Verification screens support email/phone/ID verification.
-- Create a post: Post → Create; attach media (photos/videos).
-- Create a reel: Reel → Create; record or pick a video.
-- Status/stories: create/view statuses; pick from gallery or camera depending on the screen.
+KEY FLOWS (SHORT)
+- Relationship: Relationship → Register.
+- Verification: Settings → Verification.
+- Post/Reel: Post → Create, Reel → Create.
+- Status: Status → Create (photo/video/text).
 
 COMMON TROUBLESHOOTING
 - Photos/Gallery not working: grant photo/media permissions in phone settings; on Android 13+ allow Photos and Videos permissions. After changing plugins/permissions, rebuild/reinstall the app.
@@ -951,7 +950,7 @@ async function getOpenAIResponseViaSupabaseFunction(params: {
     const { data, error } = await supabase.functions.invoke('ai-chat', {
       body: {
         userMessage: params.userMessage,
-        conversationHistory: params.conversationHistory,
+        conversationHistory: params.conversationHistory.slice(-10),
         systemPrompt: params.systemPrompt,
       },
     });
