@@ -50,6 +50,8 @@ export default function AdminSettingsScreen() {
   const [savingProviders, setSavingProviders] = useState(false);
   const [testingSms, setTestingSms] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
+  const [testSmsTo, setTestSmsTo] = useState('');
+  const [testEmailTo, setTestEmailTo] = useState('');
 
   // AI prompt management
   const [aiPrompt, setAiPrompt] = useState('');
@@ -106,10 +108,16 @@ export default function AdminSettingsScreen() {
       } catch {
         // ignore
       } finally {
+        // Pre-fill test recipients if available on the current user object
+        const u: any = currentUser as any;
+        const phone = u?.phone_number || u?.phoneNumber || '';
+        const email = u?.email || '';
+        if (phone && !testSmsTo) setTestSmsTo(String(phone));
+        if (email && !testEmailTo) setTestEmailTo(String(email));
         setProvidersLoaded(true);
       }
     })();
-  }, [isSuperAdmin, providersLoaded]);
+  }, [isSuperAdmin, providersLoaded, currentUser, testSmsTo, testEmailTo]);
 
   const upsertSetting = async (key: string, value: string) => {
     return await supabase.from('app_settings').upsert({
@@ -227,9 +235,9 @@ export default function AdminSettingsScreen() {
 
   const handleTestSms = async () => {
     if (!isSuperAdmin) return;
-    const to = (currentUser as any)?.phone_number || (currentUser as any)?.phoneNumber || '';
+    const to = String(testSmsTo || '').trim();
     if (!to) {
-      Alert.alert('Missing Phone', 'Your admin account has no phone number. Add one to your profile first.');
+      Alert.alert('Missing Phone', 'Enter a phone number to send the test SMS to.');
       return;
     }
     setTestingSms(true);
@@ -250,9 +258,9 @@ export default function AdminSettingsScreen() {
 
   const handleTestEmail = async () => {
     if (!isSuperAdmin) return;
-    const to = (currentUser as any)?.email || '';
+    const to = String(testEmailTo || '').trim();
     if (!to) {
-      Alert.alert('Missing Email', 'Your admin account has no email.');
+      Alert.alert('Missing Email', 'Enter an email address to send the test email to.');
       return;
     }
     setTestingEmail(true);
@@ -497,6 +505,34 @@ export default function AdminSettingsScreen() {
               onChangeText={setResendFromName}
               placeholder="From name (e.g. Committed)"
               placeholderTextColor={colors.text.tertiary}
+            />
+          </View>
+
+          <View style={[styles.settingItemColumn, { marginTop: 14 }]}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Test Recipients</Text>
+              <Text style={styles.settingDescription}>
+                These tests send a real SMS/email using your saved provider settings.
+              </Text>
+            </View>
+
+            <TextInput
+              style={styles.fullWidthInput}
+              value={testSmsTo}
+              onChangeText={setTestSmsTo}
+              placeholder="Test SMS to (e.g. +1234567890)"
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.fullWidthInput}
+              value={testEmailTo}
+              onChangeText={setTestEmailTo}
+              placeholder="Test Email to (e.g. you@domain.com)"
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
