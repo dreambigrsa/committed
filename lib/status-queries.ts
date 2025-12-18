@@ -1137,21 +1137,56 @@ export async function getSignedUrlForMedia(mediaPath: string): Promise<string | 
     return mediaPath;
   }
 
-  // Support both "{bucket}/{path}" and legacy "status-media/{path}" formats.
+  // Support multiple stored formats:
+  // - "status-media/<path>"
+  // - "media/<path>"
+  // - "<bucket>/<path>"
+  // - Legacy: sometimes a file was uploaded to bucket "media" but the DB stored "status-media/<path>"
+  //
+  // We generate a set of (bucket, path) attempts and try them in order.
+  const attempts: Array<{ bucket: string; path: string }> = [];
+
+  const addAttempt = (bucket: string, path: string) => {
+    const cleanPath = path.replace(/^\/+/, '');
+    if (!cleanPath) return;
+    // de-dupe
+    if (attempts.some((a) => a.bucket === bucket && a.path === cleanPath)) return;
+    attempts.push({ bucket, path: cleanPath });
+  };
+
   const parts = mediaPath.split('/');
-  const bucketCandidate = parts.length > 1 ? parts[0] : null;
-  const possibleBuckets = bucketCandidate
-    ? Array.from(new Set([bucketCandidate, 'status-media', 'media']))
-    : ['status-media', 'media'];
+  const first = parts[0];
 
-  const stripBucket = (bucket: string) =>
-    mediaPath.startsWith(`${bucket}/`) ? mediaPath.substring(bucket.length + 1) : mediaPath;
+  if (mediaPath.startsWith('status-media/')) {
+    const p = mediaPath.substring('status-media/'.length);
+    // normal
+    addAttempt('status-media', p);
+    // legacy fallback: stored with status-media prefix but actually uploaded into media bucket
+    addAttempt('media', p);
+    // extra legacy fallback: uploaded into media bucket without the status-media prefix
+    addAttempt('media', mediaPath.substring('status-media/'.length));
+  } else if (mediaPath.startsWith('media/')) {
+    const p = mediaPath.substring('media/'.length);
+    addAttempt('media', p);
+    // legacy fallback: sometimes stored as media/<path> but uploaded into status-media bucket
+    addAttempt('status-media', p);
+  } else if (parts.length > 1) {
+    // Treat first segment as bucket candidate (e.g., "<bucket>/<path>")
+    addAttempt(first, parts.slice(1).join('/'));
+    // Also try common buckets with full path and with first-segment stripped
+    addAttempt('status-media', mediaPath);
+    addAttempt('media', mediaPath);
+    addAttempt('status-media', parts.slice(1).join('/'));
+    addAttempt('media', parts.slice(1).join('/'));
+  } else {
+    // Just a raw path
+    addAttempt('status-media', mediaPath);
+    addAttempt('media', mediaPath);
+  }
 
-  for (const bucket of possibleBuckets) {
-    const path = stripBucket(bucket);
+  for (const { bucket, path } of attempts) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600); // 1 hour expiry
     if (!error && data?.signedUrl) return data.signedUrl;
-    // If it's not found, try next bucket; otherwise log and continue.
     if (error && !String((error as any).message || '').toLowerCase().includes('not found')) {
       console.warn('Error creating signed URL (will retry other buckets):', { bucket, path, error });
     }
