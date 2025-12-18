@@ -305,6 +305,57 @@ export default function AdminSettingsScreen() {
     }
   };
 
+  const getEdgeFunctionErrorMessage = async (e: any): Promise<string> => {
+    // Supabase Functions errors often include a generic message ("Edge Function returned a non-2xx status code")
+    // with useful details in `context` (Response / { status, body } / etc).
+    const fallback = e?.message || 'Edge Function failed';
+
+    try {
+      const ctx = e?.context;
+      if (!ctx) return fallback;
+
+      // Case 1: context is a fetch Response
+      if (typeof ctx?.json === 'function') {
+        const payload = await ctx.json().catch(() => null);
+        const msg = payload?.error || payload?.message;
+        return (msg && String(msg)) || fallback;
+      }
+      if (typeof ctx?.text === 'function') {
+        const t = await ctx.text().catch(() => '');
+        if (!t) return fallback;
+        try {
+          const payload = JSON.parse(t);
+          const msg = payload?.error || payload?.message;
+          return (msg && String(msg)) || t;
+        } catch {
+          return t;
+        }
+      }
+
+      // Case 2: context is a plain object with body
+      if (typeof ctx === 'object' && ctx?.body) {
+        const body = ctx.body;
+        if (typeof body === 'string') {
+          try {
+            const payload = JSON.parse(body);
+            const msg = payload?.error || payload?.message;
+            return (msg && String(msg)) || fallback;
+          } catch {
+            return body || fallback;
+          }
+        }
+        if (typeof body === 'object') {
+          const msg = body?.error || body?.message;
+          return (msg && String(msg)) || fallback;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return fallback;
+  };
+
   const handleGeneratePromptSuggestion = async () => {
     if (!isSuperAdmin) return;
     setGeneratingSuggestion(true);
@@ -314,7 +365,8 @@ export default function AdminSettingsScreen() {
       if (!data?.success) throw new Error(data?.error || 'Suggestion failed');
       Alert.alert('Suggestion created', 'A new prompt suggestion is saved for review in the database.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to generate suggestion.');
+      const msg = await getEdgeFunctionErrorMessage(e);
+      Alert.alert('Error', msg || 'Failed to generate suggestion.');
     } finally {
       setGeneratingSuggestion(false);
     }
