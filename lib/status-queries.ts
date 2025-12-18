@@ -718,14 +718,15 @@ export async function createStatus(
 
       if (!uploadedBucket) {
         console.error('Error uploading status media:', lastUploadError);
-        return null;
+        const msg = String((lastUploadError as any)?.message || (lastUploadError as any)?.error_description || '');
+        throw new Error(msg || 'Failed to upload status media (bucket/policy misconfiguration)');
       }
 
       // Store "{bucket}/{path}" so signed-url logic can resolve it.
       mediaPath = `${uploadedBucket}/${filePath}`;
     } catch (error) {
       console.error('Error processing media:', error);
-      return null;
+      throw error;
     }
   }
 

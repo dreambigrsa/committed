@@ -253,7 +253,7 @@ export default function CreateStatusScreen() {
       }
     } catch (error) {
       console.error('Error creating status:', error);
-      Alert.alert('Error', 'Failed to post status. Please try again.');
+      Alert.alert('Error', (error as any)?.message || 'Failed to post status. Please try again.');
     } finally {
       setIsPosting(false);
     }
