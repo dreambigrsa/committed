@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Supabase Edge Function for sending SMS via Twilio
 // Deploy this function to Supabase: supabase functions deploy send-sms
 
@@ -11,11 +12,14 @@ const TWILIO_API_URL = 'https://api.twilio.com/2010-04-01';
 interface RequestBody {
   phoneNumber: string;
   code: string;
-  config: {
-    accountSid: string;
-    authToken: string;
-    phoneNumber: string;
-  };
+}
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+async function getAppSetting(supabaseAdmin: any, key: string): Promise<string> {
+  const { data } = await supabaseAdmin.from('app_settings').select('value').eq('key', key).maybeSingle();
+  return data?.value ? String(data.value).trim() : '';
 }
 
 serve(async (req: Request) => {
@@ -31,11 +35,31 @@ serve(async (req: Request) => {
       });
     }
 
-    const { phoneNumber, code, config }: RequestBody = await req.json();
+    const { phoneNumber, code }: RequestBody = await req.json();
 
-    if (!phoneNumber || !code || !config.accountSid || !config.authToken) {
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Prefer values stored in app_settings (editable by Super Admin). Fallback to Edge Function secrets.
+    const accountSid =
+      (await getAppSetting(supabaseAdmin, 'twilio_account_sid')) ||
+      Deno.env.get('TWILIO_ACCOUNT_SID') ||
+      '';
+    const authToken =
+      (await getAppSetting(supabaseAdmin, 'twilio_auth_token')) ||
+      Deno.env.get('TWILIO_AUTH_TOKEN') ||
+      '';
+    const fromNumber =
+      (await getAppSetting(supabaseAdmin, 'twilio_from_number')) ||
+      Deno.env.get('TWILIO_FROM_NUMBER') ||
+      '';
+
+    if (!phoneNumber || !code || !accountSid || !authToken || !fromNumber) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing required parameters' }),
+        JSON.stringify({
+          success: false,
+          error:
+            'Missing required parameters. Provide phoneNumber + code, and configure Twilio in Admin Settings (or set TWILIO_* as Edge Function secrets).',
+        }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -45,17 +69,17 @@ serve(async (req: Request) => {
 
     // Send SMS via Twilio
     const message = `Your Committed verification code is: ${code}. This code will expire in 10 minutes.`;
-    const url = `${TWILIO_API_URL}/Accounts/${config.accountSid}/Messages.json`;
+    const url = `${TWILIO_API_URL}/Accounts/${accountSid}/Messages.json`;
 
     const formData = new URLSearchParams();
-    formData.append('From', config.phoneNumber);
+    formData.append('From', fromNumber);
     formData.append('To', phoneNumber);
     formData.append('Body', message);
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${btoa(`${config.accountSid}:${config.authToken}`)}`,
+        'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formData.toString(),

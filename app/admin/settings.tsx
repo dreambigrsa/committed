@@ -39,6 +39,16 @@ export default function AdminSettingsScreen() {
   const [savingOpenaiKey, setSavingOpenaiKey] = useState(false);
   const [testingOpenaiKey, setTestingOpenaiKey] = useState(false);
 
+  // Messaging provider settings (stored server-side in app_settings; used by Edge Functions)
+  const [twilioAccountSid, setTwilioAccountSid] = useState('');
+  const [twilioAuthToken, setTwilioAuthToken] = useState('');
+  const [twilioFromNumber, setTwilioFromNumber] = useState('');
+  const [resendApiKey, setResendApiKey] = useState('');
+  const [resendFromEmail, setResendFromEmail] = useState('');
+  const [resendFromName, setResendFromName] = useState('Committed');
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [savingProviders, setSavingProviders] = useState(false);
+
   // AI prompt management
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiPromptLoaded, setAiPromptLoaded] = useState(false);
@@ -67,6 +77,69 @@ export default function AdminSettingsScreen() {
       }
     })();
   }, [isSuperAdmin, openaiKeyLoaded]);
+
+  useEffect(() => {
+    if (!isSuperAdmin || providersLoaded) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('key,value')
+          .in('key', [
+            'twilio_account_sid',
+            'twilio_auth_token',
+            'twilio_from_number',
+            'resend_api_key',
+            'resend_from_email',
+            'resend_from_name',
+          ]);
+        const map = new Map<string, string>();
+        (data || []).forEach((r: any) => map.set(String(r.key), r.value ? String(r.value) : ''));
+        setTwilioAccountSid(map.get('twilio_account_sid') || '');
+        setTwilioAuthToken(map.get('twilio_auth_token') || '');
+        setTwilioFromNumber(map.get('twilio_from_number') || '');
+        setResendApiKey(map.get('resend_api_key') || '');
+        setResendFromEmail(map.get('resend_from_email') || '');
+        setResendFromName(map.get('resend_from_name') || 'Committed');
+      } catch {
+        // ignore
+      } finally {
+        setProvidersLoaded(true);
+      }
+    })();
+  }, [isSuperAdmin, providersLoaded]);
+
+  const upsertSetting = async (key: string, value: string) => {
+    return await supabase.from('app_settings').upsert({
+      key,
+      value,
+      updated_by: currentUser?.id ?? null,
+      updated_at: new Date().toISOString(),
+    } as any);
+  };
+
+  const handleSaveMessagingProviders = async () => {
+    if (!isSuperAdmin) return;
+    setSavingProviders(true);
+    try {
+      // Save non-empty fields; allow clearing by saving empty string.
+      const ops = await Promise.all([
+        upsertSetting('twilio_account_sid', twilioAccountSid.trim()),
+        upsertSetting('twilio_auth_token', twilioAuthToken.trim()),
+        upsertSetting('twilio_from_number', twilioFromNumber.trim()),
+        upsertSetting('resend_api_key', resendApiKey.trim()),
+        upsertSetting('resend_from_email', resendFromEmail.trim()),
+        upsertSetting('resend_from_name', resendFromName.trim() || 'Committed'),
+      ]);
+      const firstErr = ops.find((r: any) => r?.error)?.error;
+      if (firstErr) throw firstErr;
+      Alert.alert('Saved', 'Messaging provider settings saved.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save messaging provider settings.');
+    } finally {
+      setSavingProviders(false);
+    }
+  };
 
   useEffect(() => {
     if (!isSuperAdmin || aiPromptLoaded) return;
@@ -290,6 +363,95 @@ export default function AdminSettingsScreen() {
                 <Text style={styles.secondaryButtonText}>{savingOpenaiKey ? 'Saving…' : 'Save Key'}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Messaging Providers</Text>
+
+          <View style={styles.settingItemColumn}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Twilio (SMS)</Text>
+              <Text style={styles.settingDescription}>
+                Stored in Supabase app settings and used server-side by the send-sms Edge Function. Never shipped in the app build.
+              </Text>
+            </View>
+
+            <TextInput
+              style={styles.textInput}
+              value={twilioAccountSid}
+              onChangeText={setTwilioAccountSid}
+              placeholder="TWILIO_ACCOUNT_SID"
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.textInput}
+              value={twilioAuthToken}
+              onChangeText={setTwilioAuthToken}
+              placeholder="TWILIO_AUTH_TOKEN"
+              placeholderTextColor={colors.text.tertiary}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.textInput}
+              value={twilioFromNumber}
+              onChangeText={setTwilioFromNumber}
+              placeholder="TWILIO_FROM_NUMBER (e.g. +1234567890)"
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={[styles.settingItemColumn, { marginTop: 14 }]}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Resend (Email)</Text>
+              <Text style={styles.settingDescription}>
+                Stored in Supabase app settings and used server-side by the send-email Edge Function.
+              </Text>
+            </View>
+
+            <TextInput
+              style={styles.textInput}
+              value={resendApiKey}
+              onChangeText={setResendApiKey}
+              placeholder="RESEND_API_KEY"
+              placeholderTextColor={colors.text.tertiary}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.textInput}
+              value={resendFromEmail}
+              onChangeText={setResendFromEmail}
+              placeholder="From email (e.g. no-reply@yourdomain.com)"
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.textInput}
+              value={resendFromName}
+              onChangeText={setResendFromName}
+              placeholder="From name (e.g. Committed)"
+              placeholderTextColor={colors.text.tertiary}
+            />
+          </View>
+
+          <View style={styles.openaiActions}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, savingProviders && styles.buttonDisabled]}
+              onPress={handleSaveMessagingProviders}
+              disabled={savingProviders}
+            >
+              <Save size={18} color={colors.text.primary} />
+              <Text style={styles.secondaryButtonText}>{savingProviders ? 'Saving…' : 'Save Providers'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

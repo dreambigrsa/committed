@@ -1,19 +1,25 @@
+// @ts-nocheck
 // Supabase Edge Function for sending Email via Resend
 // Deploy this function to Supabase: supabase functions deploy send-email
 
 // @ts-ignore - Deno runtime import
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// @ts-ignore - Deno runtime import
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
 interface RequestBody {
   email: string;
   code: string;
-  config: {
-    apiKey: string;
-    fromEmail: string;
-    fromName: string;
-  };
+}
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+async function getAppSetting(supabaseAdmin: any, key: string): Promise<string> {
+  const { data } = await supabaseAdmin.from('app_settings').select('value').eq('key', key).maybeSingle();
+  return data?.value ? String(data.value).trim() : '';
 }
 
 serve(async (req: Request) => {
@@ -29,11 +35,30 @@ serve(async (req: Request) => {
       });
     }
 
-    const { email, code, config }: RequestBody = await req.json();
+    const { email, code }: RequestBody = await req.json();
 
-    if (!email || !code || !config.apiKey || !config.fromEmail) {
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Prefer values stored in app_settings (editable by Super Admin). Fallback to Edge Function secrets.
+    const apiKey =
+      (await getAppSetting(supabaseAdmin, 'resend_api_key')) ||
+      Deno.env.get('RESEND_API_KEY') ||
+      '';
+    const fromEmail =
+      (await getAppSetting(supabaseAdmin, 'resend_from_email')) ||
+      Deno.env.get('RESEND_FROM_EMAIL') ||
+      '';
+    const fromName =
+      (await getAppSetting(supabaseAdmin, 'resend_from_name')) ||
+      Deno.env.get('RESEND_FROM_NAME') ||
+      'Committed';
+
+    if (!email || !code || !apiKey || !fromEmail) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing required parameters' }),
+        JSON.stringify({
+          success: false,
+          error: 'Missing required parameters. Provide email + code, and configure Resend in Admin Settings (or set RESEND_* as Edge Function secrets).',
+        }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -43,7 +68,7 @@ serve(async (req: Request) => {
 
     // Send Email via Resend
     const emailBody = {
-      from: `${config.fromName} <${config.fromEmail}>`,
+      from: `${fromName} <${fromEmail}>`,
       to: [email],
       subject: 'Your Committed Verification Code',
       html: `
@@ -78,7 +103,7 @@ serve(async (req: Request) => {
     const response = await fetch(RESEND_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(emailBody),

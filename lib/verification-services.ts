@@ -119,11 +119,6 @@ export async function sendSmsCode(phoneNumber: string, code: string): Promise<{ 
           body: {
             phoneNumber,
             code,
-            config: {
-              accountSid: config.config.account_sid,
-              authToken: config.config.auth_token,
-              phoneNumber: config.config.phone_number,
-            },
           },
         });
 
@@ -182,11 +177,6 @@ export async function sendEmailCode(email: string, code: string): Promise<{ succ
           body: {
             email,
             code,
-            config: {
-              apiKey: config.config.api_key,
-              fromEmail: config.config.from_email,
-              fromName: config.config.from_name || 'Committed',
-            },
           },
         });
 
