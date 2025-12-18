@@ -185,9 +185,13 @@ export default function CreatePostScreen() {
           >
             <View style={styles.composerHeader}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarText}>
-                  {(currentUser?.fullName || currentUser?.username || 'U').slice(0, 1).toUpperCase()}
-                </Text>
+                {currentUser?.profilePicture ? (
+                  <Image source={{ uri: currentUser.profilePicture }} style={styles.avatarImage} contentFit="cover" />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {(currentUser?.fullName || currentUser?.username || 'U').slice(0, 1).toUpperCase()}
+                  </Text>
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.composerTitle}>Share something</Text>
@@ -308,6 +312,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800' as const,
     color: colors.text.primary,
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   composerTitle: {
     fontSize: 18,
