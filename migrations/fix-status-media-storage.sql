@@ -23,9 +23,11 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Anyone can view status media'
   ) THEN
-    EXECUTE $$CREATE POLICY "Anyone can view status media"
-      ON storage.objects FOR SELECT
-      USING (bucket_id = 'status-media')$$;
+    EXECUTE format(
+      'CREATE POLICY %I ON storage.objects FOR SELECT USING (bucket_id = %L)',
+      'Anyone can view status media',
+      'status-media'
+    );
   END IF;
 
   -- INSERT: authenticated users can upload status media
@@ -35,9 +37,12 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Authenticated users can upload status media'
   ) THEN
-    EXECUTE $$CREATE POLICY "Authenticated users can upload status media"
-      ON storage.objects FOR INSERT
-      WITH CHECK (bucket_id = 'status-media' AND auth.role() = 'authenticated')$$;
+    EXECUTE format(
+      'CREATE POLICY %I ON storage.objects FOR INSERT WITH CHECK (bucket_id = %L AND auth.role() = %L)',
+      'Authenticated users can upload status media',
+      'status-media',
+      'authenticated'
+    );
   END IF;
 
   -- UPDATE: users can update own status media
@@ -47,9 +52,11 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Users can update own status media'
   ) THEN
-    EXECUTE $$CREATE POLICY "Users can update own status media"
-      ON storage.objects FOR UPDATE
-      USING (bucket_id = 'status-media' AND auth.uid()::text = owner)$$;
+    EXECUTE format(
+      'CREATE POLICY %I ON storage.objects FOR UPDATE USING (bucket_id = %L AND auth.uid()::text = owner)',
+      'Users can update own status media',
+      'status-media'
+    );
   END IF;
 
   -- DELETE: users can delete own status media
@@ -59,9 +66,11 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Users can delete own status media'
   ) THEN
-    EXECUTE $$CREATE POLICY "Users can delete own status media"
-      ON storage.objects FOR DELETE
-      USING (bucket_id = 'status-media' AND auth.uid()::text = owner)$$;
+    EXECUTE format(
+      'CREATE POLICY %I ON storage.objects FOR DELETE USING (bucket_id = %L AND auth.uid()::text = owner)',
+      'Users can delete own status media',
+      'status-media'
+    );
   END IF;
 END $$;
 
