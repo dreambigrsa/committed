@@ -67,6 +67,7 @@
           "origin": "https://committed.app/"
         }
       ],
+      "expo-asset",
       "expo-font",
       "expo-web-browser",
       [

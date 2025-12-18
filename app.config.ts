@@ -10,8 +10,17 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 import appJson from './app.json';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  // Prefer config from app.json, but allow Expo to pass an existing config too.
-  const base = (appJson as any).expo ?? config;
+  // Merge config sources so Expo Doctor can see that app.json values are being used.
+  // `config` is the base Expo config passed by the CLI, `app.json` is the static config in repo.
+  const appJsonExpo = (appJson as any).expo ?? {};
+  const base = {
+    ...config,
+    ...appJsonExpo,
+    extra: {
+      ...(config.extra ?? {}),
+      ...(appJsonExpo.extra ?? {}),
+    },
+  } as ExpoConfig;
 
   return {
     ...base,
