@@ -203,14 +203,7 @@ export async function refreshOpenAIKeyCache(): Promise<string | null> {
 
 async function generateImage(prompt: string): Promise<AIResponse> {
   try {
-    const openaiApiKey = await getOpenAIApiKeyAsync();
-
-    if (!openaiApiKey) {
-      return {
-        success: false,
-        error: 'Image generation requires OpenAI API key. Please configure EXPO_PUBLIC_OPENAI_API_KEY.',
-      };
-    }
+    const shouldUseDirectOpenAI = __DEV__ && !!(await getOpenAIApiKeyAsync());
 
     // Clean up the prompt - remove common request phrases
     let cleanPrompt = prompt
@@ -225,29 +218,50 @@ async function generateImage(prompt: string): Promise<AIResponse> {
       cleanPrompt = prompt; // Fallback to original if cleaning removed everything
     }
 
-    // Call DALL-E API
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: cleanPrompt,
-        n: 1,
-        size: '1024x1024',
-        quality: 'standard',
-      }),
-    });
+    let imageUrl: string | null = null;
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `DALL-E API error: ${response.status}`);
+    if (shouldUseDirectOpenAI) {
+      const openaiApiKey = await getOpenAIApiKeyAsync();
+      if (!openaiApiKey) throw new Error('OpenAI API key missing');
+
+      // Dev-only: call OpenAI directly
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: cleanPrompt,
+          n: 1,
+          size: '1024x1024',
+          quality: 'standard',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `OpenAI image error: ${response.status}`);
+      }
+
+      const data = await response.json().catch(() => ({}));
+      imageUrl = data?.data?.[0]?.url ?? null;
+    } else {
+      // Production: call Supabase Edge Function so the key stays server-side
+      const { data, error } = await supabase.functions.invoke('openai-image', {
+        body: {
+          prompt: cleanPrompt,
+          model: 'dall-e-3',
+          n: 1,
+          size: '1024x1024',
+          quality: 'standard',
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'openai-image failed');
+      imageUrl = typeof data?.imageUrl === 'string' ? data.imageUrl : null;
     }
-
-    const data = await response.json();
-    const imageUrl = data.data[0]?.url;
 
     if (!imageUrl) {
       throw new Error('No image URL returned from DALL-E');
@@ -322,14 +336,7 @@ async function generateDocument(
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<AIResponse> {
   try {
-    const openaiApiKey = await getOpenAIApiKeyAsync();
-
-    if (!openaiApiKey) {
-      return {
-        success: false,
-        error: 'Document generation requires OpenAI API key. Please configure EXPO_PUBLIC_OPENAI_API_KEY.',
-      };
-    }
+    const shouldUseDirectOpenAI = __DEV__ && !!(await getOpenAIApiKeyAsync());
 
     // Determine document type and content
     const systemPrompt = `You are a professional document writer. Based on the user's request, generate a well-structured document. The document should be professional, clear, and comprehensive. Format it as plain text that can be converted to PDF. Include appropriate sections, headings, and content based on the document type requested.`;
@@ -340,27 +347,45 @@ async function generateDocument(
       { role: 'user', content: `Please generate a document based on this request: ${userRequest}` },
     ];
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let documentContent = '';
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+    if (shouldUseDirectOpenAI) {
+      const openaiApiKey = await getOpenAIApiKeyAsync();
+      if (!openaiApiKey) throw new Error('OpenAI API key missing');
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json().catch(() => ({}));
+      documentContent = data?.choices?.[0]?.message?.content || '';
+    } else {
+      const { data, error } = await supabase.functions.invoke('openai-chat', {
+        body: {
+          messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'openai-chat failed');
+      documentContent = String(data.message ?? '');
     }
-
-    const data = await response.json();
-    const documentContent = data.choices[0]?.message?.content || '';
 
     if (!documentContent) {
       throw new Error('No document content generated');
