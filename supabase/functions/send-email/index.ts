@@ -17,18 +17,20 @@ interface RequestBody {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-function corsHeaders() {
+function corsHeaders(req?: Request) {
+  // Reflect requested headers to satisfy browser preflight (Supabase clients often send x-client-info, apikey, etc).
+  const requested = req?.headers?.get('Access-Control-Request-Headers');
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
   };
 }
 
-function json(status: number, payload: unknown) {
+function json(status: number, payload: unknown, req?: Request) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(req) },
   });
 }
 
@@ -41,7 +43,7 @@ serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
-      return new Response('ok', { headers: corsHeaders() });
+      return new Response('ok', { headers: corsHeaders(req) });
     }
 
     const { email, code }: RequestBody = await req.json();
@@ -66,7 +68,7 @@ serve(async (req: Request) => {
       return json(400, {
         success: false,
         error: 'Missing required parameters. Provide email + code, and configure Resend in Admin Settings (or set RESEND_* as Edge Function secrets).',
-      });
+      }, req);
     }
 
     // Send Email via Resend
@@ -116,13 +118,13 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error('Resend error:', data);
-      return json(500, { success: false, error: data.message || 'Failed to send email' });
+      return json(500, { success: false, error: data.message || 'Failed to send email' }, req);
     }
 
-    return json(200, { success: true, emailId: data.id });
+    return json(200, { success: true, emailId: data.id }, req);
   } catch (error: any) {
     console.error('Error sending email:', error);
-    return json(500, { success: false, error: error.message || 'Internal server error' });
+    return json(500, { success: false, error: error.message || 'Internal server error' }, req);
   }
 });
 
