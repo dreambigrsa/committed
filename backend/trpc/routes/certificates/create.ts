@@ -51,7 +51,7 @@ export const createCertificateProcedure = protectedProcedure
       throw new Error('Not authorized');
     }
 
-    const certificateUrl = `https://rork.app/certificates/${relationshipId}`;
+    const certificateUrl = `https://committed.app/certificates/${relationshipId}`;
 
     const { data: certificate, error } = await authenticatedSupabase
       .from('couple_certificates')

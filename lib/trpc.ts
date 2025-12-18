@@ -8,15 +8,15 @@ export const trpc = createTRPCReact<AppRouter>();
 
 const getBaseUrl = () => {
   // Try to get from environment variable
-  if (process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
-    return process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  if (process.env.EXPO_PUBLIC_COMMITTED_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_COMMITTED_API_BASE_URL;
   }
 
   // Fallback to default or localhost for development
   // In production builds, this should be set via EAS environment variables
-  const defaultUrl = "https://rork.com";
+  const defaultUrl = "http://localhost:3000";
   console.warn(
-    `EXPO_PUBLIC_RORK_API_BASE_URL not set, using default: ${defaultUrl}`
+    `EXPO_PUBLIC_COMMITTED_API_BASE_URL not set, using default: ${defaultUrl}`
   );
   return defaultUrl;
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,15 @@ import {
   Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Settings as SettingsIcon, Save, Shield } from 'lucide-react-native';
+import { Settings as SettingsIcon, Save, Shield, KeyRound, TestTubeDiagonal } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
+import { refreshOpenAIKeyCache } from '@/lib/ai-service';
 
 export default function AdminSettingsScreen() {
   const { currentUser } = useApp();
+  const isSuperAdmin = useMemo(() => !!currentUser && currentUser.role === 'super_admin', [currentUser]);
   const [settings, setSettings] = useState({
     appName: 'Committed',
     maintenanceMode: false,
@@ -31,12 +34,86 @@ export default function AdminSettingsScreen() {
     enableCheatingAlerts: true,
     enableNotifications: true,
   });
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [openaiKeyLoaded, setOpenaiKeyLoaded] = useState(false);
+  const [savingOpenaiKey, setSavingOpenaiKey] = useState(false);
+  const [testingOpenaiKey, setTestingOpenaiKey] = useState(false);
 
   const handleSaveSettings = () => {
     Alert.alert('Success', 'Settings saved successfully');
   };
 
-  if (!currentUser || currentUser.role !== 'super_admin') {
+  useEffect(() => {
+    if (!isSuperAdmin || openaiKeyLoaded) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'openai_api_key')
+          .maybeSingle();
+        setOpenaiKey(data?.value ? String(data.value) : '');
+      } catch {
+        // ignore
+      } finally {
+        setOpenaiKeyLoaded(true);
+      }
+    })();
+  }, [isSuperAdmin, openaiKeyLoaded]);
+
+  const handleSaveOpenAIKey = async () => {
+    if (!isSuperAdmin) return;
+    const trimmed = openaiKey.trim();
+    if (!trimmed) {
+      Alert.alert('Missing Key', 'Please paste your OpenAI API key first.');
+      return;
+    }
+    setSavingOpenaiKey(true);
+    try {
+      const { error } = await supabase.from('app_settings').upsert({
+        key: 'openai_api_key',
+        value: trimmed,
+        updated_by: currentUser?.id ?? null,
+        updated_at: new Date().toISOString(),
+      } as any);
+      if (error) throw error;
+      await refreshOpenAIKeyCache();
+      Alert.alert('Saved', 'OpenAI API key saved successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save OpenAI key.');
+    } finally {
+      setSavingOpenaiKey(false);
+    }
+  };
+
+  const handleTestOpenAIKey = async () => {
+    if (!isSuperAdmin) return;
+    const trimmed = openaiKey.trim();
+    if (!trimmed) {
+      Alert.alert('Missing Key', 'Please paste your OpenAI API key first.');
+      return;
+    }
+    setTestingOpenaiKey(true);
+    try {
+      const res = await fetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${trimmed}`,
+        },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error?.message || `OpenAI error: ${res.status}`);
+      }
+      Alert.alert('Success', 'OpenAI key is valid and working.');
+    } catch (e: any) {
+      Alert.alert('Test Failed', e?.message ?? 'OpenAI key test failed.');
+    } finally {
+      setTestingOpenaiKey(false);
+    }
+  };
+
+  if (!isSuperAdmin) {
     return (
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'App Settings', headerShown: true }} />
@@ -97,6 +174,53 @@ export default function AdminSettingsScreen() {
               onValueChange={(value) => setSettings({ ...settings, allowRegistration: value })}
               trackColor={{ false: colors.text.tertiary, true: colors.primary }}
             />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>OpenAI</Text>
+
+          <View style={styles.settingItemColumn}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>OpenAI API Key</Text>
+              <Text style={styles.settingDescription}>
+                Used by Committed AI in messages (chat, image generation, documents). Stored in Supabase and only visible to Super Admins.
+              </Text>
+            </View>
+
+            <View style={styles.openaiRow}>
+              <KeyRound size={18} color={colors.text.secondary} />
+              <TextInput
+                style={styles.openaiInput}
+                value={openaiKey}
+                onChangeText={setOpenaiKey}
+                placeholder="sk-..."
+                placeholderTextColor={colors.text.tertiary}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.openaiActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, (savingOpenaiKey || testingOpenaiKey) && styles.buttonDisabled]}
+                onPress={handleTestOpenAIKey}
+                disabled={savingOpenaiKey || testingOpenaiKey}
+              >
+                <TestTubeDiagonal size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>{testingOpenaiKey ? 'Testing…' : 'Test Key'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, (savingOpenaiKey || testingOpenaiKey) && styles.buttonDisabled]}
+                onPress={handleSaveOpenAIKey}
+                disabled={savingOpenaiKey || testingOpenaiKey}
+              >
+                <Save size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>{savingOpenaiKey ? 'Saving…' : 'Save Key'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -299,6 +423,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
+  settingItemColumn: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
   settingInfo: {
     flex: 1,
     paddingRight: 16,
@@ -336,6 +465,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.light,
     textAlign: 'center',
+  },
+  openaiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    backgroundColor: colors.background.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  openaiInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text.primary,
+  },
+  openaiActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: colors.background.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    flex: 1,
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   saveButton: {
     flexDirection: 'row',

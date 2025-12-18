@@ -137,6 +137,26 @@ Want to add more? Here are optional integrations:
 - The notification system is ready
 - Just add push token registration
 
+#### Supabase + Expo Push (recommended)
+This repo includes client-side token registration (stores tokens in `push_notification_tokens`) and a Supabase Edge Function to send pushes.
+
+- Deploy the Edge Function:
+  - `supabase functions deploy send-push`
+- Set the Edge Function secret (Supabase Dashboard → Edge Functions → `send-push` → Secrets):
+  - `SEND_PUSH_SECRET = <a strong secret>`
+- Send a push to a user (example payload):
+  - Function name: `send-push`
+  - Body: `{ "userId": "<uuid>", "title": "Title", "body": "Message", "data": { "type": "notification" } }`
+
+#### Auto-push on every new notification row (no manual sending)
+If you want every `INSERT` into `public.notifications` to automatically send a push:
+
+- Deploy `send-push` (above)
+- Run the SQL migration `migrations/enable-auto-push-notifications.sql`
+- In Supabase SQL Editor, set the Vault secret (do **not** commit your secret):
+  - `select extensions.vault.create_secret('send_push_secret', '<PUT_YOUR_SEND_PUSH_SECRET_HERE>');`
+
+
 ## 💡 Tips
 
 1. **Test the cheating detection**: Create two relationships with the same user to see alerts

@@ -3,9 +3,9 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p hi4f53jxgrzqp7jty6rd1 --tunnel",
-    "start-web": "bunx rork start -p hi4f53jxgrzqp7jty6rd1 --web --tunnel",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p hi4f53jxgrzqp7jty6rd1 --web --tunnel",
+    "start": "bunx expo start --tunnel",
+    "start-web": "bunx expo start --web --tunnel",
+    "start-web-dev": "DEBUG=expo* bunx expo start --web --tunnel",
     "lint": "expo lint"
   },
   "dependencies": {
@@ -14,7 +14,6 @@
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
-    "@rork-ai/toolkit-sdk": "*",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@supabase/supabase-js": "^2.87.0",
     "@tanstack/react-query": "^5.83.0",
@@ -26,6 +25,7 @@
     "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.11",
+    "expo-device": "^8.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.20",
     "expo-font": "~14.0.10",
@@ -36,6 +36,7 @@
     "expo-linking": "~8.0.10",
     "expo-location": "~19.0.8",
     "expo-media-library": "~17.0.3",
+    "expo-notifications": "^0.32.15",
     "expo-router": "~6.0.17",
     "expo-splash-screen": "~31.0.12",
     "expo-status-bar": "~3.0.9",

@@ -16,6 +16,10 @@ try {
 
 const COMMITTED_AI_EMAIL = 'ai@committed.app';
 const COMMITTED_AI_NAME = 'Committed AI';
+const OPENAI_SETTINGS_KEY = 'openai_api_key';
+
+let cachedOpenAIKey: string | null | undefined = undefined; // undefined = not loaded
+let openAIKeyLoadPromise: Promise<string | null> | null = null;
 
 export interface AIResponse {
   success: boolean;
@@ -92,59 +96,70 @@ export async function getOrCreateAIUser(): Promise<{ id: string } | null> {
   }
 }
 
+async function loadOpenAIKeyFromSupabase(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', OPENAI_SETTINGS_KEY)
+      .maybeSingle();
+
+    if (error) return null;
+    const key = data?.value ? String(data.value) : null;
+    return key && key.trim().length > 0 ? key.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Get OpenAI API key from environment variables
- * Tries multiple methods to retrieve the API key for maximum compatibility
+ * Get OpenAI API key:
+ * - First: Expo build-time config/env
+ * - Then: Supabase `app_settings` (super_admin-managed)
  */
-function getOpenAIApiKey(): string | null {
-  // Try multiple methods to get the API key
-  // Method 1: Expo Constants (recommended for Expo)
+async function getOpenAIApiKeyAsync(): Promise<string | null> {
+  // 1) Expo Constants (recommended for Expo)
   try {
     if (Constants && Constants.expoConfig) {
       const expoConfig = Constants.expoConfig;
       if (expoConfig?.extra?.openaiApiKey) {
-        return String(expoConfig.extra.openaiApiKey);
+        const v = String(expoConfig.extra.openaiApiKey).trim();
+        if (v) return v;
       }
     }
-  } catch (e) {
-    // Constants might not be available in all contexts
+  } catch {
+    // ignore
   }
-  
-  // Method 2: Process env (works at build time in Expo)
+
+  // 2) Process env (works at build time in Expo)
   try {
     // @ts-ignore - process.env is available in Expo at build time
     const processEnv: any = typeof process !== 'undefined' && process.env ? process.env : {};
-    if (processEnv.EXPO_PUBLIC_OPENAI_API_KEY) {
-      return String(processEnv.EXPO_PUBLIC_OPENAI_API_KEY);
-    }
-    if (processEnv.OPENAI_API_KEY) {
-      return String(processEnv.OPENAI_API_KEY);
-    }
-  } catch (e) {
-    // Process might not be available
+    if (processEnv.EXPO_PUBLIC_OPENAI_API_KEY) return String(processEnv.EXPO_PUBLIC_OPENAI_API_KEY).trim();
+    if (processEnv.OPENAI_API_KEY) return String(processEnv.OPENAI_API_KEY).trim();
+  } catch {
+    // ignore
   }
-  
-  // Method 3: Global process (fallback)
-  try {
-    // @ts-ignore
-    const globalProcess: any = (global as any)?.process?.env;
-    if (globalProcess?.EXPO_PUBLIC_OPENAI_API_KEY) {
-      return String(globalProcess.EXPO_PUBLIC_OPENAI_API_KEY);
-    }
-    if (globalProcess?.OPENAI_API_KEY) {
-      return String(globalProcess.OPENAI_API_KEY);
-    }
-  } catch (e) {
-    // Global process might not be available
+
+  // 3) Cached DB value (load once)
+  if (cachedOpenAIKey !== undefined) return cachedOpenAIKey;
+  if (!openAIKeyLoadPromise) {
+    openAIKeyLoadPromise = loadOpenAIKeyFromSupabase().finally(() => {
+      openAIKeyLoadPromise = null;
+    });
   }
-  
-  console.warn('[AI Service] OpenAI API key not found. Please set EXPO_PUBLIC_OPENAI_API_KEY environment variable.');
-  return null;
+  cachedOpenAIKey = await openAIKeyLoadPromise;
+  return cachedOpenAIKey;
+}
+
+export async function refreshOpenAIKeyCache(): Promise<string | null> {
+  cachedOpenAIKey = await loadOpenAIKeyFromSupabase();
+  return cachedOpenAIKey;
 }
 
 async function generateImage(prompt: string): Promise<AIResponse> {
   try {
-    const openaiApiKey = getOpenAIApiKey();
+    const openaiApiKey = await getOpenAIApiKeyAsync();
 
     if (!openaiApiKey) {
       return {
@@ -263,7 +278,7 @@ async function generateDocument(
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<AIResponse> {
   try {
-    const openaiApiKey = getOpenAIApiKey();
+    const openaiApiKey = await getOpenAIApiKeyAsync();
 
     if (!openaiApiKey) {
       return {
@@ -430,7 +445,7 @@ async function analyzeConversationForLearnings(
 ): Promise<Partial<UserLearnings>> {
   try {
     // Use OpenAI to analyze the conversation if available
-    const openaiApiKey = getOpenAIApiKey();
+    const openaiApiKey = await getOpenAIApiKeyAsync();
 
     if (openaiApiKey) {
       // Create analysis prompt
@@ -711,12 +726,12 @@ export async function getAIResponse(
     }
 
     // Check if OpenAI API key is configured
-    const openaiApiKey = getOpenAIApiKey();
+    const openaiApiKey = await getOpenAIApiKeyAsync();
     
     // Log for debugging (remove in production if needed)
     if (!openaiApiKey) {
       console.warn('[AI Service] OpenAI API key not found. Using fallback responses.');
-      console.warn('[AI Service] To fix: Set EXPO_PUBLIC_OPENAI_API_KEY in your environment variables.');
+      console.warn('[AI Service] To fix: Set EXPO_PUBLIC_OPENAI_API_KEY or configure the key in Admin → Settings.');
     } else {
       console.log('[AI Service] OpenAI API key found. Using OpenAI API.');
     }

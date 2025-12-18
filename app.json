@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "scheme": "committed",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -36,6 +36,7 @@
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -63,11 +64,19 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://committed.app/"
         }
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#ffffff",
+          "sounds": []
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -100,7 +109,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://rork.com/"
+        "origin": "https://committed.app/"
       },
       "eas": {
         "projectId": "1ce53350-c138-459b-b181-9a1a06406108"

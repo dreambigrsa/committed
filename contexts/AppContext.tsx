@@ -5,6 +5,7 @@ import { User, Relationship, RelationshipRequest, Post, Reel, Comment, Conversat
 import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
 import { checkUserLegalAcceptances } from '@/lib/legal-enforcement';
+import { registerForPushNotificationsAsync, showLocalNotification } from '@/lib/push-notifications';
 
 export const [AppContext, useApp] = createContextHook(() => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -152,6 +153,12 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: userData.created_at,
         };
         setCurrentUser(user);
+
+        // Register for OS-level notifications and store the Expo push token for backend delivery.
+        // (No-op on simulators/emulators.)
+        registerForPushNotificationsAsync(user.id).catch(() => {
+          // Errors are already logged in the helper; avoid breaking login flow.
+        });
 
         // Load user status
         await loadUserStatus(user.id);
@@ -3152,6 +3159,15 @@ export const [AppContext, useApp] = createContextHook(() => {
             notificationId: payload.new.id,
             userId: payload.new.user_id,
             type: payload.new.type,
+          });
+
+          // Fallback: show an OS-level notification immediately (works even without a push backend,
+          // but only while the app is running). Real push delivery still requires sending to this
+          // device's Expo push token from your backend.
+          showLocalNotification({
+            title: payload.new.title ?? 'Notification',
+            body: payload.new.message ?? '',
+            data: payload.new.data ?? {},
           });
           
           // Check if notification already exists (avoid duplicates)
