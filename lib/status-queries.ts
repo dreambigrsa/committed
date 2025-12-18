@@ -687,6 +687,8 @@ export async function createStatus(
   let backgroundImagePath: string | null = null;
 
   // Upload media if provided
+  // NOTE: Some projects use bucket `media` while others use `status-media`.
+  // We try `status-media` first, then fall back to `media` for compatibility.
   if (mediaUri && (contentType === 'image' || contentType === 'video')) {
     try {
       const response = await fetch(mediaUri);
@@ -695,19 +697,32 @@ export async function createStatus(
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('status-media')
-        .upload(filePath, blob, {
-          contentType: contentType === 'video' ? 'video/mp4' : 'image/jpeg',
-          upsert: false,
-        });
+      const bucketsToTry = ['status-media', 'media'];
+      let uploadedBucket: string | null = null;
+      let lastUploadError: any = null;
 
-      if (uploadError) {
-        console.error('Error uploading status media:', uploadError);
+      for (const bucket of bucketsToTry) {
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(filePath, blob, {
+            contentType: contentType === 'video' ? 'video/mp4' : 'image/jpeg',
+            upsert: false,
+          });
+
+        if (!uploadError) {
+          uploadedBucket = bucket;
+          break;
+        }
+        lastUploadError = uploadError;
+      }
+
+      if (!uploadedBucket) {
+        console.error('Error uploading status media:', lastUploadError);
         return null;
       }
 
-      mediaPath = `status-media/${filePath}`;
+      // Store "{bucket}/{path}" so signed-url logic can resolve it.
+      mediaPath = `${uploadedBucket}/${filePath}`;
     } catch (error) {
       console.error('Error processing media:', error);
       return null;
@@ -722,18 +737,30 @@ export async function createStatus(
       const fileName = `bg-${Date.now()}.jpg`;
       const filePath = `${user.id}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('status-media')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
+      const bucketsToTry = ['status-media', 'media'];
+      let uploadedBucket: string | null = null;
+      let lastUploadError: any = null;
 
-      if (uploadError) {
-        console.error('Error uploading background image:', uploadError);
+      for (const bucket of bucketsToTry) {
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(filePath, blob, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (!uploadError) {
+          uploadedBucket = bucket;
+          break;
+        }
+        lastUploadError = uploadError;
+      }
+
+      if (!uploadedBucket) {
+        console.error('Error uploading background image:', lastUploadError);
         // Don't fail the whole status creation if background image fails
       } else {
-        backgroundImagePath = `status-media/${filePath}`;
+        backgroundImagePath = `${uploadedBucket}/${filePath}`;
       }
     } catch (error) {
       console.error('Error processing background image:', error);
@@ -1105,21 +1132,33 @@ export async function archiveStatus(statusId: string): Promise<boolean> {
 export async function getSignedUrlForMedia(mediaPath: string): Promise<string | null> {
   if (!mediaPath) return null;
 
-  // Remove 'status-media/' prefix if present
-  const path = mediaPath.startsWith('status-media/') 
-    ? mediaPath.substring('status-media/'.length)
-    : mediaPath;
-
-  const { data, error } = await supabase.storage
-    .from('status-media')
-    .createSignedUrl(path, 3600); // 1 hour expiry
-
-  if (error) {
-    console.error('Error creating signed URL:', error);
-    return null;
+  // If already a URL, use it directly
+  if (mediaPath.startsWith('http://') || mediaPath.startsWith('https://')) {
+    return mediaPath;
   }
 
-  return data.signedUrl;
+  // Support both "{bucket}/{path}" and legacy "status-media/{path}" formats.
+  const parts = mediaPath.split('/');
+  const bucketCandidate = parts.length > 1 ? parts[0] : null;
+  const possibleBuckets = bucketCandidate
+    ? Array.from(new Set([bucketCandidate, 'status-media', 'media']))
+    : ['status-media', 'media'];
+
+  const stripBucket = (bucket: string) =>
+    mediaPath.startsWith(`${bucket}/`) ? mediaPath.substring(bucket.length + 1) : mediaPath;
+
+  for (const bucket of possibleBuckets) {
+    const path = stripBucket(bucket);
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600); // 1 hour expiry
+    if (!error && data?.signedUrl) return data.signedUrl;
+    // If it's not found, try next bucket; otherwise log and continue.
+    if (error && !String((error as any).message || '').toLowerCase().includes('not found')) {
+      console.warn('Error creating signed URL (will retry other buckets):', { bucket, path, error });
+    }
+  }
+
+  console.error('Error creating signed URL: StorageApiError: Object not found');
+  return null;
 }
 
 // ============================================
