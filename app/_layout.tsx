@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppContext, useApp } from "@/contexts/AppContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { trpc, trpcClient } from "@/lib/trpc";
-import NotificationToast from "@/components/NotificationToast";
+import NotificationToast from "../components/NotificationToast";
 import BanMessageModal from "@/components/BanMessageModal";
 import LegalAcceptanceEnforcer from "@/components/LegalAcceptanceEnforcer";
 
