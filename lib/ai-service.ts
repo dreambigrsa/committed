@@ -21,6 +21,16 @@ const OPENAI_SETTINGS_KEY = 'openai_api_key';
 let cachedOpenAIKey: string | null | undefined = undefined; // undefined = not loaded
 let openAIKeyLoadPromise: Promise<string | null> | null = null;
 
+function normalizeOpenAIKey(candidate: any): string | null {
+  if (typeof candidate !== 'string') return null;
+  const v = candidate.trim();
+  if (!v) return null;
+  // Basic sanity check: avoid cases like "[object Object]" and only accept real-looking keys.
+  // OpenAI keys are typically sk-... (including sk-proj-...).
+  if (!v.startsWith('sk-')) return null;
+  return v;
+}
+
 export interface AIResponse {
   success: boolean;
   message?: string;
@@ -105,8 +115,7 @@ async function loadOpenAIKeyFromSupabase(): Promise<string | null> {
       .maybeSingle();
 
     if (error) return null;
-    const key = data?.value ? String(data.value) : null;
-    return key && key.trim().length > 0 ? key.trim() : null;
+    return normalizeOpenAIKey(data?.value ?? null);
   } catch {
     return null;
   }
@@ -123,7 +132,7 @@ async function getOpenAIApiKeyAsync(): Promise<string | null> {
     if (Constants && Constants.expoConfig) {
       const expoConfig = Constants.expoConfig;
       if (expoConfig?.extra?.openaiApiKey) {
-        const v = String(expoConfig.extra.openaiApiKey).trim();
+        const v = normalizeOpenAIKey(expoConfig.extra.openaiApiKey);
         if (v) return v;
       }
     }
@@ -135,8 +144,10 @@ async function getOpenAIApiKeyAsync(): Promise<string | null> {
   try {
     // @ts-ignore - process.env is available in Expo at build time
     const processEnv: any = typeof process !== 'undefined' && process.env ? process.env : {};
-    if (processEnv.EXPO_PUBLIC_OPENAI_API_KEY) return String(processEnv.EXPO_PUBLIC_OPENAI_API_KEY).trim();
-    if (processEnv.OPENAI_API_KEY) return String(processEnv.OPENAI_API_KEY).trim();
+    const v1 = normalizeOpenAIKey(processEnv.EXPO_PUBLIC_OPENAI_API_KEY);
+    if (v1) return v1;
+    const v2 = normalizeOpenAIKey(processEnv.OPENAI_API_KEY);
+    if (v2) return v2;
   } catch {
     // ignore
   }
