@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { X, Video as VideoIcon, Upload } from 'lucide-react-native';
+import { X, Video as VideoIcon, Upload, Trash2, Sparkles } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,10 +23,12 @@ import { supabase } from '@/lib/supabase';
 
 export default function CreateReelScreen() {
   const router = useRouter();
-  const { createReel } = useApp();
+  const { createReel, currentUser } = useApp();
   const [caption, setCaption] = useState<string>('');
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  const canPost = useMemo(() => !!videoUri && !isUploading, [videoUri, isUploading]);
 
   const pickVideo = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -168,61 +170,87 @@ export default function CreateReelScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {/* Creator header */}
+            <View style={styles.composerHeader}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>
+                  {(currentUser?.fullName || currentUser?.username || 'U').slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.composerTitle}>Create a Reel</Text>
+                <Text style={styles.composerSubtitle}>Short video • up to 60 seconds</Text>
+              </View>
+              <View style={styles.pill}>
+                <Sparkles size={14} color={colors.text.secondary} />
+                <Text style={styles.pillText}>New</Text>
+              </View>
+            </View>
+
+            {/* Video hero */}
             {videoUri ? (
-              <View style={styles.videoContainer}>
+              <View style={styles.videoCard}>
                 <Video
                   source={{ uri: videoUri }}
                   style={styles.videoPreview}
                   useNativeControls
                   resizeMode={ResizeMode.CONTAIN}
                 />
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={removeVideo}
-                >
-                  <X size={20} color={colors.text.white} />
+                <TouchableOpacity style={styles.removeButton} onPress={removeVideo}>
+                  <Trash2 size={18} color={colors.text.white} />
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.uploadContainer}>
-                <VideoIcon size={64} color={colors.text.tertiary} strokeWidth={1.5} />
-                <Text style={styles.uploadTitle}>Upload a Reel</Text>
-                <Text style={styles.uploadSubtitle}>
-                  Videos up to 60 seconds
-                </Text>
+              <View style={styles.uploadCard}>
+                <View style={styles.uploadIconCircle}>
+                  <VideoIcon size={26} color={colors.primary} />
+                </View>
+                <Text style={styles.uploadTitle}>Add a video</Text>
+                <Text style={styles.uploadSubtitle}>Record now or upload from your gallery</Text>
 
-                <View style={styles.uploadButtons}>
-                  {Platform.OS !== 'web' && (
-                    <TouchableOpacity
-                      style={styles.uploadButton}
-                      onPress={recordVideo}
-                    >
-                      <VideoIcon size={24} color={colors.primary} />
-                      <Text style={styles.uploadButtonText}>Record Video</Text>
+                <View style={styles.actionRow}>
+                  {Platform.OS !== 'web' ? (
+                    <TouchableOpacity style={styles.actionButton} onPress={recordVideo}>
+                      <VideoIcon size={18} color={colors.text.primary} />
+                      <Text style={styles.actionButtonText}>Record</Text>
                     </TouchableOpacity>
-                  )}
+                  ) : null}
 
-                  <TouchableOpacity
-                    style={styles.uploadButton}
-                    onPress={pickVideo}
-                  >
-                    <Upload size={24} color={colors.primary} />
-                    <Text style={styles.uploadButtonText}>Upload Video</Text>
+                  <TouchableOpacity style={styles.actionButton} onPress={pickVideo}>
+                    <Upload size={18} color={colors.text.primary} />
+                    <Text style={styles.actionButtonText}>Upload</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            <TextInput
-              style={styles.captionInput}
-              placeholder="Write a caption..."
-              placeholderTextColor={colors.text.tertiary}
-              value={caption}
-              onChangeText={setCaption}
-              multiline
-              maxLength={200}
-            />
-            <Text style={styles.captionCounter}>{caption.length}/200</Text>
+            {/* Caption */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Caption</Text>
+              <TextInput
+                style={styles.captionInput}
+                placeholder="Write something catchy…"
+                placeholderTextColor={colors.text.tertiary}
+                value={caption}
+                onChangeText={setCaption}
+                multiline
+                maxLength={200}
+              />
+              <Text style={styles.captionCounter}>{caption.length}/200</Text>
+            </View>
+
+            {/* Primary action */}
+            <TouchableOpacity
+              style={[styles.primaryButton, !canPost && styles.primaryButtonDisabled]}
+              onPress={handlePost}
+              disabled={!canPost}
+            >
+              {isUploading ? (
+                <ActivityIndicator size="small" color={colors.text.white} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Post Reel</Text>
+              )}
+            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -240,7 +268,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 20,
+    padding: 16,
+    paddingBottom: 28,
   },
   postButton: {
     fontSize: 16,
@@ -250,14 +279,62 @@ const styles = StyleSheet.create({
   postButtonDisabled: {
     color: colors.text.tertiary,
   },
-  videoContainer: {
+  composerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: colors.text.primary,
+  },
+  composerTitle: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: colors.text.primary,
+  },
+  composerSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    color: colors.text.secondary,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  pillText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.text.secondary,
+  },
+  videoCard: {
     position: 'relative',
     width: '100%',
-    height: 400,
+    height: 420,
     backgroundColor: colors.background.secondary,
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   videoPreview: {
     width: '100%',
@@ -270,34 +347,45 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.danger,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  uploadContainer: {
+  uploadCard: {
+    borderRadius: 18,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    padding: 18,
+    alignItems: 'center',
+  },
+  uploadIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    marginBottom: 20,
+    backgroundColor: 'rgba(26, 115, 232, 0.12)',
+    marginBottom: 10,
   },
   uploadTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginTop: 16,
     marginBottom: 8,
   },
   uploadSubtitle: {
     fontSize: 15,
     color: colors.text.secondary,
-    marginBottom: 32,
+    textAlign: 'center',
+    marginBottom: 14,
   },
-  uploadButtons: {
+  actionRow: {
     flexDirection: 'row',
     gap: 12,
     width: '100%',
   },
-  uploadButton: {
+  actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,32 +393,56 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.background.primary,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: colors.border.light,
   },
-  uploadButtonText: {
+  actionButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: colors.primary,
+    color: colors.text.primary,
+  },
+  card: {
+    marginTop: 14,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 16,
+    padding: 14,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: colors.text.primary,
+    marginBottom: 10,
   },
   captionInput: {
     fontSize: 16,
     color: colors.text.primary,
-    backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: colors.border.light,
     minHeight: 100,
     textAlignVertical: 'top',
-    marginBottom: 8,
   },
   captionCounter: {
+    marginTop: 8,
     fontSize: 13,
     color: colors.text.tertiary,
     textAlign: 'right',
+  },
+  primaryButton: {
+    marginTop: 18,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '900' as const,
+    color: colors.text.white,
   },
 });
