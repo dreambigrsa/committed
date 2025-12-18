@@ -23,12 +23,20 @@ create extension if not exists vault with schema extensions;
 -- Vault secrets
 -- =============
 -- Replace the URL project ref if needed.
-select
-  extensions.vault.create_secret(
-    'status_lifecycle_url',
-    'https://<YOUR_PROJECT_REF>.functions.supabase.co/status-lifecycle'
-  )
-on conflict do nothing;
+do $$
+begin
+  if not exists (
+    select 1
+    from extensions.vault.secrets
+    where name = 'status_lifecycle_url'
+  ) then
+    perform extensions.vault.create_secret(
+      'status_lifecycle_url',
+      'https://<YOUR_PROJECT_REF>.functions.supabase.co/status-lifecycle'
+    );
+  end if;
+end;
+$$;
 
 -- IMPORTANT: Replace <STATUS_LIFECYCLE_SECRET> with the same value you set in Edge Function secrets.
 -- Run manually in SQL Editor; do NOT commit your real secret:
@@ -82,6 +90,6 @@ select
     '0 * * * *',
     $$select public.run_status_lifecycle_job();$$
   )
-on conflict do nothing;
+;
 
 
