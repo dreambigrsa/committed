@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Settings as SettingsIcon, Save, Shield, KeyRound, TestTubeDiagonal, Sparkles } from 'lucide-react-native';
+import { Settings as SettingsIcon, Save, Shield, KeyRound, TestTubeDiagonal, Sparkles, ChevronDown, ChevronUp, Search } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
@@ -33,6 +33,19 @@ export default function AdminSettingsScreen() {
     maxReelsPerDay: '5',
     enableCheatingAlerts: true,
     enableNotifications: true,
+  });
+  const initialSettingsRef = useRef<string>(JSON.stringify(settings));
+  const hasUnsavedConfigChanges = useMemo(() => JSON.stringify(settings) !== initialSettingsRef.current, [settings]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    openai: true,
+    messaging: false,
+    ai: true,
+    verification: false,
+    relationships: false,
+    content: false,
+    features: false,
   });
   const [openaiKey, setOpenaiKey] = useState('');
   const [openaiKeyLoaded, setOpenaiKeyLoaded] = useState(false);
@@ -64,7 +77,24 @@ export default function AdminSettingsScreen() {
   const [reviewingSuggestionId, setReviewingSuggestionId] = useState<string | null>(null);
 
   const handleSaveSettings = () => {
-    Alert.alert('Success', 'Settings saved successfully');
+    // NOTE: This screen currently only stores these config values locally.
+    // If/when you persist them in DB, swap this to a save call.
+    initialSettingsRef.current = JSON.stringify(settings);
+    Alert.alert('Saved', 'App configuration saved (local).');
+  };
+
+  const toggleExpanded = (key: string) => {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const matches = (text: string) => {
+    if (!normalizedQuery) return true;
+    return text.toLowerCase().includes(normalizedQuery);
+  };
+
+  const shouldShowSection = (sectionKey: string, keywords: string[]) => {
+    if (!normalizedQuery) return true;
+    return matches(sectionKey) || keywords.some((k) => matches(k));
   };
 
   useEffect(() => {
@@ -509,6 +539,25 @@ export default function AdminSettingsScreen() {
           <Text style={styles.headerSubtitle}>Configure app behavior</Text>
         </View>
 
+        <View style={styles.searchWrap}>
+          <Search size={18} color={colors.text.tertiary} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search settings…"
+            placeholderTextColor={colors.text.tertiary}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {!!searchQuery && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearPill}>
+              <Text style={styles.clearPillText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {shouldShowSection('general', ['maintenance', 'registration', 'app name']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>General</Text>
           
@@ -548,7 +597,9 @@ export default function AdminSettingsScreen() {
             />
           </View>
         </View>
+        )}
 
+        {shouldShowSection('openai', ['openai', 'api key', 'chatgpt', 'ai']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>OpenAI</Text>
 
@@ -595,7 +646,9 @@ export default function AdminSettingsScreen() {
             </View>
           </View>
         </View>
+        )}
 
+        {shouldShowSection('messaging', ['twilio', 'sms', 'resend', 'email']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Messaging Providers</Text>
 
@@ -730,7 +783,9 @@ export default function AdminSettingsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
+        {shouldShowSection('committed ai', ['system prompt', 'rollout', 'suggestion', 'ai']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Committed AI</Text>
 
@@ -859,7 +914,9 @@ export default function AdminSettingsScreen() {
             </View>
           </View>
         </View>
+        )}
 
+        {shouldShowSection('verification', ['email verification', 'phone verification', 'id verification']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Verification</Text>
           
@@ -899,7 +956,9 @@ export default function AdminSettingsScreen() {
             />
           </View>
         </View>
+        )}
 
+        {shouldShowSection('relationships', ['disputes', 'cheating', 'resolve']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Relationships</Text>
           
@@ -940,7 +999,9 @@ export default function AdminSettingsScreen() {
             />
           </View>
         </View>
+        )}
 
+        {shouldShowSection('content limits', ['posts', 'reels', 'limits']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Content Limits</Text>
           
@@ -970,7 +1031,9 @@ export default function AdminSettingsScreen() {
             />
           </View>
         </View>
+        )}
 
+        {shouldShowSection('features', ['notifications', 'features']) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Features</Text>
           
@@ -986,12 +1049,26 @@ export default function AdminSettingsScreen() {
             />
           </View>
         </View>
+        )}
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveSettings}>
-          <Save size={20} color={colors.text.white} />
-          <Text style={styles.saveButtonText}>Save Settings</Text>
-        </TouchableOpacity>
       </ScrollView>
+
+      <View style={styles.stickySaveBar}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stickyTitle}>App configuration</Text>
+          <Text style={styles.stickySubtitle}>
+            {hasUnsavedConfigChanges ? 'Unsaved changes' : 'All changes saved'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.saveButton, !hasUnsavedConfigChanges && styles.buttonDisabled, { marginTop: 0 }]}
+          onPress={handleSaveSettings}
+          disabled={!hasUnsavedConfigChanges}
+        >
+          <Save size={20} color={colors.text.white} />
+          <Text style={styles.saveButtonText}>Save</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1138,6 +1215,59 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
     marginTop: 12,
+  },
+  searchWrap: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.background.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text.primary,
+    paddingVertical: 0,
+  },
+  clearPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  clearPillText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.text.secondary,
+  },
+  stickySaveBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+    backgroundColor: colors.background.primary,
+  },
+  stickyTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.text.primary,
+  },
+  stickySubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.text.secondary,
   },
   promptInput: {
     marginTop: 12,
