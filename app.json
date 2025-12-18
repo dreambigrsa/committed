@@ -64,7 +64,7 @@
       [
         "expo-router",
         {
-          "origin": "https://committed.app/"
+          "origin": "https://committed-5mxf.onrender.com"
         }
       ],
       "expo-asset",
@@ -110,7 +110,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://committed.app/"
+        "origin": "https://committed-5mxf.onrender.com"
       },
       "eas": {
         "projectId": "1ce53350-c138-459b-b181-9a1a06406108"
