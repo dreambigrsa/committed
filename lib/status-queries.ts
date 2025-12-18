@@ -39,6 +39,8 @@ export interface Status {
   text_effect?: 'default' | 'white-bg' | 'black-bg' | 'outline-white' | 'outline-black' | 'glow' | null;
   text_alignment?: 'left' | 'center' | 'right' | null;
   background_image_path?: string | null;
+  text_position_x?: number | null;
+  text_position_y?: number | null;
   user?: {
     id: string;
     full_name: string;
@@ -99,7 +101,9 @@ export async function getStatusFeedForFeed(): Promise<StatusFeedItem[]> {
       text_style,
       text_effect,
       text_alignment,
-      background_image_path
+      background_image_path,
+      text_position_x,
+      text_position_y
     `)
     .order('created_at', { ascending: false });
 
@@ -330,7 +334,9 @@ export async function getUserStatuses(userId: string): Promise<Status[]> {
       text_style,
       text_effect,
       text_alignment,
-      background_image_path
+      background_image_path,
+      text_position_x,
+      text_position_y
     `)
     .eq('user_id', userId);
 
@@ -513,7 +519,9 @@ export async function getStatusFeedForMessenger(): Promise<StatusFeedItem[]> {
       text_style,
       text_effect,
       text_alignment,
-      background_image_path
+      background_image_path,
+      text_position_x,
+      text_position_y
     `)
     .eq('archived', false)
     .gt('expires_at', new Date().toISOString())
@@ -666,6 +674,8 @@ export async function createStatus(
     textStyle?: 'classic' | 'neon' | 'typewriter' | 'elegant' | 'bold' | 'italic';
     textEffect?: 'default' | 'white-bg' | 'black-bg' | 'outline-white' | 'outline-black' | 'glow';
     textAlignment?: 'left' | 'center' | 'right';
+    textPositionX?: number;
+    textPositionY?: number;
     backgroundImageUri?: string | null;
     stickers?: Array<{ id: string; imageUrl: string; positionX?: number; positionY?: number; scale?: number; rotation?: number }>;
   }
@@ -785,6 +795,8 @@ export async function createStatus(
     text_style: customization?.textStyle || 'classic',
     text_effect: customization?.textEffect || 'default',
     text_alignment: customization?.textAlignment || 'center',
+    text_position_x: typeof customization?.textPositionX === 'number' ? customization?.textPositionX : 0.5,
+    text_position_y: typeof customization?.textPositionY === 'number' ? customization?.textPositionY : 0.5,
     background_image_path: backgroundImagePath,
   };
 

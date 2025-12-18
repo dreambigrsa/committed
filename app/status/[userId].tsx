@@ -215,6 +215,26 @@ export default function StatusViewerScreen() {
       width: width,
       height: height * 0.7,
     },
+    mediaWrapper: {
+      width: width,
+      height: height * 0.7,
+      position: 'relative',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    mediaOverlayTextContainer: {
+      position: 'absolute',
+      zIndex: 20,
+      maxWidth: '88%',
+    },
+    mediaOverlayText: {
+      color: '#fff',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: 'rgba(0,0,0,0.25)',
+      overflow: 'hidden',
+    },
     loadingText: {
       color: '#fff',
       fontSize: 16,
@@ -1374,16 +1394,52 @@ export default function StatusViewerScreen() {
                 </View>
               )}
             </View>
-          ) : status.content_type === 'image' && mediaUrl ? (
-            <Image source={{ uri: mediaUrl }} style={styles.media} contentFit="contain" />
-          ) : status.content_type === 'video' && mediaUrl ? (
-            <Video
-              source={{ uri: mediaUrl }}
-              style={styles.media}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-            />
+          ) : (status.content_type === 'image' || status.content_type === 'video') && mediaUrl ? (
+            <View
+              style={styles.mediaWrapper}
+              onLayout={(e) => {
+                // reserved for future exact centering; we store but don't strictly need it right now
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { width: _w, height: _h } = e.nativeEvent.layout;
+              }}
+            >
+              {status.content_type === 'image' ? (
+                <Image source={{ uri: mediaUrl }} style={styles.media} contentFit="contain" />
+              ) : (
+                <Video
+                  source={{ uri: mediaUrl }}
+                  style={styles.media}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                />
+              )}
+
+              {/* Text overlay for image/video statuses */}
+              {!!status.text_content?.trim() && (
+                <View
+                  style={[
+                    styles.mediaOverlayTextContainer,
+                    {
+                      left: `${(status.text_position_x ?? 0.5) * 100}%`,
+                      top: `${(status.text_position_y ?? 0.5) * 100}%`,
+                      transform: [{ translateX: -110 }, { translateY: -22 }],
+                    },
+                  ]}
+                  pointerEvents="none"
+                >
+                  <Text
+                    style={[
+                      styles.mediaOverlayText,
+                      getTextStyle(status.text_style || 'classic'),
+                      getTextEffectStyle(status.text_effect || 'default', status.background_color || '#000'),
+                    ]}
+                  >
+                    {status.text_content}
+                  </Text>
+                </View>
+              )}
+            </View>
           ) : (
             <Text style={styles.loadingText}>Loading media...</Text>
           )}

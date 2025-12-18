@@ -23,6 +23,7 @@ import {
   StatusBar,
   SafeAreaView,
   Modal,
+  PanResponder,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -112,6 +113,34 @@ export default function CreateStatusScreen() {
   const [selectedStickers, setSelectedStickers] = useState<Array<{ id: string; imageUrl: string }>>([]);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showMutedStories, setShowMutedStories] = useState(false);
+  const [showOverlayEditor, setShowOverlayEditor] = useState(false);
+  const [overlayEnabled, setOverlayEnabled] = useState(false);
+  const [overlayPos, setOverlayPos] = useState<{ x: number; y: number }>({ x: 0.5, y: 0.35 }); // normalized
+  const [previewSize, setPreviewSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const overlayDragging = useRef(false);
+  const overlayStartPos = useRef<{ x: number; y: number }>({ x: 0.5, y: 0.35 });
+
+  const overlayPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => overlayDragging.current,
+      onMoveShouldSetPanResponder: () => overlayDragging.current,
+      onPanResponderGrant: () => {
+        overlayStartPos.current = overlayPos;
+      },
+      onPanResponderMove: (_, gesture) => {
+        if (!overlayDragging.current || !previewSize.w || !previewSize.h) return;
+        const nextX = Math.max(0, Math.min(1, overlayStartPos.current.x + gesture.dx / previewSize.w));
+        const nextY = Math.max(0, Math.min(1, overlayStartPos.current.y + gesture.dy / previewSize.h));
+        setOverlayPos({ x: nextX, y: nextY });
+      },
+      onPanResponderRelease: () => {
+        overlayDragging.current = false;
+      },
+      onPanResponderTerminate: () => {
+        overlayDragging.current = false;
+      },
+    })
+  ).current;
 
   const bgColor = isDark ? '#000' : '#fff';
   const textColor = isDark ? '#fff' : '#000';
@@ -181,6 +210,8 @@ export default function CreateStatusScreen() {
     setMediaUri(asset.uri);
     setContentType(asset.mediaType === 'video' ? 'video' : 'image');
     setScreenMode('preview');
+    // Reset overlay position for a new media item
+    setOverlayPos({ x: 0.5, y: 0.35 });
   };
 
   const handleTakePhoto = async () => {
@@ -201,6 +232,7 @@ export default function CreateStatusScreen() {
       setMediaUri(result.assets[0].uri);
       setContentType('image');
       setScreenMode('preview');
+      setOverlayPos({ x: 0.5, y: 0.35 });
     }
   };
 
@@ -226,6 +258,8 @@ export default function CreateStatusScreen() {
         textStyle: textStyle,
         textEffect: textEffect,
         textAlignment: textAlignment,
+        textPositionX: overlayEnabled ? overlayPos.x : 0.5,
+        textPositionY: overlayEnabled ? overlayPos.y : 0.5,
         backgroundImageUri: contentType === 'text' ? backgroundImageUri : null,
         stickers: selectedStickers.map((sticker, index) => ({
           id: sticker.id,
@@ -239,7 +273,7 @@ export default function CreateStatusScreen() {
 
       const status = await createStatus(
         contentType,
-        textContent || null,
+        (overlayEnabled || contentType === 'text') ? (textContent || null) : null,
         finalMediaUri,
         privacyLevel,
         undefined, // allowedUserIds (for custom privacy)
@@ -561,7 +595,13 @@ export default function CreateStatusScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.previewContent}>
+        <View
+          style={styles.previewContent}
+          onLayout={(e) => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            setPreviewSize({ w, h });
+          }}
+        >
           {contentType === 'text' ? (
             <View style={[styles.textPreviewContainer, {
               backgroundColor: textBackgroundColor || '#1A73E8',
@@ -685,17 +725,72 @@ export default function CreateStatusScreen() {
                 </View>
               )}
             </View>
-          ) : contentType === 'image' ? (
-            <Image source={{ uri: mediaUri }} style={styles.previewMediaFull} contentFit="contain" />
           ) : (
-            <Video
-              source={{ uri: mediaUri }}
-              style={styles.previewMediaFull}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isLooping
-              useNativeControls
-            />
+            <View style={styles.previewMediaWrapper}>
+              {contentType === 'image' ? (
+                <Image source={{ uri: mediaUri }} style={styles.previewMediaFull} contentFit="contain" />
+              ) : (
+                <Video
+                  source={{ uri: mediaUri }}
+                  style={styles.previewMediaFull}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                  isLooping
+                  useNativeControls
+                />
+              )}
+
+              {/* Draggable text overlay */}
+              {overlayEnabled && (
+                <View
+                  style={[
+                    styles.overlayTextContainer,
+                    {
+                      left: `${overlayPos.x * 100}%`,
+                      top: `${overlayPos.y * 100}%`,
+                      transform: [{ translateX: -110 }, { translateY: -22 }],
+                    },
+                  ]}
+                  {...overlayPan.panHandlers}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setShowOverlayEditor(true)}
+                    onLongPress={() => {
+                      overlayDragging.current = true;
+                    }}
+                  >
+                    <Text style={[styles.overlayText, getTextStyle(), getTextEffectStyle()]}>
+                      {textContent?.trim() ? textContent : 'Tap to add text'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Quick action buttons */}
+              <View style={styles.previewOverlayActions}>
+                <TouchableOpacity
+                  style={styles.previewOverlayAction}
+                  onPress={() => {
+                    setOverlayEnabled(true);
+                    setShowOverlayEditor(true);
+                  }}
+                >
+                  <Text style={styles.previewOverlayActionText}>Aa</Text>
+                </TouchableOpacity>
+                {overlayEnabled && (
+                  <TouchableOpacity
+                    style={styles.previewOverlayAction}
+                    onPress={() => {
+                      setOverlayEnabled(false);
+                      setTextContent('');
+                    }}
+                  >
+                    <X size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           )}
         </View>
 
@@ -709,6 +804,55 @@ export default function CreateStatusScreen() {
              privacyLevel === 'followers' ? '👤' : '🔒'} {privacyLevel.charAt(0).toUpperCase() + privacyLevel.slice(1)}
           </Text>
         </TouchableOpacity>
+
+        {/* Overlay text editor modal */}
+        <Modal
+          visible={showOverlayEditor}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowOverlayEditor(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowOverlayEditor(false)}
+          >
+            <View style={styles.overlayEditorCard}>
+              <Text style={styles.overlayEditorTitle}>Add text</Text>
+              <TextInput
+                value={textContent}
+                onChangeText={(t) => {
+                  setTextContent(t);
+                  if (!overlayEnabled) setOverlayEnabled(true);
+                }}
+                placeholder="Type something…"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={styles.overlayEditorInput}
+                multiline
+                autoFocus
+              />
+              <View style={styles.overlayEditorActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setOverlayEnabled(false);
+                    setTextContent('');
+                    setShowOverlayEditor(false);
+                  }}
+                  style={styles.overlayEditorSecondary}
+                >
+                  <Text style={styles.overlayEditorSecondaryText}>Remove</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowOverlayEditor(false)}
+                  style={styles.overlayEditorPrimary}
+                >
+                  <Text style={styles.overlayEditorPrimaryText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.overlayEditorHint}>Tip: long‑press the text on the preview to drag it.</Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -1604,6 +1748,109 @@ const styles = StyleSheet.create({
   previewMediaFull: {
     width: width,
     height: height * 0.75,
+  },
+  previewMediaWrapper: {
+    width: width,
+    height: height * 0.75,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewOverlayActions: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    gap: 10,
+  },
+  previewOverlayAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  previewOverlayActionText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800' as const,
+  },
+  overlayTextContainer: {
+    position: 'absolute',
+    zIndex: 20,
+    maxWidth: '88%',
+  },
+  overlayText: {
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+  },
+  overlayEditorCard: {
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(20,20,20,0.98)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  overlayEditorTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800' as const,
+    marginBottom: 10,
+  },
+  overlayEditorInput: {
+    minHeight: 80,
+    maxHeight: 160,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  overlayEditorActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 12,
+  },
+  overlayEditorSecondary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  overlayEditorSecondaryText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+  },
+  overlayEditorPrimary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A73E8',
+  },
+  overlayEditorPrimaryText: {
+    color: '#fff',
+    fontWeight: '800' as const,
+  },
+  overlayEditorHint: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 10,
   },
   privacyBadge: {
     position: 'absolute',
