@@ -179,6 +179,7 @@ export default function ConversationDetailScreen() {
   const inputRef = useRef<TextInput>(null);
   const [aiUserId, setAiUserId] = useState<string | null>(null);
   const [aiFeedback, setAiFeedback] = useState<Record<string, 1 | -1>>({});
+  const [aiIsThinking, setAiIsThinking] = useState(false);
   const conversation = getConversation(conversationId);
   const recordedImpressions = useRef<Set<string>>(new Set());
   
@@ -945,6 +946,24 @@ export default function ConversationDetailScreen() {
         if (aiUser && otherParticipantId === aiUser.id) {
           // This is a conversation with the AI, trigger AI response
           try {
+            setAiIsThinking(true);
+            const typingId = `ai_typing_${Date.now()}`;
+            setLocalMessages(prev => [
+              ...prev,
+              {
+                id: typingId,
+                conversationId,
+                senderId: aiUser.id,
+                receiverId: currentUser.id,
+                content: 'Committed AI is thinking…',
+                messageType: 'text',
+                read: true,
+                deletedForSender: false,
+                deletedForReceiver: false,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+
             // Get conversation history for context
             const existingMessages = localMessages || [];
             const conversationHistory = existingMessages
@@ -971,6 +990,10 @@ export default function ConversationDetailScreen() {
               currentUser.username,
               currentUser.id
             );
+
+            // Remove typing indicator
+            setLocalMessages(prev => prev.filter(m => m.id !== typingId));
+            setAiIsThinking(false);
 
             if (aiResponse.success) {
               // Send AI response using database function or direct insert
@@ -1023,6 +1046,7 @@ export default function ConversationDetailScreen() {
               }
             }
           } catch (error: any) {
+            setAiIsThinking(false);
             console.error('Error generating AI response:', error);
             // Don't show error to user - AI failure shouldn't block the conversation
           }
@@ -1408,6 +1432,20 @@ export default function ConversationDetailScreen() {
 
   const renderMessage = ({ item }: { item: any }) => {
     if (!item || !item.id) return null;
+
+    // Render AI typing indicator without warnings/actions
+    if (typeof item.id === 'string' && item.id.startsWith('ai_typing_')) {
+      return (
+        <View style={[styles.messageContainer, styles.theirMessageContainer]}>
+          <View style={[styles.messageBubble, styles.theirMessage]}>
+            <View style={styles.aiThinkingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.messageText, styles.theirMessageText]}>{item.content}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
     
     const isMe = item.senderId === currentUser.id;
     const isDeleted = (isMe && item.deletedForSender) || (!isMe && item.deletedForReceiver);
@@ -2262,6 +2300,11 @@ const styles = StyleSheet.create({
   },
   aiFeedbackText: {
     fontSize: 14,
+  },
+  aiThinkingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   myMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',

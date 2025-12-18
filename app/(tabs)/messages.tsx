@@ -374,6 +374,12 @@ export default function MessagesScreen() {
             </TouchableOpacity>
           )}
         </View>
+        {isSendingAI && (
+          <View style={styles.aiStatusRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.aiStatusText}>Committed AI is thinking…</Text>
+          </View>
+        )}
       </View>
 
       <ScrollView
@@ -570,6 +576,18 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
+  },
+  aiStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  aiStatusText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: '600' as const,
   },
   scrollContent: {
     paddingBottom: 100,
