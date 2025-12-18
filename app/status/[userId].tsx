@@ -1832,8 +1832,10 @@ export default function StatusViewerScreen() {
                     if (!status || !status.id) return;
                     
                     try {
-                      // Create shareable link (you can customize this URL format)
-                      const shareUrl = `https://yourapp.com/status/${status.id}`;
+                      // Deep link opens the app when installed; fallback link lets users download the app.
+                      const deepLink = `committed://status-item/${status.id}`;
+                      const downloadUrl = `https://dreambig.org.za/committed`;
+                      const shareUrl = deepLink;
                       
                       // Copy to clipboard
                       if (Clipboard && Clipboard.setString) {
@@ -1842,7 +1844,7 @@ export default function StatusViewerScreen() {
                       } else {
                         // Fallback: Use Share API
                         await Share.share({
-                          message: shareUrl,
+                          message: `Open in app: ${deepLink}\nDownload Committed: ${downloadUrl}`,
                           url: shareUrl,
                         });
                       }

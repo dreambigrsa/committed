@@ -4657,14 +4657,18 @@ export const [AppContext, useApp] = createContextHook(() => {
       const post = posts.find(p => p.id === postId);
       if (!post) return;
 
-      const shareUrl = `https://yourapp.com/post/${postId}`;
-      const shareText = post.content ? `${post.content.substring(0, 100)}... ${shareUrl}` : shareUrl;
+      // Deep link (opens the app if installed). No domain ownership required.
+      const deepLink = `committed://post/${postId}`;
+      // Fallback download page (opens in browser if app not installed).
+      const downloadUrl = `https://dreambig.org.za/committed`;
+      const preview = post.content ? `${post.content.substring(0, 100)}...` : 'View this post in Committed';
+      const shareText = `${preview}\n\nOpen in app: ${deepLink}\nDownload Committed: ${downloadUrl}`;
       
       // Use React Native Share API
       const Share = require('react-native').Share;
       await Share.share({
         message: shareText,
-        url: shareUrl,
+        url: deepLink,
         title: `Post by ${post.userName}`,
       });
       
@@ -4681,14 +4685,18 @@ export const [AppContext, useApp] = createContextHook(() => {
       const reel = reels.find(r => r.id === reelId);
       if (!reel) return;
 
-      const shareUrl = `https://yourapp.com/reel/${reelId}`;
-      const shareText = reel.caption ? `${reel.caption.substring(0, 100)}... ${shareUrl}` : shareUrl;
+      // Deep link (opens the app if installed). No domain ownership required.
+      const deepLink = `committed://reel/${reelId}`;
+      // Fallback download page (opens in browser if app not installed).
+      const downloadUrl = `https://dreambig.org.za/committed`;
+      const preview = reel.caption ? `${reel.caption.substring(0, 100)}...` : 'View this reel in Committed';
+      const shareText = `${preview}\n\nOpen in app: ${deepLink}\nDownload Committed: ${downloadUrl}`;
       
       // Use React Native Share API
       const Share = require('react-native').Share;
       await Share.share({
         message: shareText,
-        url: shareUrl,
+        url: deepLink,
         title: `Reel by ${reel.userName}`,
       });
       
