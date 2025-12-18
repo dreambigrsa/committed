@@ -16,6 +16,7 @@ function corsHeaders(req?: Request) {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin, Access-Control-Request-Headers',
   };
 }
 
@@ -27,7 +28,7 @@ function json(status: number, payload: unknown, req?: Request) {
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(req) });
   if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' }, req);
 
   try {

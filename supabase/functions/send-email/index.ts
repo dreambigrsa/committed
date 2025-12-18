@@ -24,6 +24,7 @@ function corsHeaders(req?: Request) {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin, Access-Control-Request-Headers',
   };
 }
 
@@ -43,7 +44,7 @@ serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
-      return new Response('ok', { headers: corsHeaders(req) });
+      return new Response(null, { status: 204, headers: corsHeaders(req) });
     }
 
     const { email, code }: RequestBody = await req.json();
