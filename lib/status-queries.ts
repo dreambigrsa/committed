@@ -1170,14 +1170,28 @@ export async function getSignedUrlForMedia(mediaPath: string): Promise<string | 
     addAttempt('media', p);
     // legacy fallback: sometimes stored as media/<path> but uploaded into status-media bucket
     addAttempt('status-media', p);
+    // legacy: "media/status-media/<path>" but actually stored as "media/<path>"
+    if (p.startsWith('status-media/')) {
+      const inner = p.substring('status-media/'.length);
+      addAttempt('media', inner);
+      addAttempt('status-media', inner);
+    }
   } else if (parts.length > 1) {
     // Treat first segment as bucket candidate (e.g., "<bucket>/<path>")
-    addAttempt(first, parts.slice(1).join('/'));
+    const rest = parts.slice(1).join('/');
+    addAttempt(first, rest);
     // Also try common buckets with full path and with first-segment stripped
     addAttempt('status-media', mediaPath);
     addAttempt('media', mediaPath);
-    addAttempt('status-media', parts.slice(1).join('/'));
-    addAttempt('media', parts.slice(1).join('/'));
+    addAttempt('status-media', rest);
+    addAttempt('media', rest);
+    // legacy: "<bucket>/status-media/<path>" but stored as "<bucket>/<path>"
+    if (rest.startsWith('status-media/')) {
+      const inner = rest.substring('status-media/'.length);
+      addAttempt(first, inner);
+      addAttempt('media', inner);
+      addAttempt('status-media', inner);
+    }
   } else {
     // Just a raw path
     addAttempt('status-media', mediaPath);
