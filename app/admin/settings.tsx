@@ -59,6 +59,9 @@ export default function AdminSettingsScreen() {
   const [aiPromptRollout, setAiPromptRollout] = useState('100');
   const [savingAiPrompt, setSavingAiPrompt] = useState(false);
   const [generatingSuggestion, setGeneratingSuggestion] = useState(false);
+  const [promptSuggestions, setPromptSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [reviewingSuggestionId, setReviewingSuggestionId] = useState<string | null>(null);
 
   const handleSaveSettings = () => {
     Alert.alert('Success', 'Settings saved successfully');
@@ -171,6 +174,116 @@ export default function AdminSettingsScreen() {
       }
     })();
   }, [isSuperAdmin, aiPromptLoaded]);
+
+  const loadPromptSuggestions = async () => {
+    if (!isSuperAdmin) return;
+    setLoadingSuggestions(true);
+    try {
+      const { data, error } = await supabase
+        .from('ai_prompt_suggestions')
+        .select('id, suggested_prompt, rationale, stats, status, created_at, created_by, reviewed_at, reviewed_by')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setPromptSuggestions(data || []);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to load prompt suggestions.');
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    loadPromptSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin]);
+
+  const handleApproveSuggestion = async (suggestion: any) => {
+    if (!isSuperAdmin) return;
+    const suggestedPrompt = String(suggestion?.suggested_prompt ?? '').trim();
+    if (!suggestedPrompt) {
+      Alert.alert('Error', 'Suggestion is empty.');
+      return;
+    }
+
+    Alert.alert(
+      'Approve Suggestion?',
+      'This will save the suggested prompt as a NEW active prompt version.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          style: 'default',
+          onPress: async () => {
+            setReviewingSuggestionId(String(suggestion.id));
+            try {
+              const rollout = Math.max(0, Math.min(100, parseInt(aiPromptRollout || '100', 10)));
+
+              const { error: insertErr } = await supabase.from('ai_prompt_versions').insert({
+                name: 'default',
+                prompt: suggestedPrompt,
+                rollout_percent: rollout,
+                is_active: true,
+                created_by: currentUser?.id ?? null,
+              } as any);
+              if (insertErr) throw insertErr;
+
+              const { error: updErr } = await supabase
+                .from('ai_prompt_suggestions')
+                .update({
+                  status: 'approved',
+                  reviewed_at: new Date().toISOString(),
+                  reviewed_by: currentUser?.id ?? null,
+                })
+                .eq('id', suggestion.id);
+              if (updErr) throw updErr;
+
+              setAiPrompt(suggestedPrompt);
+              Alert.alert('Approved', 'New prompt version saved and suggestion marked approved.');
+              await loadPromptSuggestions();
+            } catch (e: any) {
+              Alert.alert('Error', e?.message ?? 'Failed to approve suggestion.');
+            } finally {
+              setReviewingSuggestionId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRejectSuggestion = async (suggestion: any) => {
+    if (!isSuperAdmin) return;
+    Alert.alert('Reject Suggestion?', 'This will mark the suggestion as rejected.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          setReviewingSuggestionId(String(suggestion.id));
+          try {
+            const { error } = await supabase
+              .from('ai_prompt_suggestions')
+              .update({
+                status: 'rejected',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: currentUser?.id ?? null,
+              })
+              .eq('id', suggestion.id);
+            if (error) throw error;
+            Alert.alert('Rejected', 'Suggestion marked rejected.');
+            await loadPromptSuggestions();
+          } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'Failed to reject suggestion.');
+          } finally {
+            setReviewingSuggestionId(null);
+          }
+        },
+      },
+    ]);
+  };
 
   const handleSaveOpenAIKey = async () => {
     if (!isSuperAdmin) return;
@@ -672,6 +785,77 @@ export default function AdminSettingsScreen() {
                 <Save size={18} color={colors.text.primary} />
                 <Text style={styles.secondaryButtonText}>{savingAiPrompt ? 'Saving…' : 'Save Version'}</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={[styles.section, { marginTop: 16, marginBottom: 0 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.sectionTitle}>Prompt Suggestions</Text>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, loadingSuggestions && styles.buttonDisabled]}
+                  onPress={loadPromptSuggestions}
+                  disabled={loadingSuggestions}
+                >
+                  <Text style={styles.secondaryButtonText}>{loadingSuggestions ? 'Loading…' : 'Refresh'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {promptSuggestions.length === 0 ? (
+                <Text style={{ color: colors.text.secondary, marginTop: 8 }}>
+                  No pending suggestions yet. Tap “Generate Suggestion” to create one.
+                </Text>
+              ) : (
+                <View style={{ marginTop: 12, gap: 12 }}>
+                  {promptSuggestions.map((s: any) => {
+                    const busy = reviewingSuggestionId === String(s.id);
+                    return (
+                      <View
+                        key={String(s.id)}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: colors.border.light,
+                          borderRadius: 12,
+                          padding: 12,
+                          backgroundColor: colors.background.secondary,
+                        }}
+                      >
+                        {!!s?.rationale && (
+                          <Text style={{ color: colors.text.secondary, marginBottom: 8 }}>
+                            {String(s.rationale)}
+                          </Text>
+                        )}
+
+                        <Text
+                          style={{
+                            color: colors.text.primary,
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                            lineHeight: 18,
+                          }}
+                        >
+                          {String(s.suggested_prompt ?? '')}
+                        </Text>
+
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                          <TouchableOpacity
+                            style={[styles.secondaryButton, busy && styles.buttonDisabled, { flex: 1 }]}
+                            onPress={() => handleRejectSuggestion(s)}
+                            disabled={busy}
+                          >
+                            <Text style={styles.secondaryButtonText}>{busy ? 'Working…' : 'Reject'}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.saveButton, busy && styles.buttonDisabled, { flex: 1 }]}
+                            onPress={() => handleApproveSuggestion(s)}
+                            disabled={busy}
+                          >
+                            <Text style={styles.saveButtonText}>{busy ? 'Working…' : 'Approve'}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           </View>
         </View>
