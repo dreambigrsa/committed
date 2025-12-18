@@ -816,37 +816,47 @@ async function getOpenAIResponse(
       apiKeyPrefix: apiKey.substring(0, 7) + '...',
     });
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: messages,
-        temperature: 0.8, // Slightly higher for more natural conversation while maintaining coherence
-        max_tokens: 500, // Increased to allow for thorough, thoughtful responses
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || `OpenAI API error: ${response.status}`;
-      console.error('[AI Service] OpenAI API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorMessage,
-        errorData,
+    // If we have a build-time key, call OpenAI directly; otherwise call our Supabase Edge Function
+    // so the key is never exposed and works for all users regardless of RLS.
+    let aiMessage: string | undefined;
+    if (apiKey && apiKey.trim().length > 0) {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: messages,
+          temperature: 0.8,
+          max_tokens: 500,
+        }),
       });
-      throw new Error(errorMessage);
-    }
 
-    const data = await response.json();
-    const aiMessage = data.choices[0]?.message?.content;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorMessage = data.error?.message || `OpenAI API error: ${response.status}`;
+        console.error('[AI Service] OpenAI API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+          errorData: data,
+        });
+        throw new Error(errorMessage);
+      }
+      aiMessage = data.choices?.[0]?.message?.content;
+    } else {
+      const { data, error } = await supabase.functions.invoke('openai-chat', {
+        body: { messages, temperature: 0.8, max_tokens: 500 },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'OpenAI server call failed');
+      aiMessage = data?.message;
+    }
     
     if (!aiMessage) {
-      console.error('[AI Service] No message content in OpenAI response:', data);
+      console.error('[AI Service] No message content in OpenAI response');
       throw new Error('No message content in OpenAI response');
     }
 
