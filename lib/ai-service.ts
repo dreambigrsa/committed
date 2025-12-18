@@ -725,7 +725,9 @@ export async function getAIResponse(
       return await generateDocument(userMessage, conversationHistory);
     }
 
-    // Check if OpenAI API key is configured
+    // Check if OpenAI API key is configured (build-time config).
+    // IMPORTANT: keys stored in Supabase `app_settings` are not readable by normal users due to RLS,
+    // so non-admin users will use the Supabase Edge Function instead.
     const openaiApiKey = await getOpenAIApiKeyAsync();
     
     // Log for debugging (remove in production if needed)
@@ -754,8 +756,15 @@ export async function getAIResponse(
     }
 
     if (openaiApiKey) {
-      // Use OpenAI API with learnings
-      const response = await getOpenAIResponse(userMessage, conversationHistory, openaiApiKey, userName, userUsername, userLearnings);
+      // Use OpenAI directly (build-time configured key)
+      const response = await getOpenAIResponse(
+        userMessage,
+        conversationHistory,
+        openaiApiKey,
+        userName,
+        userUsername,
+        userLearnings
+      );
       
       // Check if response contains generation commands
       if (response.message?.startsWith('GENERATE_IMAGE:')) {
@@ -769,10 +778,19 @@ export async function getAIResponse(
       }
       
       return response;
-    } else {
-      // Fallback to rule-based responses with learnings
-      return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, userLearnings);
     }
+
+    // No local key available (typical for production). Call Supabase Edge Function (server-side OpenAI).
+    const systemPrompt = buildPersonalizedSystemPrompt(userName || '', userUsername, userLearnings);
+    const fnResponse = await getOpenAIResponseViaSupabaseFunction({
+      userMessage,
+      conversationHistory,
+      systemPrompt,
+    });
+    if (fnResponse.success) return fnResponse;
+
+    // Final fallback
+    return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, userLearnings);
   } catch (error: any) {
     console.error('Error getting AI response:', error);
     return {
@@ -816,47 +834,37 @@ async function getOpenAIResponse(
       apiKeyPrefix: apiKey.substring(0, 7) + '...',
     });
 
-    // If we have a build-time key, call OpenAI directly; otherwise call our Supabase Edge Function
-    // so the key is never exposed and works for all users regardless of RLS.
-    let aiMessage: string | undefined;
-    if (apiKey && apiKey.trim().length > 0) {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: messages,
-          temperature: 0.8,
-          max_tokens: 500,
-        }),
-      });
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: messages,
+        temperature: 0.8, // Slightly higher for more natural conversation while maintaining coherence
+        max_tokens: 500, // Increased to allow for thorough, thoughtful responses
+      }),
+    });
 
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const errorMessage = data.error?.message || `OpenAI API error: ${response.status}`;
-        console.error('[AI Service] OpenAI API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorMessage,
-          errorData: data,
-        });
-        throw new Error(errorMessage);
-      }
-      aiMessage = data.choices?.[0]?.message?.content;
-    } else {
-      const { data, error } = await supabase.functions.invoke('openai-chat', {
-        body: { messages, temperature: 0.8, max_tokens: 500 },
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `OpenAI API error: ${response.status}`;
+      console.error('[AI Service] OpenAI API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorMessage,
+        errorData,
       });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'OpenAI server call failed');
-      aiMessage = data?.message;
+      throw new Error(errorMessage);
     }
+
+    const data = await response.json();
+    const aiMessage = data.choices[0]?.message?.content;
     
     if (!aiMessage) {
-      console.error('[AI Service] No message content in OpenAI response');
+      console.error('[AI Service] No message content in OpenAI response:', data);
       throw new Error('No message content in OpenAI response');
     }
 
@@ -876,6 +884,28 @@ async function getOpenAIResponse(
     // Fallback to rule-based responses if API fails
     console.warn('[AI Service] Falling back to rule-based responses');
     return getFallbackResponse(userMessage, conversationHistory, userName, userUsername, learnings);
+  }
+}
+
+async function getOpenAIResponseViaSupabaseFunction(params: {
+  userMessage: string;
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+  systemPrompt: string;
+}): Promise<AIResponse> {
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-chat', {
+      body: {
+        userMessage: params.userMessage,
+        conversationHistory: params.conversationHistory,
+        systemPrompt: params.systemPrompt,
+      },
+    });
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'AI function failed');
+    return { success: true, message: String(data.message ?? '') };
+  } catch (e: any) {
+    console.error('[AI Service] ai-chat function error:', e);
+    return { success: false, error: e?.message ?? 'AI function error' };
   }
 }
 

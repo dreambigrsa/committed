@@ -70,13 +70,15 @@ export default function AdminSettingsScreen() {
     }
     setSavingOpenaiKey(true);
     try {
-      const { data, error } = await supabase.functions.invoke('set-openai-key', {
-        body: { openaiKey: trimmed },
-      });
+      const { error } = await supabase.from('app_settings').upsert({
+        key: 'openai_api_key',
+        value: trimmed,
+        updated_by: currentUser?.id ?? null,
+        updated_at: new Date().toISOString(),
+      } as any);
       if (error) throw error;
-      if ((data as any)?.success === false) throw new Error((data as any)?.error || 'Failed to save key');
       await refreshOpenAIKeyCache();
-      Alert.alert('Saved', 'OpenAI API key saved successfully (server-side).');
+      Alert.alert('Saved', 'OpenAI API key saved successfully.');
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to save OpenAI key.');
     } finally {
@@ -93,28 +95,17 @@ export default function AdminSettingsScreen() {
     }
     setTestingOpenaiKey(true);
     try {
-      // Save then test through server-side function so we validate the full pipeline
-      const { data: saveData, error: saveErr } = await supabase.functions.invoke('set-openai-key', {
-        body: { openaiKey: trimmed },
-      });
-      if (saveErr) throw saveErr;
-      if ((saveData as any)?.success === false) throw new Error((saveData as any)?.error || 'Failed to save key');
-
-      const { data: chatData, error: chatErr } = await supabase.functions.invoke('openai-chat', {
-        body: {
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant. Reply with exactly: OK' },
-            { role: 'user', content: 'Test' },
-          ],
-          temperature: 0,
-          max_tokens: 10,
+      const res = await fetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${trimmed}`,
         },
       });
-      if (chatErr) throw chatErr;
-      if ((chatData as any)?.success === false) throw new Error((chatData as any)?.error || 'OpenAI test failed');
-
-      await refreshOpenAIKeyCache();
-      Alert.alert('Success', 'OpenAI key is saved and working (tested via server).');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error?.message || `OpenAI error: ${res.status}`);
+      }
+      Alert.alert('Success', 'OpenAI key is valid and working.');
     } catch (e: any) {
       Alert.alert('Test Failed', e?.message ?? 'OpenAI key test failed.');
     } finally {
