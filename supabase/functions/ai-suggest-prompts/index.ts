@@ -15,24 +15,26 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-function corsHeaders() {
+function corsHeaders(req?: Request) {
+  const requested = req?.headers?.get('Access-Control-Request-Headers');
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': requested || 'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin, Access-Control-Request-Headers',
   };
 }
 
-function json(status: number, payload: unknown) {
+function json(status: number, payload: unknown, req?: Request) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(req) },
   });
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
-  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { success: false, error: 'Method not allowed' }, req);
 
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -67,7 +69,18 @@ serve(async (req: Request) => {
       .filter(Boolean)
       .slice(0, 25);
 
-    // Use existing openai-chat helper to generate a suggestion using the stored OpenAI key.
+    // Read OpenAI key from app_settings (server-side).
+    const { data: keyRow, error: keyErr } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'openai_api_key')
+      .maybeSingle();
+
+    if (keyErr) return json(500, { success: false, error: keyErr.message }, req);
+    const apiKey = keyRow?.value ? String(keyRow.value).trim() : '';
+    if (!apiKey) return json(400, { success: false, error: 'OpenAI API key not configured' }, req);
+
+    // Call OpenAI directly (avoid depending on another Edge Function).
     const messages = [
       {
         role: 'system',
@@ -86,18 +99,34 @@ serve(async (req: Request) => {
       },
     ];
 
-    const { data: openaiData, error: openaiErr } = await supabaseAdmin.functions.invoke('openai-chat', {
-      body: { messages, temperature: 0.3, max_tokens: 900 },
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages,
+        temperature: 0.3,
+        max_tokens: 900,
+      }),
     });
 
-    if (openaiErr || !openaiData?.success) {
-      return json(502, {
-        success: false,
-        error: openaiData?.error || openaiErr?.message || 'Failed to generate suggestion via openai-chat',
-      });
+    const openaiJson = await openaiRes.json().catch(() => ({}));
+    if (!openaiRes.ok) {
+      return json(
+        502,
+        {
+          success: false,
+          error: openaiJson?.error?.message || `OpenAI error: ${openaiRes.status}`,
+          details: openaiJson,
+        },
+        req
+      );
     }
 
-    const suggestedPrompt = String(openaiData.message ?? '').trim();
+    const suggestedPrompt = String(openaiJson?.choices?.[0]?.message?.content ?? '').trim();
     if (!suggestedPrompt) return json(502, { success: false, error: 'Empty suggestion from OpenAI' });
 
     const { error: insertErr } = await supabaseAdmin.from('ai_prompt_suggestions').insert({
@@ -109,12 +138,12 @@ serve(async (req: Request) => {
       created_at: new Date().toISOString(),
     });
 
-    if (insertErr) return json(500, { success: false, error: insertErr.message });
+    if (insertErr) return json(500, { success: false, error: insertErr.message }, req);
 
-    return json(200, { success: true, suggestedPrompt });
+    return json(200, { success: true, suggestedPrompt }, req);
   } catch (e: any) {
     console.error('ai-suggest-prompts fatal:', e);
-    return json(500, { success: false, error: e?.message ?? 'Internal server error' });
+    return json(500, { success: false, error: e?.message ?? 'Internal server error' }, req);
   }
 });
 
