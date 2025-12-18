@@ -58,12 +58,43 @@ serve(async (req: Request) => {
       }
     }
 
-    const { userId, title, body, data }: SendPushBody = await req.json();
+    const rawBody: any = await req.json().catch(() => ({}));
+    const userId = String(rawBody?.userId ?? rawBody?.user_id ?? '').trim();
+    const title = String(rawBody?.title ?? '').trim();
+    const body = String(rawBody?.body ?? rawBody?.message ?? '').trim();
+    const data = rawBody?.data;
+
     if (!userId || !title || !body) {
-      return json(400, { success: false, error: 'Missing required fields: userId, title, body' });
+      return json(400, {
+        success: false,
+        error: 'Missing required fields: userId, title, body',
+        received: {
+          hasUserId: !!userId,
+          hasTitle: !!title,
+          hasBody: !!body,
+          keys: rawBody && typeof rawBody === 'object' ? Object.keys(rawBody) : [],
+        },
+        hint: 'Send JSON: { "userId": "...", "title": "...", "body": "..." } (or user_id/message aliases).',
+      });
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Read user notification preferences (optional; defaults to sound enabled).
+    let soundEnabled = true;
+    try {
+      const { data: settingsRow } = await supabaseAdmin
+        .from('user_settings')
+        .select('notification_settings')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const raw = (settingsRow as any)?.notification_settings?.soundEnabled;
+      if (typeof raw === 'boolean') soundEnabled = raw;
+      else if (typeof raw === 'string') soundEnabled = raw.toLowerCase() === 'true';
+      else if (raw === false || raw === 'false') soundEnabled = false;
+    } catch {
+      // ignore - keep defaults
+    }
 
     const { data: tokens, error: tokenErr } = await supabaseAdmin
       .from('push_notification_tokens')
@@ -86,7 +117,10 @@ serve(async (req: Request) => {
       title,
       body,
       data: data ?? {},
-      sound: 'default',
+      sound: soundEnabled ? 'default' : undefined,
+      // Android: select a channel that matches user sound preference.
+      // (The app creates both channels at startup; see lib/push-notifications.ts)
+      channelId: soundEnabled ? 'default' : 'default-silent',
     }));
 
     const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
