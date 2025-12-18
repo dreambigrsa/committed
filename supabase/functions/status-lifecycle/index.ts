@@ -9,6 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const STATUS_LIFECYCLE_SECRET = Deno.env.get('STATUS_LIFECYCLE_SECRET') ?? null;
 
 serve(async (req: Request) => {
   try {
@@ -21,6 +22,20 @@ serve(async (req: Request) => {
           'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
         },
       });
+    }
+
+    // Optional hardening: require secret header if configured.
+    if (STATUS_LIFECYCLE_SECRET) {
+      const provided = req.headers.get('x-status-lifecycle-secret');
+      if (!provided || provided !== STATUS_LIFECYCLE_SECRET) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
     }
 
     // Create admin client
