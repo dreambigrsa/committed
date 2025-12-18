@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { protectedProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const createMilestoneProcedure = protectedProcedure
   .input(
@@ -21,6 +21,9 @@ export const createMilestoneProcedure = protectedProcedure
     })
   )
   .mutation(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { relationshipId, title, description, date, category } = input;
     const userId = ctx.user.id;
 

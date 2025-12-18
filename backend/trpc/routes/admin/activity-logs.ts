@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { adminProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const getActivityLogsProcedure = adminProcedure
   .input(
@@ -12,7 +12,10 @@ export const getActivityLogsProcedure = adminProcedure
       resourceType: z.string().optional(),
     })
   )
-  .query(async ({ input }) => {
+  .query(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { limit, offset, userId, action, resourceType } = input;
 
     let query = supabase

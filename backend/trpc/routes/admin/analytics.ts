@@ -1,7 +1,10 @@
 import { adminProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
-export const getAnalyticsProcedure = adminProcedure.query(async () => {
+export const getAnalyticsProcedure = adminProcedure.query(async ({ ctx }) => {
+  const authHeader = ctx.req.headers.get('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  const supabase = getSupabaseAuthedClient(token);
   const { count: totalUsers } = await supabase
     .from('users')
     .select('*', { count: 'exact', head: true });

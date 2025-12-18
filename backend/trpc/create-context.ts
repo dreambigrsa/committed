@@ -1,7 +1,7 @@
 import { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdminlessClient, getSupabaseAuthedClient } from "@/backend/supabase";
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   const authHeader = opts.req.headers.get("authorization");
@@ -9,10 +9,12 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
   let user = null;
   if (authHeader) {
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: authUser } } = await supabase.auth.getUser(token);
+    const supabaseAdminless = getSupabaseAdminlessClient();
+    const { data: { user: authUser } } = await supabaseAdminless.auth.getUser(token);
     
     if (authUser) {
-      const { data: userData } = await supabase
+      const supabaseAuthed = getSupabaseAuthedClient(token);
+      const { data: userData } = await supabaseAuthed
         .from("users")
         .select("*")
         .eq("id", authUser.id)

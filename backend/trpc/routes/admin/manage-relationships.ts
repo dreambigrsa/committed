@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { adminProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const getAllRelationshipsProcedure = adminProcedure
   .input(
@@ -10,7 +10,10 @@ export const getAllRelationshipsProcedure = adminProcedure
       status: z.enum(['pending', 'verified', 'ended']).optional(),
     })
   )
-  .query(async ({ input }) => {
+  .query(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { limit, offset, status } = input;
 
     let query = supabase
@@ -50,7 +53,10 @@ export const updateRelationshipProcedure = adminProcedure
         .optional(),
     })
   )
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { relationshipId, status, privacyLevel } = input;
 
     const updates: any = {};
@@ -75,7 +81,10 @@ export const deleteRelationshipProcedure = adminProcedure
       relationshipId: z.string(),
     })
   )
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { relationshipId } = input;
 
     const { error } = await supabase

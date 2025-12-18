@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { protectedProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const confirmEndRelationshipProcedure = protectedProcedure
   .input(
@@ -9,6 +9,9 @@ export const confirmEndRelationshipProcedure = protectedProcedure
     })
   )
   .mutation(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { disputeId } = input;
     const userId = ctx.user.id;
 

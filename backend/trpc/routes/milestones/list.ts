@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { protectedProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const listMilestonesProcedure = protectedProcedure
   .input(
@@ -9,6 +9,9 @@ export const listMilestonesProcedure = protectedProcedure
     })
   )
   .query(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { relationshipId } = input;
     const userId = ctx.user.id;
 

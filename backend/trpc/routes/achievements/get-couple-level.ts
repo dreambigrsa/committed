@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { protectedProcedure } from '../../create-context';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAuthedClient } from '@/backend/supabase';
 
 export const getCoupleLevelProcedure = protectedProcedure
   .input(
@@ -8,7 +8,10 @@ export const getCoupleLevelProcedure = protectedProcedure
       relationshipId: z.string(),
     })
   )
-  .query(async ({ input }) => {
+  .query(async ({ input, ctx }) => {
+    const authHeader = ctx.req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const supabase = getSupabaseAuthedClient(token);
     const { relationshipId } = input;
 
     const { data: relationship } = await supabase
