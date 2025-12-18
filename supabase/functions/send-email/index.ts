@@ -17,6 +17,21 @@ interface RequestBody {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+function json(status: number, payload: unknown) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+  });
+}
+
 async function getAppSetting(supabaseAdmin: any, key: string): Promise<string> {
   const { data } = await supabaseAdmin.from('app_settings').select('value').eq('key', key).maybeSingle();
   return data?.value ? String(data.value).trim() : '';
@@ -26,13 +41,7 @@ serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
-      return new Response('ok', {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST',
-          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        },
-      });
+      return new Response('ok', { headers: corsHeaders() });
     }
 
     const { email, code }: RequestBody = await req.json();
@@ -54,16 +63,10 @@ serve(async (req: Request) => {
       'Committed';
 
     if (!email || !code || !apiKey || !fromEmail) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Missing required parameters. Provide email + code, and configure Resend in Admin Settings (or set RESEND_* as Edge Function secrets).',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
-      );
+      return json(400, {
+        success: false,
+        error: 'Missing required parameters. Provide email + code, and configure Resend in Admin Settings (or set RESEND_* as Edge Function secrets).',
+      });
     }
 
     // Send Email via Resend
@@ -113,31 +116,13 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error('Resend error:', data);
-      return new Response(
-        JSON.stringify({ success: false, error: data.message || 'Failed to send email' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
-      );
+      return json(500, { success: false, error: data.message || 'Failed to send email' });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, emailId: data.id }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      }
-    );
+    return json(200, { success: true, emailId: data.id });
   } catch (error: any) {
     console.error('Error sending email:', error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message || 'Internal server error' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      }
-    );
+    return json(500, { success: false, error: error.message || 'Internal server error' });
   }
 });
 

@@ -17,6 +17,21 @@ interface RequestBody {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+function json(status: number, payload: unknown) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+  });
+}
+
 async function getAppSetting(supabaseAdmin: any, key: string): Promise<string> {
   const { data } = await supabaseAdmin.from('app_settings').select('value').eq('key', key).maybeSingle();
   return data?.value ? String(data.value).trim() : '';
@@ -26,13 +41,7 @@ serve(async (req: Request) => {
   try {
     // CORS headers
     if (req.method === 'OPTIONS') {
-      return new Response('ok', {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST',
-          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        },
-      });
+      return new Response('ok', { headers: corsHeaders() });
     }
 
     const { phoneNumber, code }: RequestBody = await req.json();
@@ -54,17 +63,11 @@ serve(async (req: Request) => {
       '';
 
     if (!phoneNumber || !code || !accountSid || !authToken || !fromNumber) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error:
-            'Missing required parameters. Provide phoneNumber + code, and configure Twilio in Admin Settings (or set TWILIO_* as Edge Function secrets).',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
-      );
+      return json(400, {
+        success: false,
+        error:
+          'Missing required parameters. Provide phoneNumber + code, and configure Twilio in Admin Settings (or set TWILIO_* as Edge Function secrets).',
+      });
     }
 
     // Send SMS via Twilio
@@ -89,31 +92,13 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error('Twilio error:', data);
-      return new Response(
-        JSON.stringify({ success: false, error: data.message || 'Failed to send SMS' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
-      );
+      return json(500, { success: false, error: data.message || 'Failed to send SMS' });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, messageSid: data.sid }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      }
-    );
+    return json(200, { success: true, messageSid: data.sid });
   } catch (error: any) {
     console.error('Error sending SMS:', error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message || 'Internal server error' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      }
-    );
+    return json(500, { success: false, error: error.message || 'Internal server error' });
   }
 });
 
