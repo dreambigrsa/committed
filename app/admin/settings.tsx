@@ -48,6 +48,8 @@ export default function AdminSettingsScreen() {
   const [resendFromName, setResendFromName] = useState('Committed');
   const [providersLoaded, setProvidersLoaded] = useState(false);
   const [savingProviders, setSavingProviders] = useState(false);
+  const [testingSms, setTestingSms] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
 
   // AI prompt management
   const [aiPrompt, setAiPrompt] = useState('');
@@ -196,21 +198,76 @@ export default function AdminSettingsScreen() {
     }
     setTestingOpenaiKey(true);
     try {
-      const res = await fetch('https://api.openai.com/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${trimmed}`,
+      // Save the key first so we test the same path production uses (Edge Function reads app_settings)
+      const { error: upsertErr } = await supabase.from('app_settings').upsert({
+        key: 'openai_api_key',
+        value: trimmed,
+        updated_by: currentUser?.id ?? null,
+        updated_at: new Date().toISOString(),
+      } as any);
+      if (upsertErr) throw upsertErr;
+
+      // Test via server-side Edge Function (no direct OpenAI calls from the client)
+      const { data, error } = await supabase.functions.invoke('openai-chat', {
+        body: {
+          messages: [{ role: 'user', content: 'Say: OK' }],
+          temperature: 0,
+          max_tokens: 10,
         },
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error?.message || `OpenAI error: ${res.status}`);
-      }
-      Alert.alert('Success', 'OpenAI key is valid and working.');
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'OpenAI test failed');
+      Alert.alert('Success', 'OpenAI key is valid and working (server-side).');
     } catch (e: any) {
       Alert.alert('Test Failed', e?.message ?? 'OpenAI key test failed.');
     } finally {
       setTestingOpenaiKey(false);
+    }
+  };
+
+  const handleTestSms = async () => {
+    if (!isSuperAdmin) return;
+    const to = (currentUser as any)?.phone_number || (currentUser as any)?.phoneNumber || '';
+    if (!to) {
+      Alert.alert('Missing Phone', 'Your admin account has no phone number. Add one to your profile first.');
+      return;
+    }
+    setTestingSms(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const { data, error } = await supabase.functions.invoke('send-sms', {
+        body: { phoneNumber: to, code },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'SMS test failed');
+      Alert.alert('Sent', `Test SMS sent to ${to}.`);
+    } catch (e: any) {
+      Alert.alert('SMS Test Failed', e?.message ?? 'Failed to send test SMS.');
+    } finally {
+      setTestingSms(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!isSuperAdmin) return;
+    const to = (currentUser as any)?.email || '';
+    if (!to) {
+      Alert.alert('Missing Email', 'Your admin account has no email.');
+      return;
+    }
+    setTestingEmail(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: { email: to, code },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Email test failed');
+      Alert.alert('Sent', `Test email sent to ${to}.`);
+    } catch (e: any) {
+      Alert.alert('Email Test Failed', e?.message ?? 'Failed to send test email.');
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -282,7 +339,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>General</Text>
           
-          <View style={styles.settingItem}>
+          <View style={[styles.settingItem, { borderTopWidth: 0, paddingTop: 0 }]}>
             <View style={styles.settingInfo}>
               <Text style={styles.settingLabel}>App Name</Text>
               <Text style={styles.settingDescription}>Display name of the application</Text>
@@ -351,7 +408,7 @@ export default function AdminSettingsScreen() {
                 disabled={savingOpenaiKey || testingOpenaiKey}
               >
                 <TestTubeDiagonal size={18} color={colors.text.primary} />
-                <Text style={styles.secondaryButtonText}>{testingOpenaiKey ? 'Testing…' : 'Test Key'}</Text>
+              <Text style={styles.secondaryButtonText}>{testingOpenaiKey ? 'Testing…' : 'Test (Server)'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -378,7 +435,7 @@ export default function AdminSettingsScreen() {
             </View>
 
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={twilioAccountSid}
               onChangeText={setTwilioAccountSid}
               placeholder="TWILIO_ACCOUNT_SID"
@@ -387,7 +444,7 @@ export default function AdminSettingsScreen() {
               autoCorrect={false}
             />
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={twilioAuthToken}
               onChangeText={setTwilioAuthToken}
               placeholder="TWILIO_AUTH_TOKEN"
@@ -397,7 +454,7 @@ export default function AdminSettingsScreen() {
               autoCorrect={false}
             />
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={twilioFromNumber}
               onChangeText={setTwilioFromNumber}
               placeholder="TWILIO_FROM_NUMBER (e.g. +1234567890)"
@@ -416,7 +473,7 @@ export default function AdminSettingsScreen() {
             </View>
 
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={resendApiKey}
               onChangeText={setResendApiKey}
               placeholder="RESEND_API_KEY"
@@ -426,7 +483,7 @@ export default function AdminSettingsScreen() {
               autoCorrect={false}
             />
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={resendFromEmail}
               onChangeText={setResendFromEmail}
               placeholder="From email (e.g. no-reply@yourdomain.com)"
@@ -435,7 +492,7 @@ export default function AdminSettingsScreen() {
               autoCorrect={false}
             />
             <TextInput
-              style={styles.textInput}
+              style={styles.fullWidthInput}
               value={resendFromName}
               onChangeText={setResendFromName}
               placeholder="From name (e.g. Committed)"
@@ -451,6 +508,24 @@ export default function AdminSettingsScreen() {
             >
               <Save size={18} color={colors.text.primary} />
               <Text style={styles.secondaryButtonText}>{savingProviders ? 'Saving…' : 'Save Providers'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryButton, (testingSms || savingProviders) && styles.buttonDisabled]}
+              onPress={handleTestSms}
+              disabled={testingSms || savingProviders}
+            >
+              <TestTubeDiagonal size={18} color={colors.text.primary} />
+              <Text style={styles.secondaryButtonText}>{testingSms ? 'Testing…' : 'Test SMS'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryButton, (testingEmail || savingProviders) && styles.buttonDisabled]}
+              onPress={handleTestEmail}
+              disabled={testingEmail || savingProviders}
+            >
+              <TestTubeDiagonal size={18} color={colors.text.primary} />
+              <Text style={styles.secondaryButtonText}>{testingEmail ? 'Testing…' : 'Test Email'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -694,28 +769,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   section: {
+    marginHorizontal: 16,
+    marginTop: 16,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    backgroundColor: colors.background.primary,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text.primary,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
   },
   settingItemColumn: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    paddingTop: 12,
   },
   settingInfo: {
     flex: 1,
@@ -742,6 +819,18 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     borderWidth: 1,
     borderColor: colors.border.light,
+  },
+  fullWidthInput: {
+    width: '100%',
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    marginTop: 10,
   },
   numberInput: {
     width: 80,
@@ -774,6 +863,7 @@ const styles = StyleSheet.create({
   },
   openaiActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginTop: 12,
   },
