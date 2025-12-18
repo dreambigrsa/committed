@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Session, RealtimeChannel } from '@supabase/supabase-js';
 import { checkUserLegalAcceptances } from '@/lib/legal-enforcement';
 import { registerForPushNotificationsAsync, showLocalNotification } from '@/lib/push-notifications';
+import { setNotificationPreferences } from '@/lib/notification-preferences';
 
 export const [AppContext, useApp] = createContextHook(() => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -153,6 +154,9 @@ export const [AppContext, useApp] = createContextHook(() => {
           createdAt: userData.created_at,
         };
         setCurrentUser(user);
+
+        // Load notification prefs early so foreground notifications respect sound settings.
+        hydrateNotificationPreferences(user.id).catch(() => {});
 
         // Register for OS-level notifications and store the Expo push token for backend delivery.
         // (No-op on simulators/emulators.)
@@ -1042,6 +1046,29 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Error checking notification preference:', error);
       // Default to enabled on error
       return true;
+    }
+  }, []);
+
+  const hydrateNotificationPreferences = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('notification_settings')
+        .eq('user_id', userId)
+        .single();
+      if (error || !data?.notification_settings) return;
+
+      const soundEnabledRaw = (data.notification_settings as any)?.soundEnabled;
+      const soundEnabled =
+        typeof soundEnabledRaw === 'boolean'
+          ? soundEnabledRaw
+          : typeof soundEnabledRaw === 'string'
+            ? soundEnabledRaw.toLowerCase() === 'true'
+            : soundEnabledRaw !== false && soundEnabledRaw !== 'false' && soundEnabledRaw != null;
+
+      setNotificationPreferences({ soundEnabled });
+    } catch {
+      // ignore
     }
   }, []);
 

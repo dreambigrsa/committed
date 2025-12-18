@@ -53,6 +53,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { LegalDocument, UserStatusType, StatusVisibility } from '@/types';
 import StatusIndicator from '@/components/StatusIndicator';
 import StatusBadge from '@/components/StatusBadge';
+import { configureAndroidNotificationChannel } from '@/lib/push-notifications';
+import { setNotificationPreferences } from '@/lib/notification-preferences';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -88,6 +90,7 @@ export default function SettingsScreen() {
     verificationAttempts: true,
     anniversaryReminders: true,
     marketingPromotions: false,
+    soundEnabled: true,
   });
 
   // Privacy & Security
@@ -214,8 +217,13 @@ export default function SettingsScreen() {
               settings.notification_settings.marketingPromotions ?? settings.notification_settings.partnerActivity,
               false
             ),
+            soundEnabled: toBoolean(settings.notification_settings.soundEnabled, true),
           };
           setNotifications(normalizedSettings);
+
+          // Keep in-memory preferences in sync for foreground sound + local notifications.
+          setNotificationPreferences({ soundEnabled: normalizedSettings.soundEnabled });
+          await configureAndroidNotificationChannel({ soundEnabled: normalizedSettings.soundEnabled });
         }
         if (settings.privacy_settings) {
           setPrivacy(settings.privacy_settings);
@@ -457,6 +465,11 @@ export default function SettingsScreen() {
       ...prev,
       [key]: newValue,
     }));
+
+    if (key === 'soundEnabled') {
+      setNotificationPreferences({ soundEnabled: newValue });
+      await configureAndroidNotificationChannel({ soundEnabled: newValue });
+    }
 
     await saveNotificationSettings({ ...notifications, [key]: newValue });
   };
@@ -1221,6 +1234,22 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.settingsList}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <Bell size={20} color={colors.text.secondary} />
+                  <Text style={styles.settingLabel}>Notification Sound</Text>
+                </View>
+                <Switch
+                  value={notifications.soundEnabled}
+                  onValueChange={() => handleToggleNotification('soundEnabled')}
+                  trackColor={{
+                    false: colors.border.light,
+                    true: colors.primary + '50',
+                  }}
+                  thumbColor={notifications.soundEnabled ? colors.primary : colors.text.tertiary}
+                />
+              </View>
+
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <Heart size={20} color={colors.text.secondary} />
