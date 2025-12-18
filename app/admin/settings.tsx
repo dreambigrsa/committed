@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Settings as SettingsIcon, Save, Shield, KeyRound, TestTubeDiagonal } from 'lucide-react-native';
+import { Settings as SettingsIcon, Save, Shield, KeyRound, TestTubeDiagonal, Sparkles } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
@@ -39,6 +39,13 @@ export default function AdminSettingsScreen() {
   const [savingOpenaiKey, setSavingOpenaiKey] = useState(false);
   const [testingOpenaiKey, setTestingOpenaiKey] = useState(false);
 
+  // AI prompt management
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiPromptLoaded, setAiPromptLoaded] = useState(false);
+  const [aiPromptRollout, setAiPromptRollout] = useState('100');
+  const [savingAiPrompt, setSavingAiPrompt] = useState(false);
+  const [generatingSuggestion, setGeneratingSuggestion] = useState(false);
+
   const handleSaveSettings = () => {
     Alert.alert('Success', 'Settings saved successfully');
   };
@@ -60,6 +67,27 @@ export default function AdminSettingsScreen() {
       }
     })();
   }, [isSuperAdmin, openaiKeyLoaded]);
+
+  useEffect(() => {
+    if (!isSuperAdmin || aiPromptLoaded) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('ai_prompt_versions')
+          .select('prompt, rollout_percent')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const v = data?.[0];
+        if (v?.prompt) setAiPrompt(String(v.prompt));
+        if (typeof v?.rollout_percent === 'number') setAiPromptRollout(String(v.rollout_percent));
+      } catch {
+        // ignore
+      } finally {
+        setAiPromptLoaded(true);
+      }
+    })();
+  }, [isSuperAdmin, aiPromptLoaded]);
 
   const handleSaveOpenAIKey = async () => {
     if (!isSuperAdmin) return;
@@ -110,6 +138,47 @@ export default function AdminSettingsScreen() {
       Alert.alert('Test Failed', e?.message ?? 'OpenAI key test failed.');
     } finally {
       setTestingOpenaiKey(false);
+    }
+  };
+
+  const handleSaveAiPrompt = async () => {
+    if (!isSuperAdmin) return;
+    const promptText = aiPrompt.trim();
+    const rollout = Math.max(0, Math.min(100, parseInt(aiPromptRollout || '100', 10)));
+    if (!promptText) {
+      Alert.alert('Missing Prompt', 'Please enter the AI system prompt.');
+      return;
+    }
+    setSavingAiPrompt(true);
+    try {
+      const { error } = await supabase.from('ai_prompt_versions').insert({
+        name: 'default',
+        prompt: promptText,
+        rollout_percent: rollout,
+        is_active: true,
+        created_by: currentUser?.id ?? null,
+      } as any);
+      if (error) throw error;
+      Alert.alert('Saved', 'New AI prompt version saved.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save AI prompt.');
+    } finally {
+      setSavingAiPrompt(false);
+    }
+  };
+
+  const handleGeneratePromptSuggestion = async () => {
+    if (!isSuperAdmin) return;
+    setGeneratingSuggestion(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-suggest-prompts', { body: {} });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Suggestion failed');
+      Alert.alert('Suggestion created', 'A new prompt suggestion is saved for review in the database.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to generate suggestion.');
+    } finally {
+      setGeneratingSuggestion(false);
     }
   };
 
@@ -219,6 +288,64 @@ export default function AdminSettingsScreen() {
               >
                 <Save size={18} color={colors.text.primary} />
                 <Text style={styles.secondaryButtonText}>{savingOpenaiKey ? 'Saving…' : 'Save Key'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Committed AI</Text>
+
+          <View style={styles.settingItemColumn}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>System Prompt</Text>
+              <Text style={styles.settingDescription}>
+                This controls how Committed AI talks, helps users, and troubleshoots the app. New versions can roll out gradually.
+              </Text>
+            </View>
+
+            <TextInput
+              style={styles.promptInput}
+              value={aiPrompt}
+              onChangeText={setAiPrompt}
+              placeholder="Enter the AI system prompt..."
+              placeholderTextColor={colors.text.tertiary}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>Rollout (%)</Text>
+                <Text style={styles.settingDescription}>Percent of users who get this new prompt version</Text>
+              </View>
+              <TextInput
+                style={styles.numberInput}
+                value={aiPromptRollout}
+                onChangeText={setAiPromptRollout}
+                keyboardType="number-pad"
+              />
+            </View>
+
+            <View style={styles.openaiActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, (savingAiPrompt || generatingSuggestion) && styles.buttonDisabled]}
+                onPress={handleGeneratePromptSuggestion}
+                disabled={savingAiPrompt || generatingSuggestion}
+              >
+                <Sparkles size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>
+                  {generatingSuggestion ? 'Generating…' : 'Generate Suggestion'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, (savingAiPrompt || generatingSuggestion) && styles.buttonDisabled]}
+                onPress={handleSaveAiPrompt}
+                disabled={savingAiPrompt || generatingSuggestion}
+              >
+                <Save size={18} color={colors.text.primary} />
+                <Text style={styles.secondaryButtonText}>{savingAiPrompt ? 'Saving…' : 'Save Version'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -487,6 +614,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 12,
+  },
+  promptInput: {
+    marginTop: 12,
+    minHeight: 160,
+    backgroundColor: colors.background.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   secondaryButton: {
     flexDirection: 'row',

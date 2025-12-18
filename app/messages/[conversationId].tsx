@@ -177,6 +177,8 @@ export default function ConversationDetailScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  const [aiUserId, setAiUserId] = useState<string | null>(null);
+  const [aiFeedback, setAiFeedback] = useState<Record<string, 1 | -1>>({});
   const conversation = getConversation(conversationId);
   const recordedImpressions = useRef<Set<string>>(new Set());
   
@@ -188,6 +190,35 @@ export default function ConversationDetailScreen() {
   useEffect(() => {
     recordedImpressions.current.clear();
   }, [smartAds]);
+
+  useEffect(() => {
+    // Cache AI user id so we can show feedback UI on AI messages
+    (async () => {
+      try {
+        const aiUser = await getOrCreateAIUser();
+        if (aiUser?.id) setAiUserId(aiUser.id);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const submitAiFeedback = async (messageId: string, rating: 1 | -1) => {
+    if (!currentUser || !conversationId) return;
+    try {
+      setAiFeedback(prev => ({ ...prev, [String(messageId)]: rating }));
+      await supabase.from('ai_message_feedback').upsert({
+        user_id: currentUser.id,
+        conversation_id: conversationId,
+        message_id: String(messageId),
+        rating,
+        created_at: new Date().toISOString(),
+      } as any);
+    } catch (e) {
+      // Non-fatal
+      console.error('Failed to submit AI feedback:', e);
+    }
+  };
 
   // Keyboard listeners
   useEffect(() => {
@@ -1507,6 +1538,30 @@ export default function ConversationDetailScreen() {
             </Text>
           ) : null}
 
+          {/* AI feedback (thumbs up/down) */}
+          {!isMe && aiUserId && item.senderId === aiUserId && item.messageType === 'text' ? (
+            <View style={styles.aiFeedbackRow}>
+              <TouchableOpacity
+                onPress={() => submitAiFeedback(item.id, 1)}
+                style={[
+                  styles.aiFeedbackButton,
+                  aiFeedback[String(item.id)] === 1 && styles.aiFeedbackSelected,
+                ]}
+              >
+                <Text style={styles.aiFeedbackText}>👍</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => submitAiFeedback(item.id, -1)}
+                style={[
+                  styles.aiFeedbackButton,
+                  aiFeedback[String(item.id)] === -1 && styles.aiFeedbackSelected,
+                ]}
+              >
+                <Text style={styles.aiFeedbackText}>👎</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
               {messageTime}
@@ -2190,6 +2245,23 @@ const styles = StyleSheet.create({
   },
   deleteMessageButton: {
     padding: 2,
+  },
+  aiFeedbackRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  aiFeedbackButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  aiFeedbackSelected: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  aiFeedbackText: {
+    fontSize: 14,
   },
   myMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',
