@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Image } from 'expo-image';
@@ -26,7 +27,7 @@ interface IdVerificationRequest {
   reviewed_by?: string;
   reviewed_at?: string;
   rejection_reason?: string;
-  submitted_at?: string; // verification_documents uses submitted_at instead of created_at
+  submitted_at?: string; // verification_documents uses submitted_at
   created_at?: string; // Fallback for compatibility
   user?: {
     full_name: string;
@@ -41,6 +42,8 @@ export default function IdVerificationsScreen() {
   const [selectedRequest, setSelectedRequest] = useState<IdVerificationRequest | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
 
   useEffect(() => {
     loadRequests();
@@ -110,7 +113,7 @@ export default function IdVerificationsScreen() {
       if (error?.code === 'PGRST205' || errorMessage.includes('Could not find the table')) {
         Alert.alert(
           'Table Not Found',
-          'The id_verification_requests table does not exist.\n\nPlease run the database migration:\n\n1. Go to Supabase SQL Editor\n2. Run: migrations/add-verification-services.sql\n\nOr run PRODUCTION-COMPLETE.sql if you haven\'t already.',
+          'The verification_documents table does not exist.\n\nPlease run the database migration:\n\n1. Go to Supabase SQL Editor\n2. Run supabase-schema.sql or complete-database-setup.sql if you haven\'t already.',
           [{ text: 'OK' }]
         );
       } else {
@@ -133,16 +136,20 @@ export default function IdVerificationsScreen() {
             setReviewing(true);
             try {
                // Update verification request
-               const { error: updateError } = await supabase
+               const { error: updateError, data: updateData } = await supabase
                  .from('verification_documents')
                  .update({
                    status: 'approved',
                    reviewed_by: currentUser?.id,
                    reviewed_at: new Date().toISOString(),
                  })
-                 .eq('id', requestId);
+                 .eq('id', requestId)
+                 .select();
 
-              if (updateError) throw updateError;
+              if (updateError) {
+                console.error('Update error:', updateError);
+                throw new Error(updateError.message || 'Failed to update verification document');
+              }
 
               // Get the request to find user_id
               const request = requests.find((r) => r.id === requestId);
@@ -153,16 +160,20 @@ export default function IdVerificationsScreen() {
                   .update({ id_verified: true })
                   .eq('id', request.user_id);
 
-                if (userError) throw userError;
+                if (userError) {
+                  console.error('User update error:', userError);
+                  throw new Error(userError.message || 'Failed to update user verification status');
+                }
               }
 
               Alert.alert('Success', 'ID verification approved');
               setShowModal(false);
               setSelectedRequest(null);
               loadRequests();
-            } catch (error) {
+            } catch (error: any) {
               console.error('Failed to approve:', error);
-              Alert.alert('Error', 'Failed to approve verification');
+              const errorMessage = error?.message || error?.toString() || 'Failed to approve verification';
+              Alert.alert('Error', errorMessage);
             } finally {
               setReviewing(false);
             }
@@ -173,6 +184,11 @@ export default function IdVerificationsScreen() {
   };
 
   const rejectRequest = async (requestId: string, reason: string) => {
+    if (!reason || !reason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for rejection');
+      return;
+    }
+
     setReviewing(true);
     try {
       // Update verification request
@@ -182,49 +198,45 @@ export default function IdVerificationsScreen() {
           status: 'rejected',
           reviewed_by: currentUser?.id,
           reviewed_at: new Date().toISOString(),
-          rejection_reason: reason,
+          rejection_reason: reason.trim(),
         })
         .eq('id', requestId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw new Error(updateError.message || 'Failed to update verification document');
+      }
 
       Alert.alert('Success', 'ID verification rejected');
       setShowModal(false);
+      setShowRejectModal(false);
       setSelectedRequest(null);
+      setRejectionReason('');
       loadRequests();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to reject:', error);
-      Alert.alert('Error', 'Failed to reject verification');
+      const errorMessage = error?.message || error?.toString() || 'Failed to reject verification';
+      Alert.alert('Error', errorMessage);
     } finally {
       setReviewing(false);
     }
   };
 
   const handleReject = (requestId: string) => {
-    Alert.prompt(
-      'Reject Verification',
-      'Please provide a reason for rejection:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: (reason: string | undefined) => {
-            if (reason && reason.trim()) {
-              rejectRequest(requestId, reason.trim());
-            } else {
-              Alert.alert('Error', 'Please provide a reason');
-            }
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setShowRejectModal(true);
+  };
+
+  const handleConfirmReject = () => {
+    if (selectedRequest) {
+      rejectRequest(selectedRequest.id, rejectionReason);
+    }
   };
 
   const openRequest = (request: IdVerificationRequest) => {
     setSelectedRequest(request);
     setShowModal(true);
+    setRejectionReason('');
+    setShowRejectModal(false);
   };
 
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin')) {
@@ -430,7 +442,7 @@ export default function IdVerificationsScreen() {
                 <TouchableOpacity
                   style={[styles.actionButton, styles.rejectButton]}
                   onPress={() => handleReject(selectedRequest.id)}
-                  disabled={reviewing}
+                  disabled={reviewing || selectedRequest.status !== 'pending'}
                 >
                   <XCircle size={20} color={colors.text.white} />
                   <Text style={styles.actionButtonText}>Reject</Text>
@@ -439,7 +451,7 @@ export default function IdVerificationsScreen() {
                 <TouchableOpacity
                   style={[styles.actionButton, styles.approveButton]}
                   onPress={() => approveRequest(selectedRequest.id)}
-                  disabled={reviewing}
+                  disabled={reviewing || selectedRequest.status !== 'pending'}
                 >
                   {reviewing ? (
                     <ActivityIndicator size="small" color={colors.text.white} />
@@ -453,6 +465,89 @@ export default function IdVerificationsScreen() {
               </View>
             </ScrollView>
           )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Reject Reason Modal */}
+      <Modal
+        visible={showRejectModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (!reviewing) {
+            setShowRejectModal(false);
+            setRejectionReason('');
+          }
+        }}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                if (!reviewing) {
+                  setShowRejectModal(false);
+                  setRejectionReason('');
+                }
+              }}
+              disabled={reviewing}
+            >
+              <ArrowLeft size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Reject Verification</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Rejection Reason</Text>
+              <Text style={styles.modalText}>
+                Please provide a reason for rejecting this ID verification. This will be shown to the user.
+              </Text>
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Enter rejection reason..."
+                placeholderTextColor={colors.text.tertiary}
+                value={rejectionReason}
+                onChangeText={setRejectionReason}
+                multiline
+                numberOfLines={6}
+                textAlignVertical="top"
+                editable={!reviewing}
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowRejectModal(false);
+                  setRejectionReason('');
+                }}
+                disabled={reviewing}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.rejectButton,
+                  (!rejectionReason.trim() || reviewing) && styles.actionButtonDisabled,
+                ]}
+                onPress={handleConfirmReject}
+                disabled={!rejectionReason.trim() || reviewing}
+              >
+                {reviewing ? (
+                  <ActivityIndicator size="small" color={colors.text.white} />
+                ) : (
+                  <>
+                    <XCircle size={20} color={colors.text.white} />
+                    <Text style={styles.actionButtonText}>Reject</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -699,6 +794,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text.white,
+  },
+  reasonInput: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: colors.text.primary,
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    marginTop: 12,
+  },
+  cancelButton: {
+    backgroundColor: colors.text.tertiary,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text.white,
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
 });
 
