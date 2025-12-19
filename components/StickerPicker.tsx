@@ -17,8 +17,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { StickerPack, Sticker } from '@/types';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const BOTTOM_SHEET_HEIGHT = SCREEN_HEIGHT * 0.6; // 60% of screen height
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+const BOTTOM_SHEET_HEIGHT = SCREEN_HEIGHT * 0.5; // 50% of screen height for more compact view
 
 interface StickerPickerProps {
   visible: boolean;
@@ -291,7 +291,7 @@ export default function StickerPicker({
         ) : stickers.length > 0 ? (
           <FlatList
             data={stickers}
-            numColumns={4}
+            numColumns={6}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.stickersGrid}
             showsVerticalScrollIndicator={false}
@@ -371,10 +371,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: 8,
   },
   packItem: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    marginRight: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    marginRight: 6,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background.primary,
@@ -386,31 +386,32 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.primary + '15',
   },
   packIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
   },
   packIconPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stickersGrid: {
-    padding: 8,
-    paddingBottom: 20,
+    padding: 6,
+    paddingBottom: 16,
   },
   stickerItem: {
     flex: 1,
     aspectRatio: 1,
-    margin: 4,
-    borderRadius: 8,
+    margin: 3,
+    borderRadius: 6,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    padding: 2,
+    maxWidth: (SCREEN_WIDTH - 48) / 6, // 6 columns with padding
   },
   stickerImage: {
     width: '100%',
