@@ -86,7 +86,7 @@ FROM (VALUES
   ('Time & Calendar', 'Time-related emojis', 'https://emojicdn.elk.sh/⏰', true, false, 14),
   ('Emotions & Feelings', 'Express your emotions', 'https://emojicdn.elk.sh/😢', true, false, 15),
   ('GIF Reactions', 'Animated reaction GIFs', 'https://emojicdn.elk.sh/🎬', true, true, 16),
-  ('GIF Celebrations', 'Animated celebration GIFs', 'https://emojicdn.elk.sh/🎉', true, true, 17),
+  ('GIF Celebrations', 'Animated celebration GIFs', 'https://emojicdn.elk.sh/🎊', true, true, 17),
   ('GIF Emotions', 'Animated emotional GIFs', 'https://emojicdn.elk.sh/😍', true, false, 18),
   ('GIF Fun & Cute', 'Animated fun and cute GIFs', 'https://emojicdn.elk.sh/😊', true, false, 19)
 ) AS pack_data(name, description, icon_url, is_active, is_featured, display_order)
