@@ -80,7 +80,12 @@ export default function StickerPicker({
 
   useEffect(() => {
     if (selectedPack) {
+      // Clear previous stickers immediately when switching packs
+      setStickers([]);
       loadStickers(selectedPack.id);
+    } else {
+      // Clear stickers if no pack is selected
+      setStickers([]);
     }
   }, [selectedPack]);
 
@@ -126,15 +131,25 @@ export default function StickerPicker({
   const loadStickers = async (packId: string) => {
     try {
       setIsLoadingStickers(true);
+      // Clear existing stickers first
+      setStickers([]);
+      
+      console.log('Loading stickers for pack:', packId);
+      
       const { data, error } = await supabase
         .from('stickers')
         .select('*')
         .eq('pack_id', packId)
         .order('display_order', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading stickers:', error);
+        throw error;
+      }
 
-      if (data) {
+      console.log(`Found ${data?.length || 0} stickers for pack ${packId}`);
+
+      if (data && data.length > 0) {
         const stickersData: Sticker[] = data.map((sticker) => ({
           id: sticker.id,
           packId: sticker.pack_id,
@@ -145,10 +160,16 @@ export default function StickerPicker({
           createdAt: sticker.created_at,
           updatedAt: sticker.updated_at,
         }));
+        console.log('Setting stickers:', stickersData.length);
         setStickers(stickersData);
+      } else {
+        // No stickers found for this pack
+        console.log('No stickers found for pack:', packId);
+        setStickers([]);
       }
     } catch (error) {
       console.error('Failed to load stickers:', error);
+      setStickers([]);
     } finally {
       setIsLoadingStickers(false);
     }
@@ -257,7 +278,12 @@ export default function StickerPicker({
                     styles.packItem,
                     selectedPack?.id === item.id && styles.packItemSelected,
                   ]}
-                  onPress={() => setSelectedPack(item)}
+                  onPress={() => {
+                    // Clear stickers immediately when selecting a new pack
+                    setStickers([]);
+                    setIsLoadingStickers(true);
+                    setSelectedPack(item);
+                  }}
                   activeOpacity={0.7}
                 >
                   {item.iconUrl ? (
@@ -293,6 +319,7 @@ export default function StickerPicker({
             data={stickers}
             numColumns={6}
             keyExtractor={(item) => item.id}
+            key={`stickers-${selectedPack?.id || 'none'}`}
             contentContainerStyle={styles.stickersGrid}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
